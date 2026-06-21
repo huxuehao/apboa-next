@@ -20,13 +20,29 @@
 
 Apboa Next 是基于ReAct理念的智能体开发与管理平台，旨在简化AI智能体的构建流程，帮助用户快速打造专属数字助手。平台整合了敏感词过滤、提示词管理、多模型接入、工具集成、知识库和智能体编排等核心功能，形成一站式解决方案，架构清晰，易于使用。
 
+## 目录
+
+- [快速开始](#快速开始)
+- [本地开发](#本地开发)
+- [核心特性](#核心特性)
+- [系统架构](#系统架构)
+- [为什么选择 Apboa](#为什么选择-apboa)
+- [能力清单](#能力清单)
+- [技术栈](#技术栈)
+- [核心页面预览](#核心页面预览)
+- [部署指南](#部署指南)
+- [项目结构](#项目结构)
+- [贡献指南](#贡献指南)
+- [交流与赞助](#交流与赞助)
+- [开源协议](#开源协议)
+
 ## 快速开始
 
 前置条件：Docker Engine 20+ & Docker Compose v2+
 
 ```bash
-git clone https://gitee.com/studious_tiger/apboa-next.git && cd apboa-next/docker
-
+git clone https://gitee.com/studious_tiger/apboa-next.git
+cd apboa-next/docker
 bash start-simple.sh
 ```
 
@@ -105,7 +121,6 @@ pnpm dev
 
 ## 核心特性
 
-
 ### 🧠 ReAct 智能体引擎
 
 ReAct（Reasoning + Acting）循环驱动，内置 PlanNotebook 任务规划、AutoContext 记忆压缩、长期记忆（Mem0 / ReMe / Bailian），支持树状消息分支与多 Session 并行。
@@ -114,21 +129,17 @@ ReAct（Reasoning + Acting）循环驱动，内置 PlanNotebook 任务规划、A
 
 HTTP / SSE / STDIO 三协议 MCP 客户端。LazyMcpAgentTool 实现懒加载——注册阶段仅绑定 Schema，首次调用时建立连接。连续失败达阈值自动降级。
 
-
 ### 🤖 多模型适配器
 
 统一模型工厂适配 OpenAI · DashScope · Anthropic · Gemini · Ollama 五大供应商。Agent 级参数覆盖（temperature / topP / topK / seed），无需改代码切换供应商。
-
 
 ### 📚 知识库与 RAG
 
 四种知识库后端（百炼 / Dify / RagFlow / 本地向量库），五种向量存储（PgVector / Milvus / Elasticsearch / Qdrant / Weaviate）。内置文档解析 → 分块 → 嵌入 → 存储全流水线。
 
-
 ### 🛡️ 安全沙箱
 
 Shell 命令通过独立 Proxy 进程执行，Docker 容器 `cap_drop: ALL` + `read_only` + `pids_limit` 最小权限运行。Python / Node.js / Shell / HTML 四语言安全扫描引擎。
-
 
 ### 🏢 多租户 SaaS
 
@@ -186,7 +197,7 @@ PgVector / Milvus / Elasticsearch / Qdrant / Weaviate——修改 `VECTOR_STORE_
 ## 能力清单
 
 - **ReAct 智能体** — Reasoning + Acting 循环，可配置最大迭代次数、计划规划、用户确认
-- **多模型支持** — OpenAI / DashScope / Anthropic / Ollama，Agent 级参数覆盖
+- **多模型支持** — OpenAI / DashScope / Anthropic / Gemini / Ollama，Agent 级参数覆盖
 - **MCP 集成** — HTTP / SSE / STDIO 三协议，懒加载 + 运行时降级 + 工具治理
 - **工具系统** — 内置工具 + Groovy 动态工具 + Agent-as-Tool + 工具确认机制
 - **技能包** — VEP / APIP 内置协议技能 + 用户自定义技能（26 种文件类型）
@@ -226,16 +237,16 @@ PgVector / Milvus / Elasticsearch / Qdrant / Weaviate——修改 `VECTOR_STORE_
 
 ## 核心页面预览
 
-|  ![img](image/QQ_1781690823342.png)    |  ![image-20260617180952419](image/image-20260617180952419.png)    |
+|  ![智能体对话界面](image/QQ_1781690823342.png)    |  ![智能体配置页面](image/image-20260617180952419.png)    |
 | ---- | ---- |
-|   ![image-20260617181150794](image/image-20260617181150794.png)   |     ![image-20260617181251029](image/image-20260617181251029.png) |
-|  ![image-20260617181600141](image/image-20260617181600141.png)    |     ![image-20260617181326950](image/image-20260617181326950.png) |
-|   ![image-20260617181359867](image/image-20260617181359867.png)   |     ![image-20260617181424151](image/image-20260617181424151.png) |
+|   ![知识库管理](image/image-20260617181150794.png)   |     ![MCP 服务管理](image/image-20260617181251029.png) |
+|  ![工具配置](image/image-20260617181600141.png)    |     ![技能包管理](image/image-20260617181326950.png) |
+|   ![模型供应商配置](image/image-20260617181359867.png)   |     ![多租户管理](image/image-20260617181424151.png) |
 
-|  ![image-20260617181923101](image/image-20260617181923101.png)    |     ![image-20260617181959087](image/image-20260617181959087.png) |   ![image-20260617182021804](image/image-20260617182021804.png)   |
+|  ![智能体编排](image/image-20260617181923101.png)    |     ![会话记录](image/image-20260617181959087.png) |   ![数据可视化](image/image-20260617182021804.png)   |
 | ---- | ---- | ---- |
 
-
+---
 
 ## 部署指南
 
@@ -311,6 +322,102 @@ apboa-next/
 
 ---
 
+## 贡献指南
+
+我们欢迎任何形式的贡献！请按照以下流程提交 Pull Request：
+
+### 1. Fork 与克隆
+
+在 Gitee 上 Fork 本仓库，然后克隆到本地：
+
+```bash
+git clone https://gitee.com/<your-username>/apboa-next.git
+cd apboa-next
+git remote add upstream https://gitee.com/studious_tiger/apboa-next.git
+```
+
+### 2. 创建分支
+
+从 `main` 分支创建你的工作分支，分支命名遵循以下规范：
+
+| 类型 | 分支前缀 | 示例 |
+|------|----------|------|
+| 新功能 | `feature/` | `feature/mcp-timeout-retry` |
+| 缺陷修复 | `fix/` | `fix/react-loop-null-check` |
+| 文档更新 | `docs/` | `docs/update-deploy-guide` |
+| 重构优化 | `refactor/` | `refactor/vector-store-factory` |
+
+```bash
+git checkout -b feature/your-feature-name
+```
+
+### 3. 开发与提交
+
+**代码规范：**
+
+- 后端代码遵循项目已有的注释规范（参见类/方法上的 Javadoc）
+- 前端代码遵循 ESLint + Prettier 配置
+- 新增功能应附带相应的单元测试
+- 确保本地 `mvn compile` 和前端 `pnpm build` 通过
+
+**Commit Message 规范：**
+
+采用 [Conventional Commits](https://www.conventionalcommits.org/) 格式：
+
+```
+<type>(<scope>): <subject>
+
+[可选的正文]
+
+[可选的脚注]
+```
+
+常用 `type`：
+
+- `feat` — 新功能
+- `fix` — 缺陷修复
+- `docs` — 文档变更
+- `refactor` — 重构（非新功能、非修复）
+- `perf` — 性能优化
+- `test` — 测试相关
+- `chore` — 构建/工具链变更
+
+`scope` 为可选的模块名，如 `engine`、`mcp`、`ui`、`docker` 等。
+
+示例：
+
+```
+feat(mcp): 添加 MCP 连接超时自动重试机制
+
+- 连续失败 3 次后自动降级
+- 支持通过配置调整重试阈值
+```
+
+### 4. 提交 Pull Request
+
+- 确保你的分支与上游 `main` 保持同步：
+
+  ```bash
+  git fetch upstream
+  git rebase upstream/main
+  ```
+
+- 推送分支到你的 Fork 仓库后，向本仓库的 `main` 分支发起 Pull Request
+- PR 标题遵循 Commit Message 格式，简要描述变更内容
+- PR 描述中请说明：**变更动机**、**变更内容**、**测试方式**
+- 一个 PR 只做一件事，避免混合多个不相关的变更
+- 如果 PR 关联某个 Issue，请在描述中引用
+
+### 5. 代码审查
+
+- PR 提交后将由维护者进行 Code Review
+- 请根据审查意见及时修改并推送更新
+- 审查通过后由维护者合并到 `main` 分支
+
+> **提示：** 提交前请确保已签署 [贡献者许可协议（CLA）](https://cla-assistant.io/)（如适用），并同意你的贡献遵循本项目的 [MIT](LICENSE) 开源协议。
+
+---
+
 ## 交流与赞助
 
 <table>
@@ -325,8 +432,6 @@ apboa-next/
     <td align="center"><img src="image/image-20260617184137320.png" width="200" alt="支付宝收款码"/></td>
   </tr>
 </table>
-
-
 
 ---
 

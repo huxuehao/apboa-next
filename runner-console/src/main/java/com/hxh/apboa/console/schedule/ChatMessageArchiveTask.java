@@ -132,6 +132,11 @@ public class ChatMessageArchiveTask {
                                 "UPDATE chat_session SET message_table = ? WHERE id = ?",
                                 targetTable, sessionId);
 
+                        // 4e. 删除 agentscope_sessions 中会话的消息
+                        jdbcTemplate.update(
+                                "DELETE FROM agentscope_sessions WHERE session_id = ?",
+                                sessionId);
+
                         log.debug("归档会话 {} 的 {} 条消息 -> {}", sessionId, moved, targetTable);
                     });
                     totalMigrated++;
