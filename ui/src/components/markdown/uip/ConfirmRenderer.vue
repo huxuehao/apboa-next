@@ -1,7 +1,17 @@
 <template>
   <div class="uip-confirm-renderer">
     <div class="uip-confirm-message">
-      <span class="uip-confirm-icon">?</span>
+      <span
+        class="uip-confirm-icon"
+        :class="{
+          'is-confirmed': disabled && interaction.submittedData?.confirmed,
+          'is-cancelled': disabled && interaction.submittedData && !interaction.submittedData.confirmed
+        }"
+      >
+        <template v-if="disabled && interaction.submittedData?.confirmed">&#10003;</template>
+        <template v-else-if="disabled && interaction.submittedData && !interaction.submittedData.confirmed">&#10007;</template>
+        <template v-else>?</template>
+      </span>
       {{ interaction.message }}
     </div>
     <div v-if="interaction.payload && !disabled" class="uip-confirm-payload" @click="payloadOpen = !payloadOpen">
@@ -19,12 +29,6 @@
       <a-button style="margin-left: 8px" @click="handleCancel" :loading="canceling"  :disabled="submitting">
         {{ interaction.cancelLabel || '取消' }}
       </a-button>
-    </div>
-
-    <div v-if="disabled && interaction.submittedData" class="uip-confirm-completed">
-      <a-tag :color="interaction.submittedData.confirmed ? 'success' : 'default'">
-        {{ interaction.submittedData.confirmed ? '已确认' : '已取消' }}
-      </a-tag>
     </div>
   </div>
 </template>
@@ -77,7 +81,6 @@ function handleCancel() {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  margin-bottom: 10px;
 }
 
 .uip-confirm-icon {
@@ -92,10 +95,19 @@ function handleCancel() {
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: background 0.25s;
+}
+
+.uip-confirm-icon.is-confirmed {
+  background: #52c41a;
+}
+
+.uip-confirm-icon.is-cancelled {
+  background: #c9cdd4;
 }
 
 .uip-confirm-payload {
-  margin-bottom: 10px;
+  margin: 10px 0;
   cursor: pointer;
   user-select: none;
 }
@@ -130,9 +142,5 @@ function handleCancel() {
 .uip-confirm-actions {
   padding-top: 12px;
   border-top: 1px solid #f0f1f3;
-}
-
-.uip-confirm-completed {
-  margin-top: 12px;
 }
 </style>

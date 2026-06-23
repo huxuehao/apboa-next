@@ -17,7 +17,8 @@ import * as chatSessionApi from '@/api/chatSession'
 import { getActiveRuns, getStatus } from '@/api/agui'
 import { LoadingOutlined } from '@ant-design/icons-vue'
 import {
-  buildUserTextFromPayload
+  buildUserTextFromPayload,
+  injectSubmissionToRawContent
 } from '@/utils/chat/uip.ts'
 import type { InteractionSubmitPayload } from '@/components/markdown/uip/types'
 
@@ -339,10 +340,39 @@ const handelToolContent = async (value: any) => {
 const handleInteractionSubmit = async (payload: InteractionSubmitPayload) => {
   if (!currentSessionId.value || isRunning.value) return
 
-  // 构造纯文本用户消息发送给 agent
-  const userText = buildUserTextFromPayload(payload)
+  const sid = currentSessionId.value
+  const data = payload.data as Record<string, unknown>
 
-  await sendMessage(userText, [{ id: 'uip',  role: 'user', content: userText }] as ChatMessageVO[],)
+  // 1. 找到对应的 assistant 消息，将 submittedData 注入 UIP JSON（单次调用完成匹配+注入）
+  let updatedContent: string | null = null
+  const assistantMsg = [...messagesList.value].reverse().find(m => {
+    if (m.role !== 'assistant' || !m.content) return false
+    const updated = injectSubmissionToRawContent(m.content, payload.interactionId, data)
+    if (updated !== m.content) {
+      updatedContent = updated
+      return true
+    }
+    return false
+  })
+  if (assistantMsg && updatedContent) {
+    // 持久化到后端（后端通过 session 的 current_message_id 定位消息，无需传 messageId）
+    chatSessionApi.updateCurrentMessageContent(sid, updatedContent)
+      .catch(err => console.warn('[UIP] 持久化提交数据失败', err))
+    // 同步更新本地消息列表，使渲染器立即读取 submittedData
+    assistantMsg.content = updatedContent
+  }
+
+  // // 2. 保存用户提交消息到 DB（与 handleSend 保持一致，先 await 再 sendMessage）
+  // try {
+  //   const res = await chatSessionApi.appendMessage(sid, { role: 'user', content: userText })
+  //   if (res.data?.data) messagesList.value.push(res.data.data as ChatMessageVO)
+  // } catch (err) {
+  //   console.warn('[UIP] 保存用户提交消息失败', err)
+  // }
+
+  // 3. 发送给 Agent 继续对话
+  const userText = buildUserTextFromPayload(payload)
+  await sendMessage(userText, [{ id: 'uip', role: 'user', content: userText }] as ChatMessageVO[])
 }
 
 // 处理 UIP 卡片渲染失败重试

@@ -226,6 +226,45 @@ export function fillUIPWithUserData(
 }
 
 /**
+ * 在 raw markdown content 中定位 ```uip 代码块，对匹配 interactionId 的块注入 submittedData
+ *
+ * @param content       原始 markdown 消息内容
+ * @param interactionId 目标 UIP 交互组件 ID
+ * @param submittedData 用户提交的数据
+ * @returns 注入 submittedData 后的 content，未匹配时返回原 content
+ */
+export function injectSubmissionToRawContent(
+  content: string,
+  interactionId: string,
+  submittedData: Record<string, unknown>
+): string {
+  UIP_MD_REGEX.lastIndex = 0
+  let match: RegExpExecArray | null
+  while ((match = UIP_MD_REGEX.exec(content)) !== null) {
+    const fullBlock = match[0]
+    const blockStart = match.index
+    const jsonStr = (match[1] || '').trim()
+    const uip = parseUIPJson(jsonStr)
+    if (!uip || !uip.interaction) continue
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const interaction = uip.interaction as any
+    if (interaction.id !== interactionId) continue
+
+    try {
+      const updatedJson = fillUIPWithUserData(jsonStr, interactionId, submittedData)
+      const updatedBlock = wrapUIPBlock(updatedJson)
+      // 子串拼接精准替换，避免相同文本的误替换
+      return content.substring(0, blockStart) + updatedBlock + content.substring(blockStart + fullBlock.length)
+    } catch {
+      continue
+    }
+  }
+
+  return content
+}
+
+/**
  * 从文本中剔除 uip 代码块
  */
 export function stripUIPBlock(text: string): string {

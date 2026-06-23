@@ -1,7 +1,8 @@
 <template>
   <div class="uip-form-renderer">
     <div v-if="interaction.props?.title" class="uip-form-title">
-      {{ interaction.props.title }}
+      <span>{{ interaction.props.title }}</span>
+      <span v-if="disabled && interaction.submittedData" class="uip-form-status">已完成</span>
     </div>
     <a-form
       :model="formData"
@@ -25,9 +26,6 @@
       <a-button v-if="showReset" style="margin-left: 8px" @click="handleReset">
         重置
       </a-button>
-    </div>
-    <div v-if="disabled && interaction.submittedData" class="uip-form-completed">
-      <a-tag color="success">已提交</a-tag>
     </div>
   </div>
 </template>
@@ -209,6 +207,16 @@ function handleReset() {
   margin-bottom: 16px;
   padding-bottom: 12px;
   border-bottom: 1px solid #f0f1f3;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.uip-form-status {
+  font-size: 12px;
+  font-weight: 400;
+  color: #52c41a;
+  letter-spacing: 0.5px;
 }
 
 .uip-form {
@@ -219,9 +227,5 @@ function handleReset() {
   margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid #f0f1f3;
-}
-
-.uip-form-completed {
-  margin-top: 12px;
 }
 </style>

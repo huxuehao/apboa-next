@@ -350,6 +350,25 @@ public class ChatSessionServiceImpl extends ServiceImpl<ChatSessionMapper, ChatS
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    public void updateCurrentMessageContent(Long sessionId, String content) {
+        ChatSession session = getAndCheckSession(sessionId);
+        if (isArchived(session)) {
+            throw new RuntimeException("已归档会话不支持修改消息");
+        }
+        Integer msgId = session.getCurrentMessageId();
+        if (msgId == null) {
+            throw new RuntimeException("当前会话无活跃消息");
+        }
+        ChatMessage msg = chatMessageService.getById(msgId);
+        if (msg == null || !msg.getSessionId().equals(sessionId)) {
+            throw new RuntimeException("当前消息不存在或不属于该会话");
+        }
+        msg.setContent(content);
+        chatMessageService.updateById(msg);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public void deleteSession(Long id) {
         ChatSession session = getAndCheckSession(id);
         // 如果已归档，先删除归档表中的消息

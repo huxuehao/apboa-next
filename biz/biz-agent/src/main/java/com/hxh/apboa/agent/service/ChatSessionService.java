@@ -119,6 +119,14 @@ public interface ChatSessionService extends IService<ChatSession> {
     void updateTitle(Long id, String title);
 
     /**
+     * 更新当前消息内容（通过 session 的 current_message_id 定位，用于持久化 UIP 提交数据等场景）
+     *
+     * @param sessionId 会话 ID
+     * @param content   新内容
+     */
+    void updateCurrentMessageContent(Long sessionId, String content);
+
+    /**
      * 删除会话（物理删除会话及其消息）
      *
      * @param id 会话 ID

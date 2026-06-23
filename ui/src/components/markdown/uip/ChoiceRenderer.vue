@@ -1,6 +1,9 @@
 <template>
   <div class="uip-choice-renderer">
-    <div class="uip-choice-question">{{ interaction.question }}</div>
+    <div class="uip-choice-question">
+      <span>{{ interaction.question }}</span>
+      <span v-if="disabled && interaction.submittedData" class="uip-choice-status">已完成</span>
+    </div>
     <div class="uip-choice-body">
       <a-radio-group
         v-if="!interaction.multiple"
@@ -56,11 +59,6 @@
       <a-button type="primary" :loading="submitting" :disabled="!canSubmit" @click="handleSubmit">
         确定
       </a-button>
-    </div>
-
-    <div v-if="disabled && interaction.submittedData" class="uip-choice-completed">
-      <a-tag color="success">已提交</a-tag>
-      <span class="uip-choice-summary">{{ submittedSummary }}</span>
     </div>
   </div>
 </template>
@@ -134,6 +132,16 @@ async function handleSubmit() {
   margin-bottom: 14px;
   padding-bottom: 12px;
   border-bottom: 1px solid #f0f1f3;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.uip-choice-status {
+  font-size: 12px;
+  font-weight: 400;
+  color: #52c41a;
+  letter-spacing: 0.5px;
 }
 
 .uip-choice-group {
@@ -176,15 +184,21 @@ async function handleSubmit() {
   border-top: 1px solid #f0f1f3;
 }
 
-.uip-choice-completed {
-  margin-top: 12px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 .uip-choice-summary {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #f0f1f3;
   font-size: 13px;
   color: #86909c;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.uip-choice-summary-icon {
+  flex-shrink: 0;
+  color: #52c41a;
+  font-weight: 700;
+  font-size: 14px;
 }
 </style>

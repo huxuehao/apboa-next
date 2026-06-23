@@ -17,6 +17,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
@@ -165,6 +166,23 @@ public class ChatSessionController {
     @PutMapping("/{id}/title")
     public R<Void> updateTitle(@PathVariable("id") Long id, @RequestParam("title") String title) {
         chatSessionService.updateTitle(id, title);
+        return R.success("操作成功");
+    }
+
+    /**
+     * 更新当前消息内容（后端通过 session 的 current_message_id 定位，调用方无需传 messageId）
+     */
+    @SkAccess
+    @ChatKeyAccess
+    @PutMapping("/{sessionId}/current-message/content")
+    public R<Void> updateCurrentMessageContent(
+            @PathVariable("sessionId") Long sessionId,
+            @RequestBody Map<String, String> body) {
+        String content = body.get("content");
+        if (content == null) {
+            return R.fail("content 不能为空");
+        }
+        chatSessionService.updateCurrentMessageContent(sessionId, content);
         return R.success("操作成功");
     }
 

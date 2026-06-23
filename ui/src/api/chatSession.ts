@@ -122,6 +122,14 @@ export function updateSessionTitle(id: string, title: string) {
 }
 
 /**
+ * 更新当前消息内容（后端通过 session 的 current_message_id 定位，调用方无需传 messageId）
+ * PUT /agent/chat/session/{sessionId}/current-message/content
+ */
+export function updateCurrentMessageContent(sessionId: string, content: string) {
+  return request.put<ApiResponse<unknown>>(`${BASE}/${sessionId}/current-message/content`, { content })
+}
+
+/**
  * 删除会话
  * DELETE /agent/chat/session/{id}
  */
