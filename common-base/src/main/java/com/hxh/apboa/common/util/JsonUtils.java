@@ -6,6 +6,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hxh.apboa.common.ApboaSpringContextHolder;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 描述：json工具类
@@ -95,6 +97,26 @@ public class JsonUtils {
         }
         try {
             return getMapper().readValue(json, typeReference);
+        } catch (Exception e) {
+            throw new RuntimeException("JSON反序列化失败", e);
+        }
+    }
+
+    public static <T> List<T> parseArray(String json, Class<T> elementType) {
+        if (json == null || json.isEmpty()) {
+            return null;
+        }
+        try {
+            ObjectMapper mapper = getMapper();
+            JsonNode arrayNode = mapper.readTree(json);
+            if (!arrayNode.isArray()) {
+                throw new RuntimeException("JSON is not an array");
+            }
+            List<T> result = new ArrayList<>();
+            for (JsonNode node : arrayNode) {
+                result.add(mapper.treeToValue(node, elementType));
+            }
+            return result;
         } catch (Exception e) {
             throw new RuntimeException("JSON反序列化失败", e);
         }

@@ -28,5 +28,8 @@
         <module>biz-skill</module>
         <module>biz-studio</module>
         <module>biz-tool</module>
+        <module>biz-cache</module>
+        <module>biz-mq</module>
+        <module>biz-datasource</module>
     </modules>
 </project>

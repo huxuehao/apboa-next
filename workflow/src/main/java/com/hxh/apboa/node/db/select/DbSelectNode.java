@@ -1,0 +1,192 @@
+package com.hxh.apboa.node.db.select;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.hxh.apboa.common.consts.NodeConst;
+import com.hxh.apboa.common.entity.Datasource;
+import com.hxh.apboa.common.util.FuncUtils;
+import com.hxh.apboa.common.util.JsonUtils;
+import com.hxh.apboa.datasource.mapper.DatasourceMapper;
+import com.hxh.apboa.node.base.EnhancedNode;
+import com.hxh.apboa.node.base.NodeOutput;
+import com.hxh.apboa.node.base.NodeType;
+import com.hxh.apboa.node.base.context.NodeContext;
+import com.hxh.apboa.node.base.db.DBExecutor;
+import com.hxh.apboa.node.base.db.DBExecutorFactory;
+import com.hxh.apboa.node.base.db.DbParam;
+import com.hxh.apboa.node.base.spring.SpringContextHolder;
+import com.hxh.apboa.node.base.template.TemplateFormatter;
+import com.hxh.apboa.node.base.template.TemplateFormatterFactory;
+import com.hxh.apboa.node.base.verify.VerifyFail;
+import com.hxh.apboa.node.base.verify.VerifyResult;
+import lombok.Getter;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+/**
+ * 描述：数据库查询节点
+ * 根据配置的数据源ID获取数据源连接，执行 SQL 查询并返回结果集。
+ *
+ * @author huxuehao
+ **/
+public class DbSelectNode extends EnhancedNode {
+
+    @Getter
+    private final Config config;
+    private final TemplateFormatter formatter;
+    /** 预计算的类型转换器，与 params 一一对应，运行时零字符串比较 */
+    private final List<Function<Object, Object>> typeConverters;
+
+    public DbSelectNode(String id, String name, Config config) {
+        super(id, name, NodeType.DB_SELECT);
+        this.config = config;
+        this.formatter = TemplateFormatterFactory.createFormatter(config.getFormatterType());
+        this.typeConverters = buildConverters(config);
+    }
+
+    @Override
+    protected NodeOutput doExecute(Map<String, Object> inputs, NodeOutput output, NodeContext context) {
+        try {
+            return successNodeOutput(inputs, output);
+        } catch (Exception e) {
+            return executionNodeOutput(e, output);
+        }
+    }
+
+    /**
+     * 创建成功输出
+     *
+     * @param inputs 框架解析后的输入参数，按 inputConfigs 配置顺序排列
+     * @param output 节点输出
+     * @return 节点输出
+     */
+    private NodeOutput successNodeOutput(Map<String, Object> inputs, NodeOutput output) {
+        // TODO 这个地方不能每次都做数据源获取，浪费性能，一定要缓存，直接通过数据源ID获取DBExecutor
+        // 获取数据源配置
+        DatasourceMapper mapper = SpringContextHolder.getBean(DatasourceMapper.class);
+        Datasource datasource = mapper.selectById(config.getDatasourceId());
+        if (datasource == null) {
+            throw new RuntimeException("数据源不存在，数据源ID: " + config.getDatasourceId());
+        }
+        if (datasource.getEnabled() == null || datasource.getEnabled() == 0) {
+            throw new RuntimeException("数据源未启用，数据源ID: " + config.getDatasourceId());
+        }
+
+        // 获取数据库执行器
+        DBExecutor executor = DBExecutorFactory.getExecutor(datasource);
+
+        // 批量解析动态参数
+        List<Object> params = resolveParams(inputs);
+
+        // 执行查询
+        List<Map<String, Object>> result = executor.select(config.getSql(), params);
+
+        output.addOutput(NodeConst.DEFAULT_OUTPUT_NAME, result);
+        output.markComplete();
+        return output;
+    }
+
+    /**
+     * 解析 SQL 参数：将 params 序列化为 JSON String，使用模板引擎一次性解析所有动态变量，
+     * 再回转为 JSONArray 并按序提取 value 字段，通过预计算的类型转换器转换为目标类型。
+     */
+    private List<Object> resolveParams(Map<String, Object> inputs) {
+        if (config.getParams() == null || config.getParams().isEmpty()) {
+            return List.of();
+        }
+
+        if (inputs == null || inputs.isEmpty()) {
+            return config.getParams().stream().map(DbParam::getValue).collect(Collectors.toList());
+        }
+
+        // 1. 将 params 列表序列化为 JSON 字符串
+        String paramsJson = JsonUtils.toJsonStr(config.getParams());
+        // 2. 使用模板引擎一次性解析所有动态变量
+        String resolvedJson = formatter.format(paramsJson, inputs, false).toString();
+        // 3. 回转为 JSONArray
+        List<JsonNode> resolvedArray = JsonUtils.parseArray(resolvedJson, JsonNode.class);
+        // 4. 按序提取 value 字段并应用类型转换
+        List<Object> paramValues = new ArrayList<>();
+        for (int i = 0; i < resolvedArray.size(); i++) {
+            Object rawValue = resolvedArray.get(i).get("value");
+            paramValues.add(typeConverters.get(i).apply(rawValue));
+        }
+
+        return paramValues;
+    }
+
+    /**
+     * 预计算类型转换器：根据 params 中各参数的 type 声明，在构造阶段一次性生成转换函数，
+     * 运行时直接调用 lambda，避免每次执行时的字符串比较和分支判断。
+     */
+    private static List<Function<Object, Object>> buildConverters(Config config) {
+        if (config.getParams() == null || config.getParams().isEmpty()) {
+            return List.of();
+        }
+        List<Function<Object, Object>> converters = new ArrayList<>();
+        for (DbParam param : config.getParams()) {
+            converters.add(createConverter(param.getType()));
+        }
+        return List.copyOf(converters);
+    }
+
+    /**
+     * 根据类型名称创建转换函数，使用 instanceof 快速路径避免不必要的解析。
+     */
+    private static Function<Object, Object> createConverter(String type) {
+        if (type == null || type.isEmpty()) {
+            return v -> v;
+        }
+        return switch (type.toUpperCase()) {
+            case "STRING" -> v -> v == null ? null : v.toString();
+            case "INTEGER", "INT" -> v -> {
+                if (v == null) return null;
+                if (v instanceof Integer) return v;
+                return Integer.valueOf(v.toString());
+            };
+            case "LONG" -> v -> {
+                if (v == null) return null;
+                if (v instanceof Long) return v;
+                return Long.valueOf(v.toString());
+            };
+            case "DOUBLE" -> v -> {
+                if (v == null) return null;
+                if (v instanceof Double) return v;
+                return Double.valueOf(v.toString());
+            };
+            case "FLOAT" -> v -> {
+                if (v == null) return null;
+                if (v instanceof Float) return v;
+                return Float.valueOf(v.toString());
+            };
+            case "BOOLEAN", "BOOL" -> v -> {
+                if (v == null) return null;
+                if (v instanceof Boolean) return v;
+                return Boolean.valueOf(v.toString());
+            };
+            default -> v -> v;
+        };
+    }
+
+    /**
+     * 异常节点输出
+     */
+    private NodeOutput executionNodeOutput(Exception e, NodeOutput output) {
+        output.markFailed(getName() + "执行失败: " + e.getMessage());
+        return output;
+    }
+
+    @Override
+    public VerifyResult verifyConfig(Map<String, Object> inputs) {
+        if (FuncUtils.isEmpty(config.getDatasourceId())) {
+            return VerifyResult.invalid(new VerifyFail("datasourceId", "数据源ID不能为空"));
+        }
+        if (FuncUtils.isEmpty(config.getSql())) {
+            return VerifyResult.invalid(new VerifyFail("sql", "SQL 语句不能为空"));
+        }
+        return VerifyResult.valid();
+    }
+}

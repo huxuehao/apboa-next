@@ -52,4 +52,14 @@ public class TableConst {
     public static final String LONG_TERM_MEMORY_CONFIG = "long_term_memory_config";
     public static final String AGENT_LONG_TERM_MEMORY = "agent_long_term_memory";
     public static final String SKILL_TOKEN = "skill_token";
+    public static final String CACHE = "cache";
+    public static final String DATASOURCE = "datasource";
+    public static final String PLUGIN = "plugin";
+    public static final String WORKFLOW = "workflow";
+    public static final String WORKFLOW_CACHE = "workflow_cache";
+    public static final String WORKFLOW_DATASOURCE = "workflow_datasource";
+    public static final String WORKFLOW_NODE_EXECUTION = "workflow_node_execution";
+    public static final String WORKFLOW_PLUGIN = "workflow_plugin";
+    public static final String WORKFLOW_RUN = "workflow_run";
+    public static final String WORKFLOW_VERSION = "workflow_version";
 }
