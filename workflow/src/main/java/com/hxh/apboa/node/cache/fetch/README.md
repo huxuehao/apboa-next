@@ -1,36 +1,42 @@
-该节点为缓存获取节点（cache-fetch）节点。
+# CACHE_FETCH
 
-该节点根据配置的缓存ID从 apboa-cache 模块获取 Redis 连接配置，从 Redis 中获取指定 key 的值并返回。
+## Purpose
+Read one value from a configured Redis cache. Use it when a workflow needs reusable state, temporary results, idempotency keys, or values produced by other systems.
 
-key 支持 Velocity 动态变量语法，变量由 inputConfigs 传入框架后自动解析替换。
-
-该节点对应的 json 存储示例如下：
-
+## JSON
 ```json
 {
-  "id": "当前节点ID",
-  "name": "缓存获取",
+  "id": "cache-fetch-1",
+  "name": "Fetch cache",
   "type": "CACHE_FETCH",
   "config": {
-    "cacheId": "缓存ID",
-    "key": "user:${userId}",
+    "cacheId": "1880000000000000001",
+    "key": "user:${input.userId}",
     "formatterType": "VELOCITY"
   },
-  "inputConfigs": [
-    {
-      "name": "userId",
-      "type": "String",
-      "classify": "NODE_OUTPUT",
-      "sourceNodeId": "源节点ID",
-      "sourceOutputName": "源节点输出参数名称"
-    }
-  ],
-  "outputConfigs": [
-    {
-      "fromNodeId": "当前节点ID",
-      "name": "output",
-      "type": "String"
-    }
-  ]
+  "inputConfigs": [{ "name": "input", "sourceType": "NODE_OUTPUT", "nodeId": "start", "outputName": "output" }],
+  "outputConfigs": [{ "name": "output", "fromNodeId": "cache-fetch-1" }]
 }
 ```
+
+## Config
+| Field | Type | Required | Default | Values | Frontend control |
+| --- | --- | --- | --- | --- | --- |
+| cacheId | string | yes | - | enabled cache id | resource select from `GET /api/cache?enabled=1` |
+| key | string | yes | - | template string | template input |
+| formatterType | enum | no | VELOCITY | VELOCITY, STRING, JACKSON | select |
+
+## Inputs
+Accepts `CONSTANT`, `VARIABLE`, `NODE_OUTPUT`, and `EXPRESSION`. The default input name should be `input` when the key template references upstream data.
+
+## Outputs
+The default output name is `output`. Runtime value is the Redis value returned by the cache operator; missing keys return null.
+
+## Runtime
+The node loads `Cache` by `cacheId`, requires `Cache.enabled = 1`, renders `key` with the selected formatter, and reads the value from Redis.
+
+## Failures
+Fails when `cacheId` or `key` is blank, the cache resource does not exist or is disabled, Redis connection fails, or template rendering fails.
+
+## Frontend Notes
+Show a cache selector, a connection check action, and a template-aware key editor. Do not allow arbitrary resource ids when the enabled cache list is available.

@@ -14,10 +14,6 @@ import lombok.Setter;
 @Builder
 public class ParamItem {
     /**
-     * 参数位置
-     */
-    private Position position;
-    /**
      * 参数名称
      */
     private String name;

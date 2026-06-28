@@ -40,9 +40,4 @@ public class Plugin extends BaseTenantEntity {
      */
     @QueryDefine(condition = QueryCondition.EQ)
     private Integer version;
-    /**
-     * 插件是否启用
-     */
-    @QueryDefine(condition = QueryCondition.EQ)
-    private Integer enabled;
 }

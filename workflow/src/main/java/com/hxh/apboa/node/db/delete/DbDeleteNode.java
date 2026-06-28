@@ -68,7 +68,7 @@ public class DbDeleteNode extends EnhancedNode {
         if (datasource == null) {
             throw new RuntimeException("数据源不存在，数据源ID: " + config.getDatasourceId());
         }
-        if (datasource.getEnabled() == null || datasource.getEnabled() == 0) {
+        if (!Boolean.TRUE.equals(datasource.getEnabled())) {
             throw new RuntimeException("数据源未启用，数据源ID: " + config.getDatasourceId());
         }
 

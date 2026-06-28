@@ -23,7 +23,6 @@ public class NodeContext {
     private VariableContext variables;
     /**
      * 请求参数
-     * 用于存储http请求的核心请求。
      */
     private RequestParams requestParams;
     /**

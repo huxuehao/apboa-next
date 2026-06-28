@@ -9,7 +9,6 @@ import com.hxh.apboa.node.base.verify.VerifyFail;
 import com.hxh.apboa.node.base.verify.VerifyResult;
 import lombok.Getter;
 
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -43,7 +42,6 @@ public class StartNode extends EnhancedNode implements StartableNode {
      * @return 节点输出
      */
     private NodeOutput successNodeOutput(NodeOutput output) {
-        putExecutionContext(output);
         putOutput(output);
 
         output.markComplete();
@@ -59,29 +57,11 @@ public class StartNode extends EnhancedNode implements StartableNode {
     }
 
     /**
-     * 初始化执行上下文
-     *
-     * @param output 输出
-     */
-    private void putExecutionContext(NodeOutput output) {
-        output.addExecutionContext("protocol", config.getProtocol());
-        output.addExecutionContext("method", config.getMethod());
-        output.addExecutionContext("path", config.getPath());
-        output.addExecutionContext("contentType", config.getContentType());
-        output.addExecutionContext("accessLimit", config.getAccessLimit());
-        output.addExecutionContext("authenticate", config.getAuthenticate());
-    }
-
-    /**
      * 添加输出参数
      *
      * @param output 输出
      */
     private void putOutput(NodeOutput output) {
-        if (List.of("POST", "PUT").contains(config.getMethod().toUpperCase())) {
-            output.addOutput("body", config.getBody());
-        }
-
         // 将请求的参数添加到输出中
         config.getParams().forEach(param ->
                 output.addOutput(createOutputName(param), createOutputValue(param))

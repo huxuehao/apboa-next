@@ -1,34 +1,33 @@
-该节点为序列化节点。支持 BASE64、JSON、URL_ENCODED、XML、YAML 五种序列化格式。
+# SERIALIZE
 
-该节点对应的 json 存储示例如下：
+## Purpose
+Serialize input object to JSON, YAML, XML, Base64, or URL encoded text.
 
+## JSON
 ```json
-{
-  "id": "当前节点ID",
-  "name": "序列化",
-  "type": "SERIALIZE",
-  "config": {
-    "mode": "PRETTY",
-    "format": "JSON",
-    "excludeNulls": true,
-    "excludeEmptyStrings": true,
-    "encoding": "UTF-8"
-  },
-  "inputConfigs": [
-    {
-      "name": "input",
-      "type": "Object",
-      "classify": "NODE_OUTPUT",
-      "sourceNodeId": "其他节点ID",
-      "sourceOutputName": "其他节点输出名称"
-    }
-  ],
-  "outputConfigs": [
-    {
-      "fromNodeId": "当前节点ID",
-      "name": "output",
-      "type": "String"
-    }
-  ]
-}
+{"id":"serialize-1","name":"Serialize","type":"SERIALIZE","config":{"mode":"TO_STRING","format":"JSON","excludeNulls":false,"excludeEmptyStrings":false,"encoding":"UTF-8"},"inputConfigs":[{"name":"input","sourceType":"NODE_OUTPUT","nodeId":"start","outputName":"output"}],"outputConfigs":[{"name":"output","fromNodeId":"serialize-1"}]}
 ```
+
+## Config
+| Field | Type | Required | Default | Values | Frontend control |
+| --- | --- | --- | --- | --- | --- |
+| mode | enum | yes | - | implementation enum | select |
+| format | enum | yes | - | JSON, YAML, XML, BASE64, URL_ENCODED | select |
+| excludeNulls | boolean | no | false | true/false | switch |
+| excludeEmptyStrings | boolean | no | false | true/false | switch |
+| encoding | string | no | UTF-8 | charset | input/select |
+
+## Inputs
+Accepts all supported sources; default input name is `input`.
+
+## Outputs
+Default output name is `output`. Runtime output is serialized text or bytes depending on format.
+
+## Runtime
+Serializes resolved input according to `mode` and `format`.
+
+## Failures
+Fails on unsupported format, serialization errors, or invalid encoding.
+
+## Frontend Notes
+Use selects for mode/format and switches for exclusion flags.

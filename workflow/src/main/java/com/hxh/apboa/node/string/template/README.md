@@ -1,39 +1,30 @@
-该节点为字符串模版节点。
-该节点的作用是将字符串中插入的变量，将变量替换成对应的值，最后输出替换后的字符串。
+# STRING_TEMPLATE
 
-该节点对应的 json 存储示例如下：
+## Purpose
+Render a string template from workflow input/context.
 
+## JSON
 ```json
-{
-  "id": "当前节点ID",
-  "name": "字符串模板",
-  "type": "STRING_TEMPLATE",
-  "config": {
-    "templateType": "STRING", // STRING | VELOCITY
-    "template": "我是${input02}，我今年${input01}岁了"
-  },
-  "inputConfigs": [
-    {
-      "name": "input01",
-      "type": "String",
-      "value": 1000,
-      "classify": "CONSTANT",
-      "sourceNodeId": "",
-      "sourceOutputName": ""
-    }, {
-      "name": "input02",
-      "type": "String",
-      "classify": "NODE_OUTPUT",
-      "sourceNodeId": "其他节点ID",
-      "sourceOutputName": "其他节点名称"
-    }
-  ],
-  "outputConfigs": [
-    {
-      "fromNodeId": "当前节点ID",
-      "name": "output",
-      "type": "String"
-    }
-  ]
-}
+{"id":"template-1","name":"Template","type":"STRING_TEMPLATE","config":{"templateType":"VELOCITY","template":"Hello ${input.name}"},"inputConfigs":[{"name":"input","sourceType":"NODE_OUTPUT","nodeId":"start","outputName":"output"}],"outputConfigs":[{"name":"output","fromNodeId":"template-1"}]}
 ```
+
+## Config
+| Field | Type | Required | Default | Values | Frontend control |
+| --- | --- | --- | --- | --- | --- |
+| templateType | enum | no | STRING | STRING, VELOCITY, JACKSON | select |
+| template | string | yes | - | template text | template editor |
+
+## Inputs
+Accepts all source types; default input name is `input`.
+
+## Outputs
+Default output name is `output`. Runtime output is the rendered string/object depending on formatter behavior.
+
+## Runtime
+Renders `template` with selected formatter and current context.
+
+## Failures
+Fails on missing template or rendering error.
+
+## Frontend Notes
+Use a template editor and variable picker.

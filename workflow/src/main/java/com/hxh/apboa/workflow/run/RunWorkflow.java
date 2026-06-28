@@ -27,7 +27,7 @@ public class RunWorkflow extends Workflow {
     /**
      * 执行工作流
      *
-     * @param context 执行上下文 TODO:执行上下文将由vertx路由传递
+     * @param context 执行上下文
      * @return 响应结果
      */
     @Override
@@ -85,12 +85,10 @@ public class RunWorkflow extends Workflow {
         StartNode startNode = (StartNode) getStartNode();
 
         // 完善开始节点的请求参数
-        startNode.getConfig().setBody(context.getRequestParams().getBody());
         List<Param> params = startNode.getConfig().getParams();
         for (ParamItem reqParam : context.getRequestParams().getParams()) {
             for (Param originalParam : params) {
-                if (reqParam.getPosition() == originalParam.getPosition()
-                        && reqParam.getName().equals(originalParam.getName())) {
+                if (reqParam.getName().equals(originalParam.getName())) {
                     originalParam.setValue(reqParam.getValue());
                     break;
                 }

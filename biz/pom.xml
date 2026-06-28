@@ -31,5 +31,6 @@
         <module>biz-cache</module>
         <module>biz-mq</module>
         <module>biz-datasource</module>
+        <module>biz-workflow</module>
     </modules>
 </project>

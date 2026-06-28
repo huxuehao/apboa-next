@@ -55,7 +55,7 @@ public class CacheFetchNode extends EnhancedNode {
         if (cache == null) {
             throw new RuntimeException("缓存配置不存在，缓存ID: " + config.getCacheId());
         }
-        if (cache.getEnabled() == null || cache.getEnabled() == 0) {
+        if (!Boolean.TRUE.equals(cache.getEnabled())) {
             throw new RuntimeException("缓存未启用，缓存ID: " + config.getCacheId());
         }
 

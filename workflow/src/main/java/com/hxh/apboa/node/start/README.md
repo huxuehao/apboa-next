@@ -1,74 +1,82 @@
-开始节点，作为一个流程的开始节点
+# START
 
-该节点对应的 json 存储示例如下，注意：config.params[x].name的值不允许使用“_”，且不允许重复
+## Purpose
+Workflow entry node，作为工作流执行的起始点，引导下游节点依次执行。
+将配置的参数列表作为变量写入节点输出，供后续节点引用。
+
+## JSON
 ```json
 {
-  "id": "当前节点ID",
-  "name": "开始",
+  "id": "start",
+  "name": "Start",
   "type": "START",
   "config": {
-    "protocol": "HTTP",
-    "method": "POST",
-    "path": "/test/path",
-    "contentType": "*",
-    "params": [ // 参数列表，name 不允许使用“_”，且不允许重复
+    "params": [
       {
-        "position":"PATH",
-        "name": "code",
-        "type": "String",
+        "name": "userId",
+        "value": "123",
+        "type": "Long",
         "required": true,
-        "remark": "参数描述",
-        "defaultValue": null
-      },{
-        "position":"QUERY",
-        "name": "age",
-        "type": "Integer",
-        "required": false,
-        "remark": "参数描述",
-        "defaultValue": "18"
-      },{
-        "position":"HEADER",
-        "name": "requestIp",
-        "type": "String",
-        "required": true,
-        "remark": "请求IP",
-        "defaultValue": null
+        "remark": "用户ID"
       }
-    ],
-    "accessLimit": {
-      "enable": true,
-      "unit": "MINUTE",
-      "ipTimes": 10000,
-      "routerTimes": 10000
-    },
-    "authenticate": {
-      "enable": true,
-      "position": "HEADER",
-      "name": "Authorization"
-    }
+    ]
   },
   "inputConfigs": [],
-  "outputConfigs": [
-    {
-      "fromNodeId": "当前节点ID",
-      "name": "body",
-      "type": "Object"
-    },
-    {
-      "fromNodeId": "当前节点ID",
-      "name": "code",
-      "type": "String"
-    },
-    {
-      "fromNodeId": "当前节点ID",
-      "name": "age",
-      "type": "Integer"
-    },
-    {
-      "fromNodeId": "当前节点ID",
-      "name": "requestIp",
-      "type": "String"
-    }
-  ]
+  "outputConfigs": []
 }
 ```
+
+## Config
+| Field | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| params | Param[] | no | [] | 请求参数定义列表，每个参数会作为输出变量写入上下文 |
+
+### Param
+| Field | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| name | string | yes | - | 参数名称，将作为输出变量名 |
+| value | string | yes | - | 参数值（字符串形式，运行时按 type 转换） |
+| type | VariableType | yes | - | 参数类型，决定 value 的转换方式 |
+| required | boolean | no | null | 是否必填 |
+| remark | string | no | null | 备注说明 |
+
+### VariableType
+| Value | 说明 |
+| --- | --- |
+| String | 直接使用 value |
+| Long | Long.valueOf(value) |
+| Integer | Integer.valueOf(value) |
+| Float | Float.valueOf(value) |
+| Double | Double.valueOf(value) |
+| Boolean | Boolean.valueOf(value) |
+| Array | 暂未实现 |
+| Object | 暂未实现 |
+
+## Inputs
+无上游输入。前端应禁止向 START 节点连入边。
+
+## Outputs
+输出变量名由每个 Param 的 `name` 决定，输出值由 `value` 按 `type` 转换后得到。
+一组 params 配置示例：
+```json
+{"name":"userId","value":"123","type":"Long"}
+```
+运行时输出为 `{ "userId": 123L }`。
+
+## Runtime
+1. 执行 `doExecute`，遍历 `config.params`
+2. 对每个 Param，以 `name` 为输出变量名，调用 `createOutputValue` 按 `type` 进行类型转换后写入 `NodeOutput`
+3. 标记 `output` 为 COMPLETE 状态
+
+## Verification
+配置校验规则（`verifyConfig`）：
+1. 参数名称不允许包含下划线 `_`
+2. 参数名称不允许重复
+
+## Failures
+- `IllegalArgumentException`：遇到不支持的 VariableType（如 Array/Object 尚未实现转换逻辑）
+- 运行时 `Exception`：标记节点状态为 FAILED，消息格式为 `{节点名}执行失败: {异常信息}`
+
+## Frontend Notes
+- 每个工作流只允许一个 START 节点
+- 禁止删除工作流中唯一的 START 节点

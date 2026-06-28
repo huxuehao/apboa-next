@@ -1,0 +1,115 @@
+@font-face {
+  font-family: "iconfont"; /* Project id 5065047 */
+  src: url('iconfont.woff2?t=1782484127350') format('woff2'),
+       url('iconfont.woff?t=1782484127350') format('woff'),
+       url('iconfont.ttf?t=1782484127350') format('truetype');
+}
+
+.iconfont {
+  font-family: "iconfont" !important;
+  font-size: 16px;
+  font-style: normal;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.icon-nodecache:before {
+  content: "\e684";
+}
+
+.icon-nodenon_empty_select:before {
+  content: "\e634";
+}
+
+.icon-nodeend:before {
+  content: "\e6de";
+}
+
+.icon-nodecode:before {
+  content: "\e6f7";
+}
+
+.icon-nodelist_sort:before {
+  content: "\e609";
+}
+
+.icon-nodemq_push:before {
+  content: "\e729";
+}
+
+.icon-nodeloop:before {
+  content: "\e62b";
+}
+
+.icon-nodelist_filter:before {
+  content: "\e718";
+}
+
+.icon-nodestring_template:before {
+  content: "\e69f";
+}
+
+.icon-nodeplugin:before {
+  content: "\e7b6";
+}
+
+.icon-nodedb_update:before {
+  content: "\e93d";
+}
+
+.icon-nodedb_select:before {
+  content: "\e93f";
+}
+
+.icon-nodehttp_external:before {
+  content: "\e9d7";
+}
+
+.icon-nodematch_result:before {
+  content: "\e600";
+}
+
+.icon-nodevariable_agg:before {
+  content: "\e680";
+}
+
+.icon-nodestring_split:before {
+  content: "\ed26";
+}
+
+.icon-nodehttp_inline:before {
+  content: "\e619";
+}
+
+.icon-nodestart:before {
+  content: "\e8e8";
+}
+
+.icon-nodeunserialize:before {
+  content: "\e601";
+}
+
+.icon-nodeiterate:before {
+  content: "\e62a";
+}
+
+.icon-nodeserialize:before {
+  content: "\e665";
+}
+
+.icon-nodeif_else:before {
+  content: "\e616";
+}
+
+.icon-nodellm:before {
+  content: "\e8f1";
+}
+
+.icon-nodedb_insert:before {
+  content: "\e80a";
+}
+
+.icon-nodedb_delete:before {
+  content: "\e80b";
+}
+

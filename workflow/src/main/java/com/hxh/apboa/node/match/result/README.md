@@ -1,51 +1,34 @@
-该节点为结果匹配节点节点。类似于switch-case，其目的是返回下一个执行节点。
+# MATCH_RESULT
 
-MatchType为EQUALS时，会将输入的内容进行toString()转成字符串，然后在与被匹配值进行比配。
-MatchType为CONTAINS时，
-   如果类型输入的类型为String，会将内容直接与被匹配值进行比配。
-   如果类型输入的类型为Array，则将输入的子元素内容进行toString()转成字符串，然后与被匹配值进行比配。
+## Purpose
+Route by matching input against configured values.
 
-如果匹配boolean类型的，caseSensitive必须设置为false，以适配大小写true/false
-
-节点的配置如下：
+## JSON
 ```json
-{
-  "id": "当前节点ID",
-  "name": "结果匹配",
-  "type": "MATCH_RESULT",
-  "config": {
-    "matchType": "EQUALS", // EQUALS、CONTAINS
-    "caseSensitive": "true",
-    "defaultNextNodeId":"默认下一个节点ID",
-    "matches": [
-      {
-        "matchValue": "匹配值",
-        "nextNodeId": "匹配成功时，下一个节点ID"
-      },
-      {
-        "matchValue": "匹配值",
-        "nextNodeId": "匹配成功时，下一个节点ID"
-      }, {
-        "matchValue": "匹配值",
-        "nextNodeId": "匹配成功时，下一个节点ID"
-      }
-    ]
-  },
-  "inputConfigs": [
-    {
-      "name": "input",
-      "type": "String", // EQUALS支持 String、Integer、Long、Float、Double、Boolean；CONTAINS支持 String、Array
-      "classify": "NODE_OUTPUT",
-      "sourceNodeId": "其他节点ID",
-      "sourceOutputName": "其他节点输出名称"
-    }
-  ],
-  "outputConfigs": [
-    {
-      "fromNodeId": "当前节点ID",
-      "name": "output",
-      "type": "String"
-    }
-  ]
-}
+{"id":"match-1","name":"Match result","type":"MATCH_RESULT","config":{"matches":[{"value":"OK","nextNodeId":"success"}],"matchType":"EQUALS","caseSensitive":true,"defaultNextNodeId":"fallback"},"inputConfigs":[{"name":"input","sourceType":"NODE_OUTPUT","nodeId":"start","outputName":"output"}],"outputConfigs":[{"name":"output","fromNodeId":"match-1"}]}
 ```
+
+## Config
+| Field | Type | Required | Default | Values | Frontend control |
+| --- | --- | --- | --- | --- | --- |
+| matches | array | yes | [] | match rows | editable table |
+| matches[].value | string | yes | - | compare value | input |
+| matches[].nextNodeId | string | yes | - | node id | node select |
+| matchType | enum | no | EQUALS | EQUALS and implementation enum values | select |
+| caseSensitive | boolean | no | true | true/false | switch |
+| defaultNextNodeId | string | no | null | node id | node select |
+
+## Inputs
+Default input name is `input`; all source types are accepted.
+
+## Outputs
+Default output name is `output`. Runtime output is the original or matched value depending on implementation.
+
+## Runtime
+Evaluates matches in order. If no match succeeds, uses `defaultNextNodeId` when configured.
+
+## Failures
+Fails on invalid match config, missing target node, unsupported match type, or input resolution error.
+
+## Frontend Notes
+Render one output handle per match plus optional default; keep edge targets synchronized with config.

@@ -1,40 +1,46 @@
-该节点为数据库查询节点（db-select）节点。
+# DB_SELECT
 
-该节点根据配置的数据源ID从 apboa-datasource 模块获取数据源连接配置，使用 HikariCP 连接池执行 SQL 查询操作。支持 MySQL、Oracle、PostgreSQL 三种数据库类型。
+## Purpose
+Execute a parameterized SELECT statement against an enabled datasource.
 
-该节点对应的 json 存储示例如下：
-
+## JSON
 ```json
 {
-  "id": "当前节点ID",
-  "name": "数据库查询",
+  "id": "db-select-1",
+  "name": "Select users",
   "type": "DB_SELECT",
   "config": {
-    "datasourceId": "数据源ID",
-    "sql": "SELECT * FROM users WHERE age > ?",
-    "params": [
-      {
-        "value": "${minAge}",
-        "type": "Integer"
-      }
-    ],
+    "datasourceId": "1880000000000000002",
+    "sql": "select * from user where id = ?",
+    "params": [{ "value": "${input.userId}", "type": "LONG" }],
     "formatterType": "VELOCITY"
   },
-  "inputConfigs": [
-    {
-      "name": "minAge",
-      "type": "Integer",
-      "classify": "NODE_OUTPUT",
-      "sourceNodeId": "源节点ID",
-      "sourceOutputName": "源节点输出参数名称"
-    }
-  ],
-  "outputConfigs": [
-    {
-      "fromNodeId": "当前节点ID",
-      "name": "output",
-      "type": "List"
-    }
-  ]
+  "inputConfigs": [{ "name": "input", "sourceType": "NODE_OUTPUT", "nodeId": "start", "outputName": "output" }],
+  "outputConfigs": [{ "name": "output", "fromNodeId": "db-select-1" }]
 }
 ```
+
+## Config
+| Field | Type | Required | Default | Values | Frontend control |
+| --- | --- | --- | --- | --- | --- |
+| datasourceId | string | yes | - | enabled datasource id | resource select from `GET /api/datasource?enabled=1` |
+| sql | string | yes | - | SQL with `?` placeholders | SQL editor |
+| params | array | no | [] | ordered `DbParam` values | parameter grid |
+| params[].value | string | yes | - | literal or template | input/template cell |
+| params[].type | enum | yes | STRING | STRING, INTEGER, INT, LONG, DOUBLE, FLOAT, BOOLEAN, BOOL | select |
+| formatterType | enum | no | VELOCITY | VELOCITY, STRING, JACKSON | select |
+
+## Inputs
+Accepts `CONSTANT`, `VARIABLE`, `NODE_OUTPUT`, and `EXPRESSION`. Use `input` for upstream data referenced by parameter templates.
+
+## Outputs
+The default output name is `output`. Runtime output is the result list or table-like structure returned by the DB executor.
+
+## Runtime
+The SQL text itself is not templated as a whole. Use `?` placeholders. Parameter values are rendered with `formatterType`, converted by `params[].type`, then bound in order.
+
+## Failures
+Fails when datasource is missing/disabled, SQL is blank, placeholder count does not match params, parameter conversion fails, or JDBC execution fails.
+
+## Frontend Notes
+Use a SQL editor, ordered parameter rows, datasource connection check, and a warning that SQL identifiers cannot be dynamically templated by the backend.

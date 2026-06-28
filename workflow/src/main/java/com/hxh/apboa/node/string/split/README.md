@@ -1,42 +1,40 @@
-该节点为字符串切割节点。
+# STRING_SPLIT
 
-该节点对应的 json 存储示例如下：
+## Purpose
+Split a string into list or key-value output.
 
+## JSON
+```json
+{"id":"split-1","name":"Split","type":"STRING_SPLIT","config":{"mode":"SINGLE_DELIMITER","delimiter":",","trimParts":true,"removeEmpty":true,"limit":-1,"maxResults":-1,"processingResult":true},"inputConfigs":[{"name":"input","sourceType":"NODE_OUTPUT","nodeId":"start","outputName":"output"}],"outputConfigs":[{"name":"output","fromNodeId":"split-1"}]}
 ```
-{
-  "id": "当前节点ID",
-  "name": "字符串切割",
-  "type": "STRING_SPLIT",
-  "config": {
-    "mode": "SIMPLE", // SIMPLE,REGEX,FIXED_LENGTH,LINE_BREAK,KEY_VALUE,MULTIPLE_DELIMITERS
-    "keyValueDelimiter": "=", //键值对分隔符，mode为KEY_VALUE时
-    "keyValueOutputFormat": "COLON_SEPARATED", // COLON_SEPARATED,EQUALS_SEPARATED,JSON_OBJECT,MAP_ENTRY,CUSTOM
-    "keyValueCustomFormat":"", // 当keyValueOutputFormat为CUSTOM时填写，格式要求："%s===>%s"
-    "delimiter": "分隔符", // 根据不同的模式填写不同的内容
-    "trimParts": true, //是否去除空字符,
-    "removeEmpty": true, //是否去除空元素,
-    "limit": -1,
-    "maxResults": -1,
-    "processingResult": true,
-    "prefix": "",
-    "suffix": ""
-  },
-  "inputConfigs": [
-    {
-      "name": "input",
-      "type": "String",
-      "value": "常量字符串",
-      "classify": "CONSTANT",
-      "sourceNodeId": "其他节点ID",
-      "sourceOutputName": "其他节点输出名称"
-    }
-  ],
-  "outputConfigs": [
-    {
-      "fromNodeId": "当前节点ID",
-      "name": "output",
-      "type": "Array"
-    }
-  ]
-}
-```
+
+## Config
+| Field | Type | Required | Default | Values | Frontend control |
+| --- | --- | --- | --- | --- | --- |
+| mode | enum | yes | - | implementation enum | select |
+| delimiter | string | conditional | - | delimiter | input |
+| delimiters | array | conditional | - | multiple delimiters | tag input |
+| trimParts | boolean | no | true | true/false | switch |
+| removeEmpty | boolean | no | true | true/false | switch |
+| limit | int | no | -1 | Java split limit | number input |
+| maxResults | int | no | -1 | max output items | number input |
+| processingResult | boolean | no | true | true/false | switch |
+| prefix/suffix | string | no | null | key-value wrappers | input |
+| keyValueDelimiter | string | no | = | delimiter | input |
+| keyValueOutputFormat | enum | no | COLON_SEPARATED | implementation enum | select |
+| keyValueCustomFormat | string | no | null | custom format | input |
+
+## Inputs
+Default input name is `input`; it should resolve to a string.
+
+## Outputs
+Default output name is `output`. Runtime output is split parts or formatted key-value data.
+
+## Runtime
+Applies selected split mode, trim/remove-empty rules, limits, and optional key-value formatting.
+
+## Failures
+Fails on missing required delimiter config, non-string input, invalid mode, or invalid limits.
+
+## Frontend Notes
+Show fields conditionally by mode to avoid invalid JSON.

@@ -1,49 +1,52 @@
-该节点为循环节点（loop）节点。
+# LOOP
 
-该节点支持两种循环模式：
-1. **数据集合迭代循环**：基于上游节点输出的数据集合进行遍历，每次迭代处理集合中的一个元素。
-2. **纯计数循环**：当未配置迭代数据源时，执行固定次数的纯计数循环。
+## Purpose
+Run a sub-workflow repeatedly until max iterations is reached or a termination expression evaluates to true.
 
-循环体内是一个子工作流（sub-workflow），每次迭代都会从入口节点开始执行子工作流中的节点。循环节点会将当前迭代索引（loopVariable）和当前迭代元素（itemVariable）注入到上下文变量中，子工作流中的节点可以通过这些变量获取循环状态。
-
-该节点对应的 json 存储示例如下：
-
+## JSON
 ```json
 {
-  "id": "当前节点ID",
-  "name": "循环节点",
+  "id": "loop-1",
+  "name": "Loop items",
   "type": "LOOP",
   "config": {
     "loopVariable": "loopIndex",
     "maxIterations": 1000,
-    "terminationExpression": "item == null",
-    "iterateDataSource": "dataList",
-    "itemVariable": "item",
+    "terminationExpression": "loopIndex >= 10",
     "subNodes": [],
     "subEdges": [],
-    "entryNodeId": "子工作流入口节点ID",
-    "workflow": "工作流实例"
+    "entryNodeId": "sub-start",
+    "iterateDataSource": "${input.items}",
+    "itemVariable": "item"
   },
-  "inputConfigs": [
-    {
-      "name": "dataList",
-      "type": "List",
-      "classify": "NODE_OUTPUT",
-      "sourceNodeId": "源节点ID",
-      "sourceOutputName": "源节点输出参数名称"
-    }
-  ],
-  "outputConfigs": [
-    {
-      "fromNodeId": "当前节点ID",
-      "name": "output",
-      "type": "List"
-    },
-    {
-      "fromNodeId": "当前节点ID",
-      "name": "totalIterations",
-      "type": "Integer"
-    }
-  ]
+  "inputConfigs": [{ "name": "input", "sourceType": "NODE_OUTPUT", "nodeId": "start", "outputName": "output" }],
+  "outputConfigs": [{ "name": "output", "fromNodeId": "loop-1" }]
 }
 ```
+
+## Config
+| Field | Type | Required | Default | Values | Frontend control |
+| --- | --- | --- | --- | --- | --- |
+| loopVariable | string | no | loopIndex | variable name | input |
+| maxIterations | int | no | 1000 | positive integer | number input |
+| terminationExpression | string | no | null | expression | code editor |
+| subNodes | array | yes | [] | node definitions | nested workflow editor |
+| subEdges | array | yes | [] | edge definitions | nested workflow editor |
+| entryNodeId | string | yes | - | id in subNodes | select |
+| iterateDataSource | string | no | null | expression/template | input |
+| itemVariable | string | no | item | variable name | input |
+
+## Inputs
+Accepts all supported input source types. Default input name is `input`.
+
+## Outputs
+The default output name is `output`. Runtime value contains loop execution results produced by the loop node.
+
+## Runtime
+Each iteration writes `loopVariable` into context. When `iterateDataSource` resolves to a list/array, the current item is written to `itemVariable`. The sub-flow starts at `entryNodeId`. The loop stops at `maxIterations` or when `terminationExpression` is true.
+
+## Failures
+Fails when `entryNodeId` is missing, the sub-flow is invalid, max iterations is invalid, expression execution fails, or a sub-node fails.
+
+## Frontend Notes
+Use a nested canvas or drawer for `subNodes/subEdges`. Show a hard max-iteration warning and make `entryNodeId` selectable from sub-flow nodes.

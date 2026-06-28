@@ -1,42 +1,30 @@
-该节点为非空选择节点，该节点会根据配置的策略，选择一个非空的输入作为输出。
+# NON_EMPTY_SELECT
 
-下面为该节点的配置文件为：
+## Purpose
+Select the first or configured non-empty input and route forward.
+
+## JSON
 ```json
-{
-  "id": "当前节点ID",
-  "name": "非空选择",
-  "type": "NON_EMPTY_SELECT",
-  "config": {
-    "strategy": "FIRST",
-    "defaultNextNodeId": "默认节点ID"
-  },
-  "inputConfigs": [
-    {
-      "name": "name1",
-      "type": "Object",
-      "classify": "NODE_OUTPUT",
-      "sourceNodeId": "其他节点ID",
-      "sourceOutputName": "sourceNodeId输出名称"
-    },{
-      "name": "name2",
-      "type": "Object",
-      "classify": "NODE_OUTPUT",
-      "sourceNodeId": "其他节点ID",
-      "sourceOutputName": "sourceNodeId输出名称"
-    },{
-      "name": "name3",
-      "type": "Object",
-      "classify": "NODE_OUTPUT",
-      "sourceNodeId": "其他节点ID",
-      "sourceOutputName": "sourceNodeId输出名称"
-    }
-  ],
-  "outputConfigs": [
-    {
-      "fromNodeId": "当前节点ID",
-      "name": "output",
-      "type": "Object"
-    }
-  ]
-}
+{"id":"non-empty-1","name":"Non empty select","type":"NON_EMPTY_SELECT","config":{"strategy":"FIRST","defaultNextNodeId":"fallback"},"inputConfigs":[{"name":"a","sourceType":"NODE_OUTPUT","nodeId":"n1","outputName":"output"},{"name":"b","sourceType":"NODE_OUTPUT","nodeId":"n2","outputName":"output"}],"outputConfigs":[{"name":"output","fromNodeId":"non-empty-1"}]}
 ```
+
+## Config
+| Field | Type | Required | Default | Values | Frontend control |
+| --- | --- | --- | --- | --- | --- |
+| strategy | enum | no | FIRST | FIRST and implementation enum values | select |
+| defaultNextNodeId | string | no | null | node id | node select |
+
+## Inputs
+Supports multiple named inputs from all source types.
+
+## Outputs
+Default output name is `output`. Runtime output is the selected non-empty value.
+
+## Runtime
+Checks inputs according to `strategy`. If none match, routes to `defaultNextNodeId` when provided.
+
+## Failures
+Fails on invalid strategy, bad default node, or input resolution errors.
+
+## Frontend Notes
+Render multiple input rows and show fallback edge distinctly.

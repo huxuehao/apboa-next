@@ -66,7 +66,7 @@ public class DBExecutorFactory {
      *
      * @param datasourceId 数据源ID
      */
-    public static void evictCache(String datasourceId) {
+    public static void evictCache(Long datasourceId) {
         DBExecutor executor = executorCache.remove(datasourceId);
         if (executor != null) {
             executor.close();

@@ -1,6 +1,7 @@
 package com.hxh.apboa.node.base.inputout;
 
 import lombok.Getter;
+import lombok.Setter;
 
 /**
  * 描述：节点输出配置定义
@@ -8,6 +9,7 @@ import lombok.Getter;
  * @author huxuehao
  **/
 @Getter
+@Setter
 public class OutputConfig {
     /**
      * 输出变量名

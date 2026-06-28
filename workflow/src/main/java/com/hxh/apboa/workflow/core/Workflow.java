@@ -25,6 +25,14 @@ public abstract class Workflow {
     // 节点
     private List<Node> nodes;
 
+    public List<Edge> getEdges() {
+        return edges == null ? List.of() : edges;
+    }
+
+    public List<Node> getNodes() {
+        return nodes == null ? List.of() : nodes;
+    }
+
     public Workflow(String workflowId) {
         this.workflowId = workflowId;
     }

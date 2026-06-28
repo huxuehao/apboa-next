@@ -1,7 +1,14 @@
 /* 字体 */
 @font-face {
   font-family: 'AlimamaFangYuan';
-  src: url("@/assets/fonts/AlimamaFangYuanTiVF-Thin.woff");
+  src: url("/fonts/AlimamaFangYuanTiVF-Thin.woff");
+}
+
+@font-face {
+  font-family: 'iconfont';
+  src: url('@/assets/iconfont/iconfont.woff2?t=1782484127350') format('woff2'),
+       url('@/assets/iconfont/iconfont.woff?t=1782484127350') format('woff'),
+       url('@/assets/iconfont/iconfont.ttf?t=1782484127350') format('truetype');
 }
 
 /* CSS 变量定义 */

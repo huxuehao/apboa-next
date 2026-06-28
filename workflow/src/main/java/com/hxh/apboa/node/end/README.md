@@ -1,40 +1,30 @@
-该节点为结束（http response）节点。
+# END
 
-inputConfigs 支持多个输入，所有输入变量都会作为模板变量参与 responseTemplate 的解析。
+## Purpose
+Workflow terminal node. It formats the final response.
 
-该节点对应的 json 存储示例如下：
-
+## JSON
 ```json
-{
-  "id": "当前节点ID",
-  "name": "结束",
-  "type": "END",
-  "config": {
-    "formatterType": "JACKSON",
-    "responseTemplate": "响应结果模版，支持json、字符串、纯变量格式"
-  },
-  "inputConfigs": [
-    {
-      "name": "input",
-      "type": "Object",
-      "classify": "NODE_OUTPUT",
-      "sourceNodeId": "其他节点ID",
-      "sourceOutputName": "其他节点输出名称"
-    },
-    {
-      "name": "extra",
-      "type": "String",
-      "classify": "NODE_OUTPUT",
-      "sourceNodeId": "其他节点ID",
-      "sourceOutputName": "其他节点输出名称"
-    }
-  ],
-  "outputConfigs": [
-    {
-      "fromNodeId": "当前节点ID",
-      "name": "output",
-      "type": "Object"
-    }
-  ]
-}
+{"id":"end","name":"End","type":"END","config":{"responseTemplate":"${input}","formatterType":"JACKSON"},"inputConfigs":[{"name":"input","sourceType":"NODE_OUTPUT","nodeId":"start","outputName":"output"}],"outputConfigs":[{"name":"output","fromNodeId":"end"}]}
 ```
+
+## Config
+| Field | Type | Required | Default | Values | Frontend control |
+| --- | --- | --- | --- | --- | --- |
+| responseTemplate | string | no | null | template string | template/code editor |
+| formatterType | enum | no | JACKSON | JACKSON, VELOCITY, STRING | select |
+
+## Inputs
+Accepts `CONSTANT`, `VARIABLE`, `NODE_OUTPUT`, and `EXPRESSION`; default input name is `input`.
+
+## Outputs
+The default output name is `output`. Runtime output is the formatted response.
+
+## Runtime
+The node renders `responseTemplate` with the input/context and marks workflow termination.
+
+## Failures
+Fails when formatter rendering fails.
+
+## Frontend Notes
+Allow one or more END nodes. Highlight paths that do not reach an END.

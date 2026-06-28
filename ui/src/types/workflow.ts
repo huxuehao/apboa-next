@@ -1,0 +1,265 @@
+import type { Node, Edge } from '@vue-flow/core'
+
+export type WorkflowStatus = 'DRAFT' | 'PUBLISHED'
+export type WorkflowRunStatus = 'RUNNING' | 'SUCCESS' | 'FAIL' | 'STOP'
+export type WorkflowNodeRunStatus = 'RUNNING' | 'SUCCESS' | 'FAIL' | 'STOP'
+export type InputSourceType = 'CONSTANT' | 'VARIABLE' | 'NODE_OUTPUT' | 'EXPRESSION'
+
+export interface PageQuery {
+  page?: number
+  size?: number
+}
+
+export interface WorkflowQuery extends PageQuery {
+  name?: string
+  status?: WorkflowStatus
+  routeId?: string
+  enabled?: boolean
+}
+
+export interface WorkflowRunQuery extends PageQuery {
+  workflowId?: string
+  routeId?: string
+  status?: WorkflowRunStatus
+}
+
+export interface WorkflowDefinition {
+  nodes: WorkflowNodeDefinition[]
+  edges: WorkflowEdgeDefinition[]
+  viewport?: { x: number; y: number; zoom: number }
+  metadata?: {
+    schemaVersion?: string
+    updatedAt?: string
+    nodeVersion?: string
+  }
+}
+
+export interface WorkflowNodeDefinition {
+  id: string
+  type: string
+  name: string
+  position: { x: number; y: number }
+  config: Record<string, unknown>
+  inputConfigs?: WorkflowInputConfig[]
+  outputConfigs?: WorkflowOutputConfig[]
+  ui?: Record<string, unknown>
+}
+
+export interface WorkflowEdgeDefinition {
+  id: string
+  source: string
+  target: string
+  sourceHandle?: string
+  targetHandle?: string
+  label?: string
+}
+
+export interface WorkflowInputConfig {
+  name: string
+  sourceType: InputSourceType
+  value?: unknown
+  variableName?: string
+  nodeId?: string
+  outputName?: string
+  expression?: string
+}
+
+export interface WorkflowOutputConfig {
+  name: string
+  fromNodeId?: string
+  type?: string
+  description?: string
+}
+
+export interface Workflow {
+  id?: string
+  tenantId?: string
+  name?: string
+  remark?: string
+  routeId?: string
+  status?: WorkflowStatus
+  version?: string
+  config?: WorkflowDefinition
+  locked?: number
+  enabled?: boolean
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface WorkflowVersion {
+  id: string
+  name: string
+  routeId?: string
+  workflowId: string
+  remark?: string
+  config: WorkflowDefinition
+  version: string
+  createdAt?: string
+}
+
+export interface WorkflowRun {
+  id: string
+  routeId?: string
+  workflowId: string
+  version?: string
+  config?: WorkflowDefinition
+  status: WorkflowRunStatus
+  inputs?: unknown
+  outputs?: unknown
+  error?: string
+  startTime?: number
+  endTime?: number
+  createdAt?: string
+}
+
+export interface WorkflowNodeExecution {
+  id: string
+  routeId?: string
+  workflowId: string
+  workflowRunId: string
+  nodeId: string
+  nodeTitle?: string
+  nodeType: string
+  inputs?: string
+  processData?: string
+  outputs?: string
+  status: WorkflowNodeRunStatus
+  error?: string
+  startTime?: number
+  endTime?: number
+}
+
+export interface WorkflowRunRequest {
+  params?: Array<{ name: string; value: unknown }>
+  body?: unknown
+  variables?: Record<string, unknown>
+}
+
+export interface WorkflowRunResult {
+  run: WorkflowRun
+  output?: unknown
+  nodeExecutions: WorkflowNodeExecution[]
+}
+
+export interface WorkflowValidationResult {
+  valid: boolean
+  errors: Array<{ nodeId?: string; field?: string; message?: string } | string>
+  warnings?: Array<{ nodeId?: string; field?: string; message?: string } | string>
+}
+
+export interface WorkflowResourceRefs {
+  cacheIds?: string[]
+  datasourceIds?: string[]
+  mqIds?: string[]
+  pluginIds?: string[]
+}
+
+export interface WorkflowDetail {
+  workflow: Workflow
+  resources?: WorkflowResourceRefs
+}
+
+export interface NodeMetadata {
+  type: string
+  title: string
+  group: string
+  description: string
+  defaultConfig: Record<string, unknown>
+  fields?: Array<{
+    name: string
+    type: string
+    required: boolean
+    defaultValue?: unknown
+    enumValues?: string[]
+    control?: string
+  }>
+  outputs: string[]
+  branchable: boolean
+}
+
+export interface WorkflowResource {
+  id: string
+  name: string
+  type?: string
+  enabled?: boolean
+}
+
+export type WorkflowFieldControl =
+  | 'input'
+  | 'textarea'
+  | 'number'
+  | 'switch'
+  | 'select'
+  | 'segmented'
+  | 'code'
+  | 'json'
+  | 'resource'
+  | 'dbParams'
+  | 'keyValueList'
+  | 'stringList'
+  | 'startParams'
+  | 'httpRequest'
+  | 'compareTo'
+  | 'matchList'
+  | 'readonlyJson'
+
+export interface WorkflowFieldOption {
+  label: string
+  value: string | number | boolean
+  description?: string
+}
+
+export interface WorkflowFieldSchema {
+  name: string
+  label: string
+  control: WorkflowFieldControl
+  required?: boolean
+  defaultValue?: unknown
+  placeholder?: string
+  description?: string
+  options?: WorkflowFieldOption[]
+  language?: 'java' | 'javascript' | 'json' | 'txt'
+  resourceType?: 'cache' | 'datasource' | 'mq'
+  min?: number
+  max?: number
+  rows?: number
+}
+
+export interface WorkflowNodeSchema {
+  type: string
+  title: string
+  group: string
+  groupTitle: string
+  description: string
+  icon: string
+  color: string
+  defaultConfig: Record<string, unknown>
+  fields: WorkflowFieldSchema[]
+  inputConfigs: WorkflowInputConfig[]
+  outputConfigs: WorkflowOutputConfig[]
+  branchHandles?: Array<{ id: string; label: string }>
+  summary?: (config: Record<string, unknown>, resources?: WorkflowResourceMaps) => Record<string, unknown>[]
+}
+
+export interface WorkflowResourceMaps {
+  caches: WorkflowResource[]
+  datasources: WorkflowResource[]
+  mqs: WorkflowResource[]
+}
+
+export type FlowNodeData = {
+  type: string
+  label: string
+  description?: string
+  status?: WorkflowNodeRunStatus | 'IDLE' | 'INVALID'
+  errors?: string[]
+  config: Record<string, unknown>
+  inputConfigs?: WorkflowInputConfig[]
+  outputConfigs?: WorkflowOutputConfig[]
+  metadata?: NodeMetadata
+  schema?: WorkflowNodeSchema
+  resources?: WorkflowResourceMaps
+}
+
+export type WorkflowFlowNode = Node<FlowNodeData> & { data: FlowNodeData }
+export type WorkflowFlowEdge = Edge

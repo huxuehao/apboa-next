@@ -1,63 +1,48 @@
-该节点为消息推送节点（mq-push）节点。
+# MQ_PUSH
 
-该节点根据配置的 MQ ID从 apboa-mq 模块获取消息中间件连接配置，向指定的消息中间件推送消息。支持 Kafka、RabbitMQ、RocketMQ 三种消息中间件。
+## Purpose
+Publish one message to Kafka, RabbitMQ, or RocketMQ through an enabled MQ resource.
 
-消息内容支持两种方式：
-1. **静态消息（message）**：直接指定消息内容。
-2. **模板消息（messageTemplate）**：支持变量替换的模板格式，如 `Hello, ${name}!`。模板类型通过 templateType 指定（STRING / JACKSON / VELOCITY），默认使用 STRING 模板引擎。
-
-其中 `topicOrQueue`、`key`、`messageTemplate` 均支持 Velocity 动态变量语法，变量由 inputConfigs 传入框架后自动解析替换。
-
-该节点对应的 json 存储示例如下：
-
+## JSON
 ```json
 {
-  "id": "当前节点ID",
-  "name": "消息推送",
+  "id": "mq-push-1",
+  "name": "Publish event",
   "type": "MQ_PUSH",
   "config": {
-    "mqId": "MQ配置ID",
-    "topicOrQueue": "${serviceName}-order-topic",
-    "key": "${orderKey}",
-    "message": "{\"orderId\": 1001, \"status\": \"paid\"}",
-    "messageTemplate": "{\"orderId\": ${orderId}, \"status\": \"${status}\"}",
+    "mqId": "1880000000000000003",
+    "topicOrQueue": "workflow-events",
+    "key": "${input.id}",
+    "message": null,
+    "messageTemplate": "{\"id\":\"${input.id}\"}",
     "templateType": "VELOCITY"
   },
-  "inputConfigs": [
-    {
-      "name": "orderId",
-      "type": "String",
-      "classify": "NODE_OUTPUT",
-      "sourceNodeId": "源节点ID",
-      "sourceOutputName": "源节点输出参数名称"
-    },
-    {
-      "name": "status",
-      "type": "String",
-      "classify": "NODE_OUTPUT",
-      "sourceNodeId": "源节点ID",
-      "sourceOutputName": "status"
-    },
-    {
-      "name": "serviceName",
-      "type": "String",
-      "classify": "CONSTANT",
-      "value": "prod"
-    },
-    {
-      "name": "orderKey",
-      "type": "String",
-      "classify": "NODE_OUTPUT",
-      "sourceNodeId": "源节点ID",
-      "sourceOutputName": "orderKey"
-    }
-  ],
-  "outputConfigs": [
-    {
-      "fromNodeId": "当前节点ID",
-      "name": "output",
-      "type": "Boolean"
-    }
-  ]
+  "inputConfigs": [{ "name": "input", "sourceType": "NODE_OUTPUT", "nodeId": "start", "outputName": "output" }],
+  "outputConfigs": [{ "name": "output", "fromNodeId": "mq-push-1" }]
 }
 ```
+
+## Config
+| Field | Type | Required | Default | Values | Frontend control |
+| --- | --- | --- | --- | --- | --- |
+| mqId | string | yes | - | enabled MQ id | resource select from `GET /api/mq?enabled=1` |
+| topicOrQueue | string | yes | - | template string | input |
+| key | string | no | null | template string | input |
+| message | string | no | null | literal message | textarea |
+| messageTemplate | string | no | null | template string | template/code editor |
+| templateType | enum | no | STRING | STRING, VELOCITY, JACKSON | select |
+
+## Inputs
+Accepts `CONSTANT`, `VARIABLE`, `NODE_OUTPUT`, and `EXPRESSION`. Use `input` for template context.
+
+## Outputs
+The default output name is `output`. Runtime output is the publish result from the MQ operator.
+
+## Runtime
+Requires `Mq.enabled = 1`. `message` has priority when it is not blank; otherwise `messageTemplate` is rendered with `templateType`. `topicOrQueue`, `key`, and `messageTemplate` are template-rendered. For Kafka and RocketMQ, `topicOrQueue` means topic; for RabbitMQ it means queue or routing target according to the MQ resource config.
+
+## Failures
+Fails on missing/disabled MQ resource, blank destination, missing message content, template failure, or publish failure.
+
+## Frontend Notes
+Show resource type after selection. Label destination as "Topic / Queue" and expose a connection check button.

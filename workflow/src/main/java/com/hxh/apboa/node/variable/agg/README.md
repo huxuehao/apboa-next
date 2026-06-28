@@ -1,44 +1,31 @@
-该节点为变量聚合节点，用于将多个输入聚合成一个输出，支持聚合成Map、Array、String。
-注意：该节点的多个输入的数据值类型必须一致。
+# VARIABLE_AGG
 
-下面为该节点的配置文件为：
+## Purpose
+Aggregate multiple inputs into a map, list, or joined string.
+
+## JSON
 ```json
-{
-  "id": "当前节点ID",
-  "name": "变量聚合",
-  "type": "VARIABLE_AGG",
-  "config": {
-    "strategy": "MAP",
-    "splicingSymbol": "",
-    "excludeNull": false
-  },
-  "inputConfigs": [
-    {
-      "name": "name1",
-      "type": "String",
-      "classify": "NODE_OUTPUT",
-      "sourceNodeId": "其他节点ID",
-      "sourceOutputName": "sourceNodeId输出名称"
-    },{
-      "name": "name2",
-      "type": "String",
-      "classify": "NODE_OUTPUT",
-      "sourceNodeId": "其他节点ID",
-      "sourceOutputName": "sourceNodeId输出名称"
-    },{
-      "name": "name3",
-      "type": "String",
-      "classify": "NODE_OUTPUT",
-      "sourceNodeId": "其他节点ID",
-      "sourceOutputName": "sourceNodeId输出名称"
-    }
-  ],
-  "outputConfigs": [
-    {
-      "fromNodeId": "当前节点ID",
-      "name": "output",
-      "type": "Object"
-    }
-  ]
-}
+{"id":"agg-1","name":"Aggregate","type":"VARIABLE_AGG","config":{"strategy":"MAP","excludeNull":false,"splicingSymbol":","},"inputConfigs":[{"name":"a","sourceType":"NODE_OUTPUT","nodeId":"n1","outputName":"output"}],"outputConfigs":[{"name":"output","fromNodeId":"agg-1"}]}
 ```
+
+## Config
+| Field | Type | Required | Default | Values | Frontend control |
+| --- | --- | --- | --- | --- | --- |
+| strategy | enum | no | MAP | MAP, LIST, STRING | segmented select |
+| excludeNull | boolean | no | false | true/false | switch |
+| splicingSymbol | string | no | empty | delimiter for STRING | input |
+
+## Inputs
+Supports all source types and multiple named inputs. Names become map keys when `strategy=MAP`.
+
+## Outputs
+Default output name is `output`. Runtime value follows the aggregation strategy.
+
+## Runtime
+Resolves all inputConfigs, optionally drops nulls, then aggregates.
+
+## Failures
+Fails on invalid strategy or input resolution errors.
+
+## Frontend Notes
+Provide add/remove input rows and keep `output` as the primary output.

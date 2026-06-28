@@ -1,51 +1,49 @@
-该节点为数据库更新节点（db-update）节点。
+# DB_UPDATE
 
-该节点根据配置的数据源ID从 apboa-datasource 模块获取数据源连接配置，使用 HikariCP 连接池执行 SQL 更新操作。支持 MySQL、Oracle、PostgreSQL 三种数据库类型。返回受影响的行数。
+## Purpose
+Execute a parameterized UPDATE statement against an enabled datasource.
 
-该节点对应的 json 存储示例如下：
-
+## JSON
 ```json
 {
-  "id": "当前节点ID",
-  "name": "数据库更新",
+  "id": "db-update-1",
+  "name": "Update status",
   "type": "DB_UPDATE",
   "config": {
-    "datasourceId": "数据源ID",
-    "sql": "UPDATE users SET age = ? WHERE name = ?",
+    "datasourceId": "1880000000000000002",
+    "sql": "update task set status = ? where id = ?",
     "params": [
-      {
-        "value": "${newAge}",
-        "type": "Integer"
-      },
-      {
-        "value": "${userName}",
-        "type": "String"
-      }
+      { "value": "${input.status}", "type": "STRING" },
+      { "value": "${input.id}", "type": "LONG" }
     ],
     "formatterType": "VELOCITY"
   },
-  "inputConfigs": [
-    {
-      "name": "newAge",
-      "type": "Integer",
-      "classify": "NODE_OUTPUT",
-      "sourceNodeId": "源节点ID",
-      "sourceOutputName": "源节点输出参数名称"
-    },
-    {
-      "name": "userName",
-      "type": "String",
-      "classify": "NODE_OUTPUT",
-      "sourceNodeId": "源节点ID2",
-      "sourceOutputName": "源节点输出参数名称"
-    }
-  ],
-  "outputConfigs": [
-    {
-      "fromNodeId": "当前节点ID",
-      "name": "output",
-      "type": "Integer"
-    }
-  ]
+  "inputConfigs": [{ "name": "input", "sourceType": "NODE_OUTPUT", "nodeId": "start", "outputName": "output" }],
+  "outputConfigs": [{ "name": "output", "fromNodeId": "db-update-1" }]
 }
 ```
+
+## Config
+| Field | Type | Required | Default | Values | Frontend control |
+| --- | --- | --- | --- | --- | --- |
+| datasourceId | string | yes | - | enabled datasource id | resource select |
+| sql | string | yes | - | SQL with `?` placeholders | SQL editor |
+| params | array | no | [] | ordered values | parameter grid |
+| params[].value | string | yes | - | literal or template | input/template cell |
+| params[].type | enum | yes | STRING | STRING, INTEGER, INT, LONG, DOUBLE, FLOAT, BOOLEAN, BOOL | select |
+| formatterType | enum | no | VELOCITY | VELOCITY, STRING, JACKSON | select |
+
+## Inputs
+Accepts `CONSTANT`, `VARIABLE`, `NODE_OUTPUT`, `EXPRESSION`; default input name is `input`.
+
+## Outputs
+The default output name is `output`. Runtime output is typically affected row count.
+
+## Runtime
+The node binds params to `?` placeholders in order. SQL text is not whole-template-rendered; parameter values are rendered and converted.
+
+## Failures
+Fails for missing/disabled datasource, invalid SQL, bad parameter count/type, transaction/JDBC errors.
+
+## Frontend Notes
+Show affected row count in debug output. Use a warning for UPDATE without WHERE if SQL linting is added.

@@ -1,36 +1,42 @@
-该节点为缓存删除节点（cache-remove）节点。
+# CACHE_REMOVE
 
-该节点根据配置的缓存ID从 apboa-cache 模块获取 Redis 连接配置，从 Redis 中删除指定 key。
+## Purpose
+Delete one Redis key from a configured cache resource.
 
-key 支持 Velocity 动态变量语法，变量由 inputConfigs 传入框架后自动解析替换。
-
-该节点对应的 json 存储示例如下：
-
+## JSON
 ```json
 {
-  "id": "当前节点ID",
-  "name": "缓存删除",
+  "id": "cache-remove-1",
+  "name": "Remove cache",
   "type": "CACHE_REMOVE",
   "config": {
-    "cacheId": "缓存ID",
-    "key": "user:${userId}",
+    "cacheId": "1880000000000000001",
+    "key": "workflow:${input.id}",
     "formatterType": "VELOCITY"
   },
-  "inputConfigs": [
-    {
-      "name": "userId",
-      "type": "String",
-      "classify": "NODE_OUTPUT",
-      "sourceNodeId": "源节点ID",
-      "sourceOutputName": "源节点输出参数名称"
-    }
-  ],
-  "outputConfigs": [
-    {
-      "fromNodeId": "当前节点ID",
-      "name": "output",
-      "type": "Boolean"
-    }
-  ]
+  "inputConfigs": [{ "name": "input", "sourceType": "NODE_OUTPUT", "nodeId": "start", "outputName": "output" }],
+  "outputConfigs": [{ "name": "output", "fromNodeId": "cache-remove-1" }]
 }
 ```
+
+## Config
+| Field | Type | Required | Default | Values | Frontend control |
+| --- | --- | --- | --- | --- | --- |
+| cacheId | string | yes | - | enabled cache id | resource select |
+| key | string | yes | - | template string | template input |
+| formatterType | enum | no | VELOCITY | VELOCITY, STRING, JACKSON | select |
+
+## Inputs
+Accepts `CONSTANT`, `VARIABLE`, `NODE_OUTPUT`, and `EXPRESSION`. Use `input` when the key references upstream data.
+
+## Outputs
+The default output name is `output`. Runtime output is the remove operation result.
+
+## Runtime
+Requires `Cache.enabled = 1`, renders `key`, and removes it from Redis.
+
+## Failures
+Fails on blank `cacheId` or `key`, missing/disabled resource, Redis errors, or formatter errors.
+
+## Frontend Notes
+Warn that deletion is immediate. Provide resource check and key preview when variables are known.

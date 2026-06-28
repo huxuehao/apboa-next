@@ -1,52 +1,46 @@
-该节点为缓存设置节点（cache-set）节点。
+# CACHE_SET
 
-该节点根据配置的缓存ID从 apboa-cache 模块获取 Redis 连接配置，向 Redis 中设置键值对。支持配置过期时间（秒）。
+## Purpose
+Write one value into a configured Redis cache. Use it for workflow state, intermediate data, or short-lived coordination values.
 
-key 和 value 支持 Velocity 动态变量语法，变量由 inputConfigs 传入框架后自动解析替换。
-value 可以是 JSON 对象、字符串或数字，若为复杂对象则会先序列化为 JSON 再进行模板解析。
-
-该节点对应的 json 存储示例如下：
-
+## JSON
 ```json
 {
-  "id": "当前节点ID",
-  "name": "缓存设置",
+  "id": "cache-set-1",
+  "name": "Set cache",
   "type": "CACHE_SET",
   "config": {
-    "cacheId": "缓存ID",
-    "key": "user:${userId}",
-    "value": {"name": "${userName}", "age": ${userAge}},
+    "cacheId": "1880000000000000001",
+    "key": "workflow:${input.id}",
+    "value": "${input}",
     "expire": 3600,
     "formatterType": "VELOCITY"
   },
-  "inputConfigs": [
-    {
-      "name": "userId",
-      "type": "String",
-      "classify": "NODE_OUTPUT",
-      "sourceNodeId": "源节点ID",
-      "sourceOutputName": "源节点输出参数名称"
-    },
-    {
-      "name": "userName",
-      "type": "String",
-      "classify": "NODE_OUTPUT",
-      "sourceNodeId": "源节点ID",
-      "sourceOutputName": "userName"
-    },
-    {
-      "name": "userAge",
-      "type": "Integer",
-      "classify": "CONSTANT",
-      "value": 25
-    }
-  ],
-  "outputConfigs": [
-    {
-      "fromNodeId": "当前节点ID",
-      "name": "output",
-      "type": "Boolean"
-    }
-  ]
+  "inputConfigs": [{ "name": "input", "sourceType": "NODE_OUTPUT", "nodeId": "start", "outputName": "output" }],
+  "outputConfigs": [{ "name": "output", "fromNodeId": "cache-set-1" }]
 }
 ```
+
+## Config
+| Field | Type | Required | Default | Values | Frontend control |
+| --- | --- | --- | --- | --- | --- |
+| cacheId | string | yes | - | enabled cache id | resource select |
+| key | string | yes | - | template string | template input |
+| value | any | yes | - | literal or template value | JSON/template editor |
+| expire | long | no | null | seconds; null or 0 means no expiration | number input |
+| formatterType | enum | no | VELOCITY | VELOCITY, STRING, JACKSON | select |
+
+## Inputs
+Accepts `CONSTANT`, `VARIABLE`, `NODE_OUTPUT`, and `EXPRESSION`. Use `input` as the default input name.
+
+## Outputs
+The default output name is `output`. Runtime output is the cache operator result, normally a boolean-like success value.
+
+## Runtime
+Requires an enabled cache resource. `key` and templated `value` are rendered before writing. `expire = null` or `expire = 0` means the key is stored without TTL.
+
+## Failures
+Fails when required fields are missing, the cache is disabled or absent, Redis write fails, or template rendering fails.
+
+## Frontend Notes
+Expose TTL as seconds with an explicit "no expiration" state. Use enabled resource lists and provide `POST /api/cache/check/connect`.

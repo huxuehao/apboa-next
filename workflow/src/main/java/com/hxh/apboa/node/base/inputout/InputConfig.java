@@ -58,7 +58,7 @@ public class InputConfig {
     /**
      * 私有构造函数，避免外部进行实例化
      */
-    private InputConfig() {}
+    public InputConfig() {}
 
 //    /**
 //     * 创建一个常量输入配置

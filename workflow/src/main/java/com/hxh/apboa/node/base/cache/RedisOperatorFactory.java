@@ -64,7 +64,7 @@ public class RedisOperatorFactory {
      *
      * @param cacheId 缓存ID
      */
-    public static void evictCache(String cacheId) {
+    public static void evictCache(Long cacheId) {
         RedisOperator operator = operatorCache.remove(cacheId);
         if (operator != null) {
             operator.close();

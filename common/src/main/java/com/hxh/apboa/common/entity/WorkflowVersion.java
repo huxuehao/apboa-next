@@ -18,6 +18,9 @@ import lombok.Setter;
 @Setter
 @TableName(TableConst.WORKFLOW_VERSION)
 public class WorkflowVersion extends BaseTenantEntity {
+    @QueryDefine(condition = QueryCondition.LIKE)
+    private String name;
+
     /**
      * 路由ID
      */

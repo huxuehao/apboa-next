@@ -18,7 +18,7 @@ import java.util.concurrent.ConcurrentMap;
  *
  * @author huxuehao
  **/
-@Component
+@Component("iterateGroovyInstanceLoader")
 public class GroovyInstanceLoader implements InstanceLoader {
     private final GroovyClassLoader groovyClassLoader = new GroovyClassLoader();
     private final ConcurrentMap<String, Class<?>> CLASS_CACHE = new ConcurrentHashMap<>();

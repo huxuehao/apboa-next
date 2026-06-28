@@ -60,10 +60,4 @@ public class Datasource extends BaseTenantEntity {
      */
     @QueryDefine(condition = QueryCondition.LIKE)
     private String password;
-    /**
-     * 是否启用
-     * 1（可用）、0（不可用）
-     */
-    @QueryDefine(condition = QueryCondition.EQ)
-    private Integer enabled;
 }

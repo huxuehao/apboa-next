@@ -1,50 +1,49 @@
-该节点为数据库插入节点（db-insert）节点。
+# DB_INSERT
 
-该节点根据配置的数据源ID从 apboa-datasource 模块获取数据源连接配置，使用 HikariCP 连接池执行 SQL 插入操作。支持 MySQL、Oracle、PostgreSQL 三种数据库类型。返回受影响的行数。
+## Purpose
+Execute a parameterized INSERT statement against an enabled datasource.
 
-该节点对应的 json 存储示例如下：
-
+## JSON
 ```json
 {
-  "id": "当前节点ID",
-  "name": "数据库插入",
+  "id": "db-insert-1",
+  "name": "Insert audit",
   "type": "DB_INSERT",
   "config": {
-    "datasourceId": "数据源ID",
-    "sql": "INSERT INTO users (name, age) VALUES (?, ?)",
+    "datasourceId": "1880000000000000002",
+    "sql": "insert into audit_log(user_id, content) values(?, ?)",
     "params": [
-      {
-        "value": "${userName}",
-        "type": "String"
-      },
-      {
-        "value": "${userAge}",
-        "type": "Integer"
-      }
+      { "value": "${input.userId}", "type": "LONG" },
+      { "value": "${input.content}", "type": "STRING" }
     ],
     "formatterType": "VELOCITY"
   },
-  "inputConfigs": [
-    {
-      "name": "userName",
-      "type": "String",
-      "classify": "NODE_OUTPUT",
-      "sourceNodeId": "源节点ID",
-      "sourceOutputName": "源节点输出参数名称"
-    },
-    {
-      "name": "userAge",
-      "type": "Integer",
-      "classify": "CONSTANT",
-      "value": 25
-    }
-  ],
-  "outputConfigs": [
-    {
-      "fromNodeId": "当前节点ID",
-      "name": "output",
-      "type": "Integer"
-    }
-  ]
+  "inputConfigs": [{ "name": "input", "sourceType": "NODE_OUTPUT", "nodeId": "start", "outputName": "output" }],
+  "outputConfigs": [{ "name": "output", "fromNodeId": "db-insert-1" }]
 }
 ```
+
+## Config
+| Field | Type | Required | Default | Values | Frontend control |
+| --- | --- | --- | --- | --- | --- |
+| datasourceId | string | yes | - | enabled datasource id | resource select |
+| sql | string | yes | - | SQL with `?` placeholders | SQL editor |
+| params | array | no | [] | ordered values | parameter grid |
+| params[].value | string | yes | - | literal or template | input/template cell |
+| params[].type | enum | yes | STRING | STRING, INTEGER, INT, LONG, DOUBLE, FLOAT, BOOLEAN, BOOL | select |
+| formatterType | enum | no | VELOCITY | VELOCITY, STRING, JACKSON | select |
+
+## Inputs
+Accepts all input source types: `CONSTANT`, `VARIABLE`, `NODE_OUTPUT`, `EXPRESSION`. Default input name: `input`.
+
+## Outputs
+The default output name is `output`. Runtime output is the insert execution result, normally affected row count.
+
+## Runtime
+SQL is executed with prepared-statement placeholders. SQL text is not globally templated; only `params[].value` is rendered and converted.
+
+## Failures
+Fails on disabled/missing datasource, invalid SQL, parameter mismatch, conversion failure, constraint violations, or JDBC errors.
+
+## Frontend Notes
+Keep SQL and params visually linked. Provide datasource select and connection check. Do not allow frontend-only output names unless backend outputConfigs include them.

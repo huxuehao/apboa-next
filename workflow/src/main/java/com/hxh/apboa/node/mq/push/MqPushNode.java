@@ -58,7 +58,7 @@ public class MqPushNode extends EnhancedNode {
         if (mq == null) {
             throw new RuntimeException("MQ 配置不存在，MQ ID: " + config.getMqId());
         }
-        if (mq.getEnabled() == null || mq.getEnabled() == 0) {
+        if (!Boolean.TRUE.equals(mq.getEnabled())) {
             throw new RuntimeException("MQ 未启用，MQ ID: " + config.getMqId());
         }
 

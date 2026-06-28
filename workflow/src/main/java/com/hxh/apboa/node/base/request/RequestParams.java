@@ -16,5 +16,4 @@ import java.util.List;
 @Builder
 public class RequestParams {
     private List<ParamItem> params;
-    private byte[] body;
 }

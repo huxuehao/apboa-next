@@ -77,9 +77,9 @@
   cursor: pointer;
 }
 
-.ant-segmented {
-  background-color: transparent;
-}
+/*.ant-segmented {*/
+/*  background-color: transparent;*/
+/*}*/
 
 .ant-modal-mask {
   /* 1. 现代浏览器标准属性（带webkit前缀，适配Safari/Chrome） */

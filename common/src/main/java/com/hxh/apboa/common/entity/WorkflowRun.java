@@ -19,11 +19,16 @@ import lombok.Setter;
 @Setter
 @TableName(TableConst.WORKFLOW_RUN)
 public class WorkflowRun extends BaseTenantEntity {
+    @QueryDefine(condition = QueryCondition.EQ)
+    private String routeId;
+
     /**
      * 工作流ID
      */
     @QueryDefine(condition = QueryCondition.EQ)
     private String workflowId;
+    @QueryDefine(condition = QueryCondition.EQ)
+    private String version;
     /**
      * 工作流配置
      */
@@ -34,4 +39,11 @@ public class WorkflowRun extends BaseTenantEntity {
      */
     @QueryDefine(condition = QueryCondition.EQ)
     private WorkflowRunStatus status;
+    @TableField(typeHandler = JsonNodeTypeHandler.class)
+    private Object inputs;
+    @TableField(typeHandler = JsonNodeTypeHandler.class)
+    private Object outputs;
+    private String error;
+    private Long startTime;
+    private Long endTime;
 }

@@ -60,9 +60,4 @@ public class Cache extends BaseTenantEntity {
      */
     @QueryDefine(condition = QueryCondition.LIKE)
     private String password;
-    /**
-     * 缓存状态
-     */
-    @QueryDefine(condition = QueryCondition.EQ)
-    private Integer enabled;
 }

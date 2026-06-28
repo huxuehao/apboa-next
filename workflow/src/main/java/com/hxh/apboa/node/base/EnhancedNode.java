@@ -44,6 +44,7 @@ public abstract class EnhancedNode implements Node {
         NodeOutput output = initOutput();
         // 解析节点输入
         Map<String, Object> inputs = resolveInputs(context);
+        output.addExecutionContext("inputs", inputs);
         // 校验参数
         VerifyResult verifyResult = verifyConfig(inputs);
         if (!verifyResult.isValid()) {

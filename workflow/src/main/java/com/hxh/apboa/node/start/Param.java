@@ -1,7 +1,6 @@
 package com.hxh.apboa.node.start;
 
 import com.hxh.apboa.node.base.inputout.OutputConfig;
-import com.hxh.apboa.node.base.request.Position;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -13,10 +12,6 @@ import lombok.Setter;
 @Getter
 @Setter
 public class Param {
-    /**
-     * 参数位置
-     */
-    private Position position;
     /**
      * 参数名称
      */
