@@ -9,6 +9,7 @@ import com.hxh.apboa.common.entity.RagDocument;
 import com.hxh.apboa.common.entity.RagDocumentChunk;
 import com.hxh.apboa.common.enums.RagDocumentStatus;
 import com.hxh.apboa.common.util.JsonUtils;
+import com.hxh.apboa.common.util.TenantUtils;
 import com.hxh.apboa.common.vo.RagDocumentChunkVO;
 import com.hxh.apboa.engine.rag.DocumentParser;
 import com.hxh.apboa.engine.rag.EmbeddingRecord;
@@ -205,10 +206,16 @@ public class LocalRagService {
      * 异步执行，不阻塞调用线程
      */
     @Async("ragDocExecutor")
-    public void reprocessDocument(RagDocument document, Attach attach, KnowledgeBaseConfig config) {
-        document.setStatus(RagDocumentStatus.PROCESSING);
-        document.setUpdatedAt(LocalDateTime.now());
-        ragDocumentMapper.updateById(document);
+    public void reprocessDocument(RagDocument document, Attach attach, KnowledgeBaseConfig config, Long tenantId, String tenantCode) {
+        TenantUtils.setCurrentTenant(tenantId, tenantCode);
+        try {
+            document.setStatus(RagDocumentStatus.PROCESSING);
+            document.setUpdatedAt(LocalDateTime.now());
+            ragDocumentMapper.updateById(document);
+        } catch (Exception e) {
+            TenantUtils.clear();
+            throw new RuntimeException(e);
+        }
 
         try (InputStream inputStream = attachService.downloadAsStream(attach)) {
             processDocument(document, inputStream, config);
@@ -218,6 +225,8 @@ public class LocalRagService {
             document.setErrorMessage(e.getMessage());
             document.setUpdatedAt(LocalDateTime.now());
             ragDocumentMapper.updateById(document);
+        } finally {
+            TenantUtils.clear();
         }
     }
 

@@ -9,6 +9,7 @@ import com.hxh.apboa.common.enums.KbType;
 import com.hxh.apboa.common.enums.RagDocumentStatus;
 import com.hxh.apboa.common.enums.TenantRole;
 import com.hxh.apboa.common.r.R;
+import com.hxh.apboa.common.util.TenantUtils;
 import com.hxh.apboa.common.vo.RagDocumentChunkVO;
 import com.hxh.apboa.engine.rag.DocumentParser;
 import com.hxh.apboa.knowledge.service.KnowledgeBaseConfigService;
@@ -90,7 +91,9 @@ public class RagEndPoint {
             ragDocumentMapper.insert(document);
 
             // 异步处理文档，从已保存的附件中读取文件流
-            localRagService.reprocessDocument(document, attach, kbConfig);
+            Long tenantId = TenantUtils.getCurrentTenantId();
+            String tenantCode = TenantUtils.getCurrentTenantCode();
+            localRagService.reprocessDocument(document, attach, kbConfig, tenantId, tenantCode);
 
             return R.data(document.getId());
         } catch (Exception e) {
@@ -274,8 +277,10 @@ public class RagEndPoint {
             document.setUpdatedAt(LocalDateTime.now());
             ragDocumentMapper.updateById(document);
 
+            Long tenantId = TenantUtils.getCurrentTenantId();
+            String tenantCode = TenantUtils.getCurrentTenantCode();
             // 异步重新处理文档，从已保存的附件中读取文件流
-            localRagService.reprocessDocument(document, newAttach, kbConfig);
+            localRagService.reprocessDocument(document, newAttach, kbConfig, tenantId, tenantCode);
 
             return R.data(true);
         } catch (Exception e) {
@@ -315,8 +320,10 @@ public class RagEndPoint {
             document.setUpdatedAt(LocalDateTime.now());
             ragDocumentMapper.updateById(document);
 
+            Long tenantId = TenantUtils.getCurrentTenantId();
+            String tenantCode = TenantUtils.getCurrentTenantCode();
             // 异步重新处理文档
-            localRagService.reprocessDocument(document, attach, kbConfig);
+            localRagService.reprocessDocument(document, attach, kbConfig, tenantId, tenantCode);
 
             return R.data(true);
         } catch (Exception e) {
