@@ -16,6 +16,8 @@
 package io.agentscope.core.tool;
 
 import com.hxh.apboa.common.consts.SysConst;
+import com.hxh.apboa.common.util.TenantUtils;
+import com.hxh.apboa.engine.agui.AgentContext;
 import io.agentscope.core.agent.Agent;
 import io.agentscope.core.message.ToolResultBlock;
 import io.agentscope.core.message.ToolUseBlock;
@@ -247,7 +249,14 @@ class ToolExecutor {
                         .emitter(toolEmitter)
                         .build();
 
-        return tool.callAsync(executionParam)
+        AgentContext agentContext = finalContext.get(AgentContext.class);
+        return Mono.defer(() -> {
+                    // 在订阅线程设置租户（若 callAsync 内部不切换线程，则可生效）
+                    if (agentContext != null) {
+                        TenantUtils.setCurrentTenant(agentContext.getTenantId(), agentContext.getTenantCode());
+                    }
+                    return tool.callAsync(executionParam);
+                })
                 .onErrorResume(
                         ToolSuspendException.class,
                         e -> {
@@ -261,12 +270,10 @@ class ToolExecutor {
                 .onErrorResume(
                         e -> {
                             String errorMsg =
-                                    e.getMessage() != null
-                                            ? e.getMessage()
-                                            : e.getClass().getSimpleName();
-                            return Mono.just(
-                                    ToolResultBlock.error("Tool execution failed: " + errorMsg));
-                        });
+                                    e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+                            return Mono.just(ToolResultBlock.error("Tool execution failed: " + errorMsg));
+                        })
+                .doFinally(signalType -> TenantUtils.clear());   // 无论成功、挂起、异常都清理
     }
 
     // ==================== Batch Tool Execution ====================
