@@ -12,8 +12,9 @@ import {
   UndoOutlined,
   UnlockOutlined
 } from '@ant-design/icons-vue'
+import { Modal } from 'ant-design-vue';
 
-defineProps<{
+const props = defineProps<{
   locked: boolean
   readonly: boolean
   canUndo: boolean
@@ -23,7 +24,7 @@ defineProps<{
   lockToggling?: boolean
 }>()
 
-defineEmits<{
+const emit =defineEmits<{
   addNode: []
   fit: []
   zoomIn: []
@@ -35,18 +36,32 @@ defineEmits<{
   layout: []
   clearSelection: []
 }>()
+
+const handleToggleLock = () => {
+  if (props.locked) {
+    Modal.confirm({
+      title: '解锁工作流',
+      content: '解锁工作流后将进入只读模式，是否确认？',
+      onOk: () => {
+        emit('toggleLock')
+      }
+    })
+  } else {
+    emit('toggleLock')
+  }
+}
 </script>
 
 <template>
   <div class="canvas-toolbar" aria-label="画布快捷工具栏">
-    <ATooltip v-if="!readonly" placement="right" title="添加节点">
-      <AButton :type="libraryOpen ? 'primary' : 'text'" @click="$emit('addNode')">
+    <ATooltip placement="right" title="添加节点">
+      <AButton :disabled="readonly" :type="libraryOpen ? 'primary' : 'text'" @click="$emit('addNode')">
         <template #icon><PlusCircleOutlined /></template>
       </AButton>
     </ATooltip>
-    <div v-if="!readonly" class="toolbar-divider" />
+    <div class="toolbar-divider" />
     <ATooltip placement="right" title="适配全部节点">
-      <AButton type="text" :disabled="!hasNodes" @click="$emit('fit')">
+      <AButton type="text" :disabled="!hasNodes || readonly" @click="$emit('fit')">
         <template #icon><AimOutlined /></template>
       </AButton>
     </ATooltip>
@@ -65,32 +80,32 @@ defineEmits<{
         <template #icon><CompressOutlined /></template>
       </AButton>
     </ATooltip>
-    <div class="toolbar-divider" v-if="!readonly" />
-    <ATooltip v-if="!readonly" placement="right" :title="locked ? '锁定工作流' : '解锁工作流'">
-      <AButton :type="locked ? 'primary' : 'text'" :loading="lockToggling" @click="$emit('toggleLock')">
+    <div class="toolbar-divider" />
+    <ATooltip placement="right" :title="locked ? '锁定工作流' : '解锁工作流'">
+      <AButton :disabled="readonly" :type="locked ? 'primary' : 'text'" :loading="lockToggling" @click="handleToggleLock">
         <template #icon>
           <LockOutlined v-if="locked" />
           <UnlockOutlined v-else />
         </template>
       </AButton>
     </ATooltip>
-    <ATooltip v-if="!readonly" placement="right" title="撤销">
-      <AButton type="text" :disabled="!canUndo" @click="$emit('undo')">
+    <ATooltip placement="right" title="撤销">
+      <AButton type="text" :disabled="!canUndo || readonly" @click="$emit('undo')">
         <template #icon><UndoOutlined /></template>
       </AButton>
     </ATooltip>
-    <ATooltip v-if="!readonly" placement="right" title="重做">
-      <AButton type="text" :disabled="!canRedo" @click="$emit('redo')">
+    <ATooltip placement="right" title="重做">
+      <AButton type="text" :disabled="!canRedo || readonly" @click="$emit('redo')">
         <template #icon><RedoOutlined /></template>
       </AButton>
     </ATooltip>
-    <ATooltip v-if="!readonly" placement="right" title="整理布局">
-      <AButton type="text" :disabled="!hasNodes" @click="$emit('layout')">
+    <ATooltip placement="right" title="整理布局">
+      <AButton type="text" :disabled="!hasNodes || readonly" @click="$emit('layout')">
         <template #icon><NodeIndexOutlined /></template>
       </AButton>
     </ATooltip>
-    <ATooltip v-if="!readonly" placement="right" title="清空选择">
-      <AButton type="text" @click="$emit('clearSelection')">
+    <ATooltip placement="right" title="清空选择">
+      <AButton :disabled="readonly" type="text" @click="$emit('clearSelection')">
         <template #icon><ClearOutlined /></template>
       </AButton>
     </ATooltip>
@@ -130,11 +145,13 @@ defineEmits<{
 :deep(.ant-btn-primary) {
   background-color: #F0F0F0;
   color: #000000;
+  box-shadow: none;
 }
 
 :deep(.ant-btn-primary:hover),
 :deep(.ant-btn-primary:focus) {
   background-color: #E0E0E0;
   color: #000000;
+  box-shadow: none;
 }
 </style>

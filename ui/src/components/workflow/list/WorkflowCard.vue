@@ -118,7 +118,7 @@ function handleMenu({ key }: { key: string }) {
     </header>
 
     <div class="card-content">
-      <div class="desc" :title="data.remark">{{ data.remark || '暂无描述，进入编辑完善工作流说明。' }}</div>
+      <div class="desc" :title="data.remark">{{ data.remark || '暂无描述' }}</div>
       <div class="metrics">
 
         <span>节点 {{ nodeCount }}</span>

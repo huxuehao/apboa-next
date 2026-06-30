@@ -7,6 +7,7 @@ import com.hxh.apboa.common.entity.WorkflowRun;
 import com.hxh.apboa.common.entity.WorkflowVersion;
 import com.hxh.apboa.common.enums.workflow.WorkflowStatus;
 import com.hxh.apboa.common.util.RedisUtils;
+import com.hxh.apboa.common.util.UserUtils;
 import com.hxh.apboa.workflow.run.cache.RunWorkflowCache;
 import com.hxh.apboa.workflowbiz.core.WorkflowDefinitionCompiler;
 import com.hxh.apboa.workflowbiz.mapper.WorkflowMapper;
@@ -21,6 +22,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -70,7 +72,7 @@ public class WorkflowServiceImpl extends ServiceImpl<WorkflowMapper, Workflow> i
         if (existing == null) {
             throw new RuntimeException("workflow not found");
         }
-        if (Integer.valueOf(1).equals(existing.getLocked())) {
+        if (Integer.valueOf(1).equals(existing.getLocked()) && !isLockOwner(existing)) {
             throw new RuntimeException("workflow is locked");
         }
         boolean updated = updateById(workflow);
@@ -126,10 +128,8 @@ public class WorkflowServiceImpl extends ServiceImpl<WorkflowMapper, Workflow> i
         if (workflow == null) {
             throw new RuntimeException("workflow not found");
         }
+        Long currentUserId = UserUtils.getId();
         // 检查业务锁状态：若已被锁定，则锁定失败
-        if (Integer.valueOf(1).equals(workflow.getLocked())) {
-            return false;
-        }
         // 分布式锁，防止并发重复锁定
         String lockKey = "workflow:lock:" + id;
         String lockValue = UUID.randomUUID().toString();
@@ -138,10 +138,49 @@ public class WorkflowServiceImpl extends ServiceImpl<WorkflowMapper, Workflow> i
             return false;
         }
         try {
-            return lambdaUpdate().set(Workflow::getLocked, locked).eq(Workflow::getId, id).update();
+            Workflow latest = getById(id);
+            if (latest == null) {
+                throw new RuntimeException("workflow not found");
+            }
+            if (Integer.valueOf(1).equals(locked)) {
+                if (Integer.valueOf(1).equals(latest.getLocked())) {
+                    return isLockOwner(latest, currentUserId);
+                }
+                return lambdaUpdate()
+                        .set(Workflow::getLocked, 1)
+                        .set(Workflow::getUpdatedBy, currentUserId)
+                        .set(Workflow::getUpdatedAt, LocalDateTime.now())
+                        .eq(Workflow::getId, id)
+                        .and(wrapper -> wrapper.ne(Workflow::getLocked, 1).or().isNull(Workflow::getLocked))
+                        .update();
+            }
+            if (!Integer.valueOf(1).equals(latest.getLocked())) {
+                return true;
+            }
+            if (!isLockOwner(latest, currentUserId)) {
+                return false;
+            }
+            return lambdaUpdate()
+                    .set(Workflow::getLocked, 0)
+                    .set(Workflow::getUpdatedBy, currentUserId)
+                    .set(Workflow::getUpdatedAt, LocalDateTime.now())
+                    .eq(Workflow::getId, id)
+                    .eq(Workflow::getUpdatedBy, currentUserId)
+                    .update();
         } finally {
             redisUtils.unlock(lockKey, lockValue);
         }
+    }
+
+    private boolean isLockOwner(Workflow workflow) {
+        return isLockOwner(workflow, UserUtils.getId());
+    }
+
+    private boolean isLockOwner(Workflow workflow, Long currentUserId) {
+        return workflow != null
+                && currentUserId != null
+                && workflow.getUpdatedBy() != null
+                && currentUserId.equals(workflow.getUpdatedBy());
     }
 
     @Override

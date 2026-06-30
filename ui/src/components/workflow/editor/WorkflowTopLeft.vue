@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ArrowLeftOutlined,LoadingOutlined } from '@ant-design/icons-vue'
+import { ArrowLeftOutlined, LoadingOutlined } from '@ant-design/icons-vue'
 
 defineProps<{
   title: string
   status?: string
   version?: string
   saving?: boolean
+  saveState?: 'idle' | 'dirty' | 'saved'
   readonly?: boolean
 }>()
 
@@ -35,7 +36,13 @@ defineEmits<{
       <span class="title-meta">
         <span>{{ status === 'PUBLISHED' ? '已发布' : '草稿' }}</span>
         <span>v{{ version || '0' }}</span>
-        <span v-if="saving"> <LoadingOutlined /> 保存中...</span>
+        <span v-if="saving" class="save-state save-state-saving">
+          <LoadingOutlined />
+          保存中...
+        </span>
+        <span v-else-if="saveState === 'dirty'" class="save-state save-state-dirty">未保存</span>
+        <span v-else-if="saveState === 'saved'" class="save-state save-state-saved">已保存</span>
+        <span v-else class="save-state save-state-idle">无变化</span>
       </span>
     </div>
   </div>
@@ -108,5 +115,27 @@ defineEmits<{
   color: #8c8c8c;
   font-size: 12px;
   white-space: nowrap;
+}
+
+.save-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.save-state-saving {
+  color: #1677ff;
+}
+
+.save-state-dirty {
+  color: #faad14;
+}
+
+.save-state-saved {
+  color: #52c41a;
+}
+
+.save-state-idle {
+  color: #8c8c8c;
 }
 </style>

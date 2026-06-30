@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { Graph, layout as dagreLayout } from '@dagrejs/dagre'
 import WorkflowCanvasViewport from '@/components/workflow/editor/WorkflowCanvasViewport.vue'
@@ -35,6 +35,8 @@ import type {
   WorkflowValidationResult,
 } from '@/types/workflow'
 import { useAccountStore } from '@/stores'
+import { getToken } from '@/utils/auth'
+import setting from '@/config/setting'
 
 type CanvasRef = InstanceType<typeof WorkflowCanvasViewport>
 
@@ -48,8 +50,11 @@ const nodes = ref<WorkflowFlowNode[]>([])
 const edges = ref<WorkflowFlowEdge[]>([])
 const selectedNodeId = ref<string | null>(null)
 const saving = ref(false)
+const saveState = ref<'idle' | 'dirty' | 'saved'>('idle')
 const running = ref(false)
 const lockToggling = ref(false)
+const lockAcquired = ref(false)
+const releasingLock = ref(false)
 const libraryOpen = ref(false)
 const libraryAnchorX = ref<number | undefined>(undefined)
 const libraryAnchorY = ref<number | undefined>(undefined)
@@ -65,6 +70,8 @@ const validationPanelWidth = ref(440)
 const validationResult = ref<WorkflowValidationResult | null>(null)
 const publishModalOpen = ref(false)
 const publishing = ref(false)
+const leaveConfirmOpen = ref(false)
+const leavingAfterSave = ref(false)
 const runInput = ref('{\n  "params": [],\n  "variables": {}\n}')
 const canvasRef = ref<CanvasRef | null>(null)
 const resources = ref<WorkflowResourceMaps>({ caches: [], datasources: [], mqs: [] })
@@ -88,19 +95,52 @@ const nodeNames = computed(() =>
     return acc
   }, {}),
 )
+const draftSignature = computed(() =>
+  JSON.stringify({
+    name: workflow.value.name || '',
+    remark: workflow.value.remark || '',
+    nodes: nodes.value.map((node) => ({
+      id: node.id,
+      type: node.data.type,
+      name: node.data.label,
+      position: node.position,
+      config: node.data.config || {},
+      inputConfigs: node.data.inputConfigs || [],
+      outputConfigs: node.data.outputConfigs || [],
+    })),
+    edges: edges.value.map((edge) => ({
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      sourceHandle: edge.sourceHandle || 'output',
+      targetHandle: edge.targetHandle || 'input',
+      label: String(edge.label || ''),
+    })),
+  }),
+)
+const savedDraftSignature = ref('')
 
+const currentUserId = computed(() => String(accountStore.userInfo?.id || ''))
+const lockOwnerId = computed(() => String(workflow.value.updatedBy || ''))
+const lockOwnedByMe = computed(() =>
+  Boolean(workflow.value.locked && currentUserId.value && lockOwnerId.value === currentUserId.value),
+)
 const readonly = computed(() => {
-  if (accountStore.isReadOnly) {
-    return true
-  }
-  return !!(workflow.value.locked && accountStore.userInfo?.id !== workflow.value.updatedBy);
-
+  if (accountStore.isReadOnly) return true
+  if (!workflow.value.id) return false
+  return !lockAcquired.value || !lockOwnedByMe.value
 })
+const leaveConfirmMessage = computed(() =>
+  saving.value
+    ? '当前工作流正在保存中，直接退出可能无法确认保存结果。'
+    : '当前工作流有未保存的修改，退出前可以先保存。',
+)
 
 onMounted(async () => {
   await loadResources()
   if (workflowId.value) {
     await loadWorkflow(workflowId.value)
+    await acquireWorkflowLock()
   } else {
     const definition = createDefaultWorkflowDefinition()
     workflow.value = {
@@ -112,6 +152,28 @@ onMounted(async () => {
       config: definition,
     }
     loadDefinition(definition)
+    captureSavedDraft('idle')
+  }
+  window.addEventListener('pagehide', releaseWorkflowLockOnPageExit)
+  window.addEventListener('beforeunload', releaseWorkflowLockOnPageExit)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('pagehide', releaseWorkflowLockOnPageExit)
+  window.removeEventListener('beforeunload', releaseWorkflowLockOnPageExit)
+  releaseWorkflowLock()
+})
+
+onBeforeRouteLeave(async () => {
+  await releaseWorkflowLock()
+})
+
+watch(draftSignature, (signature) => {
+  if (!savedDraftSignature.value || saving.value || readonly.value) return
+  if (signature !== savedDraftSignature.value) {
+    saveState.value = 'dirty'
+  } else if (saveState.value === 'dirty') {
+    saveState.value = 'idle'
   }
 })
 
@@ -128,11 +190,72 @@ async function loadResources() {
   }
 }
 
+function captureSavedDraft(state: 'idle' | 'saved' = 'saved') {
+  savedDraftSignature.value = draftSignature.value
+  saveState.value = state
+}
+
+async function acquireWorkflowLock(resetDraftState = true) {
+  if (!workflow.value.id || accountStore.isReadOnly) {
+    lockAcquired.value = false
+    if (resetDraftState) captureSavedDraft('idle')
+    return
+  }
+  lockToggling.value = true
+  try {
+    const response = await workflowApi.workflowLock(workflow.value.id, 1)
+    if (!response.data.data) {
+      lockAcquired.value = false
+      await refreshWorkflowDetail(false)
+      message.warning('当前工作流正在被其他用户编辑，已进入只读模式')
+      return
+    }
+    await refreshWorkflowDetail(false)
+    lockAcquired.value = lockOwnedByMe.value
+    if (!lockAcquired.value) {
+      message.warning('未能持有当前工作流编辑锁，已进入只读模式')
+    }
+  } finally {
+    lockToggling.value = false
+    if (resetDraftState) captureSavedDraft('idle')
+  }
+}
+
+async function releaseWorkflowLock() {
+  if (releasingLock.value || !workflow.value.id || !lockAcquired.value || !lockOwnedByMe.value) return
+  releasingLock.value = true
+  try {
+    await workflowApi.workflowLock(workflow.value.id, 0)
+    workflow.value.locked = 0
+    lockAcquired.value = false
+    store.markListDirty()
+  } catch {
+    // Browser lifecycle events may interrupt requests; manual unlock remains available as compensation.
+  } finally {
+    releasingLock.value = false
+  }
+}
+
+function releaseWorkflowLockOnPageExit() {
+  if (!workflow.value.id || !lockAcquired.value || !lockOwnedByMe.value) return
+  lockAcquired.value = false
+  const token = getToken()
+  const headers: Record<string, string> = {}
+  if (token) headers[setting.tokenHeader] = `Bearer ${token}`
+  fetch(`${import.meta.env.VITE_APP_BASE_API || ''}/api/workflow/${workflow.value.id}/lock/0`, {
+    method: 'PUT',
+    headers,
+    keepalive: true,
+  }).catch(() => {})
+}
+
 async function loadWorkflow(id: string) {
   const response = await workflowApi.workflowDetail(id)
   workflow.value = response.data.data.workflow || {}
   workflow.value.config = ensureWorkflowDefinition(workflow.value.config)
   loadDefinition(workflow.value.config)
+  lockAcquired.value = lockOwnedByMe.value
+  captureSavedDraft('idle')
   await nextTick()
   canvasRef.value?.fitAll()
 }
@@ -241,7 +364,7 @@ function clone<T>(value: T): T {
 
 function addNode(schema: WorkflowNodeSchema) {
   if (readonly.value) {
-    message.warning('画布已锁定，无法添加节点')
+    message.warning('当前工作流为只读模式，无法添加节点')
     return
   }
   if (pendingEdgeId.value) {
@@ -352,7 +475,7 @@ function insertNodeOnEdge(schema: WorkflowNodeSchema, edgeId: string) {
 
 function updateNode(node: WorkflowFlowNode) {
   if (readonly.value) {
-    message.warning('工作流已锁定，解锁后再编辑节点配置')
+    message.warning('当前工作流为只读模式，无法编辑节点配置')
     return
   }
   snapshot()
@@ -361,7 +484,7 @@ function updateNode(node: WorkflowFlowNode) {
 
 function deleteNode(nodeId: string) {
   if (readonly.value) {
-    message.warning('画布已锁定，无法删除节点')
+    message.warning('当前工作流为只读模式，无法删除节点')
     return
   }
   snapshot()
@@ -459,28 +582,48 @@ function redo() {
 }
 
 async function saveWorkflow() {
+  if (readonly.value) {
+    message.warning('当前工作流为只读模式，无法保存修改')
+    return false
+  }
+  saving.value = true
   if (!workflow.value.id && !workflowId.value) {
-    const response = await workflowApi.workflowSave({
-      ...workflow.value,
-      config: toDefinition(),
-      status: workflow.value.status || 'DRAFT',
-      version: workflow.value.version || '0',
-    })
-    workflow.value = response.data.data
-    store.upsertWorkflow(workflow.value)
-    store.markListDirty()
-    message.success('工作流已创建')
-    if (workflow.value.id) await router.replace(`/workflow/${workflow.value.id}/edit`)
+    try {
+      const response = await workflowApi.workflowSave({
+        ...workflow.value,
+        config: toDefinition(),
+        status: workflow.value.status || 'DRAFT',
+        version: workflow.value.version || '0',
+      })
+      workflow.value = response.data.data
+      store.upsertWorkflow(workflow.value)
+      store.markListDirty()
+      message.success('工作流已创建')
+      captureSavedDraft('saved')
+      if (workflow.value.id) {
+        await acquireWorkflowLock(false)
+        await router.replace(`/workflow/${workflow.value.id}`)
+      }
+      return true
+    } finally {
+      saving.value = false
+    }
+  }
+  if (!workflow.value.id) {
+    saving.value = false
+    return false
+  }
+  if (saveState.value !== 'dirty') {
+    saving.value = false
     return true
   }
-  if (!workflow.value.id) return false
-  saving.value = true
   try {
     workflow.value.config = toDefinition()
     await workflowApi.workflowUpdate(workflow.value)
     await refreshWorkflowDetail(false)
     store.upsertWorkflow(workflow.value)
     store.markListDirty()
+    captureSavedDraft('saved')
     return true
   } finally {
     saving.value = false
@@ -623,6 +766,7 @@ async function handleVersionLoaded(nextWorkflow: Workflow) {
   workflow.value = nextWorkflow
   workflow.value.config = ensureWorkflowDefinition(workflow.value.config)
   loadDefinition(workflow.value.config)
+  captureSavedDraft('idle')
   await nextTick()
   canvasRef.value?.fitAll()
   store.upsertWorkflow(workflow.value)
@@ -695,31 +839,64 @@ function updateWorkflowTitle(value: string) {
   workflow.value.name = value
 }
 
-async function goBack() {
+async function leaveEditor() {
   store.markListDirty()
   await router.push('/workflow')
 }
 
-async function toggleWorkflowLock() {
-  const nextLocked = workflow.value.locked ? 0 : 1
-  if (!workflow.value.id) {
-    workflow.value.locked = nextLocked
+function waitForSavingFinished() {
+  if (!saving.value) return Promise.resolve()
+  return new Promise<void>((resolve) => {
+    const stop = watch(saving, (value) => {
+      if (!value) {
+        stop()
+        resolve()
+      }
+    })
+  })
+}
+
+function goBack() {
+  if (saving.value || saveState.value === 'dirty') {
+    leaveConfirmOpen.value = true
     return
   }
-  lockToggling.value = true
+  void leaveEditor()
+}
+
+function leaveDirectly() {
+  leaveConfirmOpen.value = false
+  void leaveEditor()
+}
+
+async function saveAndLeave() {
+  if (leavingAfterSave.value) return
+  leavingAfterSave.value = true
   try {
-    await workflowApi.workflowLock(workflow.value.id, nextLocked)
-    workflow.value.locked = nextLocked
-    store.upsertWorkflow({ ...workflow.value })
-    store.markListDirty()
-    if (workflow.value.locked) {
-      selectedNodeId.value = null
-      closeLibrary()
-    }
-    clearAllPanels()
-    message.success(workflow.value.locked ? '已锁定编辑' : '已解除锁定')
+    if (saving.value) await waitForSavingFinished()
+    const saved = saveState.value === 'dirty' ? await saveWorkflow() : true
+    if (!saved) return
+    leaveConfirmOpen.value = false
+    await leaveEditor()
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '保存失败，请稍后重试')
   } finally {
-    lockToggling.value = false
+    leavingAfterSave.value = false
+  }
+}
+
+async function toggleWorkflowLock() {
+  if (!workflow.value.id || accountStore.isReadOnly) return
+  if (lockOwnedByMe.value) {
+    await releaseWorkflowLock()
+    await refreshWorkflowDetail(false)
+    clearAllPanels()
+    message.success('已解除锁定')
+    return
+  }
+  await acquireWorkflowLock()
+  if (lockAcquired.value) {
+    message.success('已锁定编辑')
   }
 }
 
@@ -753,6 +930,7 @@ function clearAllPanels() {
       :status="workflow.status"
       :version="workflow.version"
       :saving="saving"
+      :save-state="saveState"
       :readonly="readonly"
       @back="goBack"
       @update-title="updateWorkflowTitle"
@@ -770,7 +948,7 @@ function clearAllPanels() {
     />
 
     <WorkflowCanvasToolbar
-      :locked="workflow.locked ?? false"
+      :locked="Boolean(workflow.locked)"
       :readonly="readonly"
       :can-undo="canUndo"
       :can-redo="canRedo"
@@ -857,6 +1035,20 @@ function clearAllPanels() {
       @fit="focusNode(contextMenu.nodeId); closeContextMenu()"
       @logs="openDebugPanel(); closeContextMenu()"
     />
+
+    <AModal
+      v-model:open="leaveConfirmOpen"
+      title="确认退出编辑器"
+      :closable="false"
+      :mask-closable="false"
+      :keyboard="false"
+    >
+      <p class="leave-confirm-message">{{ leaveConfirmMessage }}</p>
+      <template #footer>
+        <AButton :disabled="leavingAfterSave" @click="leaveDirectly">直接退出</AButton>
+        <AButton type="primary" :loading="leavingAfterSave" @click="saveAndLeave">保存并退出</AButton>
+      </template>
+    </AModal>
   </main>
 </template>
 
@@ -873,5 +1065,10 @@ function clearAllPanels() {
   position: absolute;
   inset: 0;
   z-index: 1;
+}
+
+.leave-confirm-message {
+  margin: 0;
+  color: #595959;
 }
 </style>

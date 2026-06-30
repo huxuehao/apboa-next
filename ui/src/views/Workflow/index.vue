@@ -125,7 +125,7 @@ async function submitWorkflowInfo(payload: { name: string; remark?: string }) {
       infoModalVisible.value = false
       store.markListDirty()
       const id = response.data.data.id
-      if (id) await router.push(`/workflow/${id}/edit`)
+      if (id) await router.push(`/workflow/${id}`)
       return
     }
 
@@ -160,7 +160,6 @@ async function removeWorkflow(record: Workflow) {
     title: '删除工作流',
     content: '删除后无法恢复；如果存在运行记录或资源绑定，后端会阻止普通删除。',
     okText: '删除',
-    okType: 'danger',
     cancelText: '取消',
     onOk: async () => {
       await workflowApi.workflowRemove([record.id!], 0)
