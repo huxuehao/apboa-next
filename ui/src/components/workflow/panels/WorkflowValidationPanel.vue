@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { CheckCircleOutlined, CloseOutlined, ExclamationCircleOutlined, WarningOutlined } from '@ant-design/icons-vue'
 import type { WorkflowValidationResult } from '@/types/workflow'
 
@@ -11,11 +11,15 @@ const props = defineProps<{
   nodeNames: Record<string, string>
 }>()
 
+const width = defineModel<number>('width', { default: 440 })
+
 const emit = defineEmits<{
   close: []
   focusNode: [nodeId: string]
 }>()
 
+const dragging = ref(false)
+const maxWidth = computed(() => Math.floor(window.innerWidth * 0.55))
 const errors = computed(() => normalizeItems(props.result?.errors || []))
 const warnings = computed(() => normalizeItems(props.result?.warnings || []))
 const hasResult = computed(() => Boolean(props.result))
@@ -33,10 +37,36 @@ function nodeLabel(nodeId?: string) {
   if (!nodeId) return '工作流'
   return props.nodeNames[nodeId] || nodeId
 }
+
+function beginResize(event: MouseEvent) {
+  dragging.value = true
+  const startX = event.clientX
+  const startWidth = width.value
+  const onMove = (moveEvent: MouseEvent) => {
+    const next = startWidth + (startX - moveEvent.clientX)
+    width.value = Math.max(440, Math.min(maxWidth.value, next))
+  }
+  const onUp = () => {
+    dragging.value = false
+    window.removeEventListener('mousemove', onMove)
+    window.removeEventListener('mouseup', onUp)
+  }
+  window.addEventListener('mousemove', onMove)
+  window.addEventListener('mouseup', onUp)
+}
+
+watch(
+  () => props.open,
+  (open) => {
+    if (!open) dragging.value = false
+  },
+)
 </script>
 
 <template>
-  <aside v-if="open" class="validation-panel">
+  <aside v-if="open" class="validation-panel" :class="{ dragging }" :style="{ width: `${width}px` }">
+    <div class="resize-handle" @mousedown.prevent="beginResize" />
+
     <header class="validation-header">
       <div>
         <div class="validation-title">
@@ -121,12 +151,47 @@ function nodeLabel(nodeId?: string) {
   top: 60px;
   bottom: 18px;
   z-index: 17;
-  width: 440px;
+  min-width: 440px;
+  max-width: 55vw;
   box-shadow: 0px 3px 10px rgba(0, 0, 0, 0.08);
   border-radius: 8px;
   background: #fff;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
+}
+
+.resize-handle {
+  position: absolute;
+  left: -5px;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  cursor: col-resize;
+  background: transparent;
+  transition: background 0.2s ease;
+}
+
+.resize-handle::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 40px;
+  border-radius: 1px;
+  background: #c9c9c9;
+  transition: background 0.2s ease;
+}
+
+.resize-handle:hover::after,
+.dragging .resize-handle::after {
+  display: none;
+}
+
+.resize-handle:hover,
+.dragging .resize-handle {
+  background: #1677FF;
 }
 
 .validation-header {
@@ -265,7 +330,12 @@ function nodeLabel(nodeId?: string) {
     right: 12px;
     top: auto;
     width: auto;
+    max-width: none;
     height: 58vh;
+  }
+
+  .resize-handle {
+    display: none;
   }
 }
 </style>

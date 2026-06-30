@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
+import { Graph, layout as dagreLayout } from '@dagrejs/dagre'
 import WorkflowCanvasViewport from '@/components/workflow/editor/WorkflowCanvasViewport.vue'
 import WorkflowCanvasToolbar from '@/components/workflow/editor/WorkflowCanvasToolbar.vue'
 import WorkflowTopActions from '@/components/workflow/editor/WorkflowTopActions.vue'
@@ -21,6 +22,7 @@ import {
   cloneDefaultOutputs,
   getWorkflowNodeSchema,
 } from '@/config/workflow/nodeSchemas'
+import { createDefaultWorkflowDefinition, ensureWorkflowDefinition } from '@/utils/workflow/defaultDefinition'
 import type {
   Workflow,
   WorkflowDefinition,
@@ -46,6 +48,7 @@ const selectedNodeId = ref<string | null>(null)
 const saving = ref(false)
 const running = ref(false)
 const locked = ref(false)
+const lockToggling = ref(false)
 const libraryOpen = ref(false)
 const libraryAnchorX = ref<number | undefined>(undefined)
 const libraryAnchorY = ref<number | undefined>(undefined)
@@ -54,8 +57,10 @@ const pendingSourceNodeId = ref<string | null>(null)
 const pendingSourceHandle = ref<string>('output')
 const pendingEdgeId = ref<string | null>(null)
 const runDockOpen = ref(false)
+const runDockWidth = ref(440)
 const versionModalOpen = ref(false)
 const validationPanelOpen = ref(false)
+const validationPanelWidth = ref(440)
 const validationResult = ref<WorkflowValidationResult | null>(null)
 const publishModalOpen = ref(false)
 const publishing = ref(false)
@@ -68,6 +73,12 @@ const contextMenu = ref({ open: false, nodeId: '', x: 0, y: 0 })
 
 const workflowId = computed(() => String(route.params.id || ''))
 const selectedNode = computed(() => nodes.value.find((item) => item.id === selectedNodeId.value) || null)
+const activeSidePanelWidth = computed(() => {
+  if (validationPanelOpen.value) return validationPanelWidth.value
+  if (runDockOpen.value) return runDockWidth.value
+  return 0
+})
+const configPanelRightOffset = computed(() => (activeSidePanelWidth.value ? activeSidePanelWidth.value + 28 : 16))
 const canUndo = computed(() => history.value.length > 0)
 const canRedo = computed(() => future.value.length > 0)
 const nodeNames = computed(() =>
@@ -82,15 +93,16 @@ onMounted(async () => {
   if (workflowId.value) {
     await loadWorkflow(workflowId.value)
   } else {
+    const definition = createDefaultWorkflowDefinition()
     workflow.value = {
       name: '未命名工作流',
       status: 'DRAFT',
       version: '0',
       locked: 0,
       enabled: true,
-      config: defaultDefinition(),
+      config: definition,
     }
-    loadDefinition(workflow.value.config || defaultDefinition())
+    loadDefinition(definition)
   }
 })
 
@@ -111,7 +123,8 @@ async function loadWorkflow(id: string) {
   const response = await workflowApi.workflowDetail(id)
   workflow.value = response.data.data.workflow || {}
   locked.value = Boolean(workflow.value.locked)
-  loadDefinition(workflow.value.config || defaultDefinition())
+  workflow.value.config = ensureWorkflowDefinition(workflow.value.config)
+  loadDefinition(workflow.value.config)
   await nextTick()
   canvasRef.value?.fitAll()
 }
@@ -122,22 +135,25 @@ async function refreshWorkflowDetail(reloadCanvas = false) {
   workflow.value = response.data.data.workflow || workflow.value
   locked.value = Boolean(workflow.value.locked)
   if (reloadCanvas) {
-    loadDefinition(workflow.value.config || defaultDefinition())
+    workflow.value.config = ensureWorkflowDefinition(workflow.value.config)
+    loadDefinition(workflow.value.config)
     await nextTick()
     canvasRef.value?.fitAll()
   }
 }
 
 function loadDefinition(definition: WorkflowDefinition) {
-  nodes.value = (definition.nodes || []).map(toFlowNode)
-  edges.value = (definition.edges || []).map(toFlowEdge)
+  const safeDefinition = ensureWorkflowDefinition(definition)
+  nodes.value = (safeDefinition.nodes || []).map(toFlowNode)
+  edges.value = (safeDefinition.edges || []).map(toFlowEdge)
   history.value = []
   future.value = []
 }
 
 function restoreDefinition(definition: WorkflowDefinition) {
-  nodes.value = (definition.nodes || []).map(toFlowNode)
-  edges.value = (definition.edges || []).map(toFlowEdge)
+  const safeDefinition = ensureWorkflowDefinition(definition)
+  nodes.value = (safeDefinition.nodes || []).map(toFlowNode)
+  edges.value = (safeDefinition.edges || []).map(toFlowEdge)
 }
 
 function toFlowNode(node: WorkflowNodeDefinition): WorkflowFlowNode {
@@ -190,18 +206,6 @@ function toDefinition(): WorkflowDefinition {
       nodeVersion: '1.0',
       updatedAt: new Date().toISOString(),
     },
-  }
-}
-
-function defaultDefinition(): WorkflowDefinition {
-  const start = createDefinitionNode('start', getWorkflowNodeSchema('START')!, { x: 120, y: 180 })
-  const end = createDefinitionNode('end', getWorkflowNodeSchema('END')!, { x: 520, y: 180 })
-  end.inputConfigs = [{ name: 'input', sourceType: 'NODE_OUTPUT', nodeId: 'start', outputName: 'output' }]
-  return {
-    nodes: [start, end],
-    edges: [{ id: 'edge-start-end', source: 'start', target: 'end', sourceHandle: 'output', targetHandle: 'input', label: '' }],
-    viewport: { x: 0, y: 0, zoom: 1 },
-    metadata: { schemaVersion: '1.0', nodeVersion: '1.0', updatedAt: new Date().toISOString() },
   }
 }
 
@@ -340,6 +344,10 @@ function insertNodeOnEdge(schema: WorkflowNodeSchema, edgeId: string) {
 }
 
 function updateNode(node: WorkflowFlowNode) {
+  if (locked.value) {
+    message.warning('工作流已锁定，解锁后再编辑节点配置')
+    return
+  }
   snapshot()
   nodes.value = nodes.value.map((item) => (item.id === node.id ? { ...node, data: { ...node.data, resources: resources.value } } : item))
 }
@@ -378,39 +386,59 @@ function copyNode(nodeId: string) {
   closeContextMenu()
 }
 
+function getLayoutEdgeWeight(edge: WorkflowFlowEdge) {
+  const sourceNode = nodes.value.find((node) => node.id === edge.source)
+  const branchHandles = sourceNode?.data.schema?.branchHandles || []
+  return branchHandles.length && edge.sourceHandle ? 1 : 2
+}
+
 function autoLayout() {
   if (!nodes.value.length || locked.value) return
   snapshot()
-  const indegree = new Map(nodes.value.map((node) => [node.id, 0]))
-  edges.value.forEach((edge) => indegree.set(edge.target, (indegree.get(edge.target) || 0) + 1))
-  const levels = new Map<string, number>()
-  const queue = nodes.value.filter((node) => (indegree.get(node.id) || 0) === 0).map((node) => node.id)
-  queue.forEach((id) => levels.set(id, 0))
-  while (queue.length) {
-    const id = queue.shift()!
-    const level = levels.get(id) || 0
-    edges.value.filter((edge) => edge.source === id).forEach((edge) => {
-      const nextLevel = Math.max(levels.get(edge.target) || 0, level + 1)
-      levels.set(edge.target, nextLevel)
-      indegree.set(edge.target, (indegree.get(edge.target) || 0) - 1)
-      if ((indegree.get(edge.target) || 0) === 0) queue.push(edge.target)
-    })
-  }
-  const buckets = new Map<number, WorkflowFlowNode[]>()
-  nodes.value.forEach((node) => {
-    const level = levels.get(node.id) || 0
-    buckets.set(level, [...(buckets.get(level) || []), node])
+  const graph = new Graph({ multigraph: true, compound: false })
+  graph.setGraph({
+    rankdir: 'LR',
+    align: 'UL',
+    ranker: 'network-simplex',
+    nodesep: 96,
+    ranksep: 160,
+    edgesep: 56,
+    marginx: 120,
+    marginy: 100,
   })
+  graph.setDefaultEdgeLabel(() => ({}))
+  nodes.value.forEach((node) => {
+    graph.setNode(node.id, {
+      width: 236,
+      height: 124,
+      rank: node.data.type === 'START' ? 'min' : node.data.type === 'END' ? 'max' : undefined,
+    })
+  })
+  edges.value.forEach((edge) => {
+    graph.setEdge(edge.source, edge.target, {
+      id: edge.id,
+      weight: getLayoutEdgeWeight(edge),
+      minlen: 1,
+      labeloffset: 16,
+    }, edge.id)
+  })
+  dagreLayout(graph)
   nodes.value = nodes.value.map((node) => {
-    const level = levels.get(node.id) || 0
-    const bucket = buckets.get(level) || []
-    const index = bucket.findIndex((item) => item.id === node.id)
-    return { ...node, position: { x: 120 + level * 320, y: 120 + index * 180 } }
+    const layoutNode = graph.node(node.id) as { x?: number; y?: number; width?: number; height?: number } | undefined
+    if (!layoutNode?.x || !layoutNode?.y) return node
+    return {
+      ...node,
+      position: {
+        x: Math.round(layoutNode.x - (layoutNode.width || 236) / 2),
+        y: Math.round(layoutNode.y - (layoutNode.height || 124) / 2),
+      },
+    }
   })
   nextTick(() => canvasRef.value?.fitAll())
 }
 
 function undo() {
+  if (locked.value) return
   const previous = history.value.pop()
   if (!previous) return
   future.value.push(toDefinition())
@@ -418,13 +446,20 @@ function undo() {
 }
 
 function redo() {
+  if (locked.value) return
   const next = future.value.pop()
   if (!next) return
   history.value.push(toDefinition())
   restoreDefinition(next)
 }
 
-async function saveWorkflow() {
+async function saveWorkflow(options: { allowLockedSkip?: boolean } = {}) {
+  if (locked.value && workflow.value.id) {
+    if (!options.allowLockedSkip) {
+      message.warning('工作流已锁定，解锁后才能保存修改')
+    }
+    return Boolean(options.allowLockedSkip)
+  }
   if (!workflow.value.id && !workflowId.value) {
     const response = await workflowApi.workflowSave({
       ...workflow.value,
@@ -437,9 +472,9 @@ async function saveWorkflow() {
     store.markListDirty()
     message.success('工作流已创建')
     if (workflow.value.id) await router.replace(`/workflow/${workflow.value.id}/edit`)
-    return
+    return true
   }
-  if (!workflow.value.id) return
+  if (!workflow.value.id) return false
   saving.value = true
   try {
     workflow.value.config = toDefinition()
@@ -448,13 +483,15 @@ async function saveWorkflow() {
     store.upsertWorkflow(workflow.value)
     store.markListDirty()
     message.success('已保存')
+    return true
   } finally {
     saving.value = false
   }
 }
 
 async function validateWorkflow() {
-  await saveWorkflow()
+  const canContinue = await saveWorkflow({ allowLockedSkip: true })
+  if (!canContinue) return false
   if (!workflow.value.id) return false
   const result = await store.validate(workflow.value.id)
   validationResult.value = result
@@ -495,14 +532,12 @@ async function submitPublish(remark?: string) {
 
 function openDebugPanel() {
   runDockOpen.value = true
+  validationPanelOpen.value = false
 }
 
 async function debugRun() {
-  if (!workflow.value.id) {
-    await saveWorkflow()
-  } else {
-    await saveWorkflow()
-  }
+  const canContinue = await saveWorkflow({ allowLockedSkip: true })
+  if (!canContinue) return
   if (!workflow.value.id) return
   running.value = true
   try {
@@ -579,8 +614,6 @@ function markValidation(valid: boolean, errors: unknown[]) {
       errors: errorMap.get(node.id) || [],
     },
   }))
-  const firstInvalid = nodes.value.find((node) => errorMap.has(node.id))
-  if (firstInvalid) selectedNodeId.value = firstInvalid.id
 }
 
 function showVersions() {
@@ -591,7 +624,8 @@ function showVersions() {
 async function handleVersionLoaded(nextWorkflow: Workflow) {
   workflow.value = nextWorkflow
   locked.value = Boolean(workflow.value.locked)
-  loadDefinition(workflow.value.config || defaultDefinition())
+  workflow.value.config = ensureWorkflowDefinition(workflow.value.config)
+  loadDefinition(workflow.value.config)
   await nextTick()
   canvasRef.value?.fitAll()
   store.upsertWorkflow(workflow.value)
@@ -621,6 +655,7 @@ function closeLibrary() {
 }
 
 function toggleLibrary() {
+  if (locked.value) return
   if (libraryOpen.value) {
     closeLibrary()
     return
@@ -630,6 +665,7 @@ function toggleLibrary() {
 }
 
 function openLibraryFromNode(payload: { sourceNodeId: string; sourceHandle: string; x: number; y: number }) {
+  if (locked.value) return
   pendingSourceNodeId.value = payload.sourceNodeId
   pendingSourceHandle.value = payload.sourceHandle || 'output'
   pendingEdgeId.value = null
@@ -641,6 +677,7 @@ function openLibraryFromNode(payload: { sourceNodeId: string; sourceHandle: stri
 }
 
 function openLibraryFromEdge(payload: { edgeId: string; x: number; y: number }) {
+  if (locked.value) return
   pendingSourceNodeId.value = null
   pendingSourceHandle.value = 'output'
   pendingEdgeId.value = payload.edgeId
@@ -652,9 +689,53 @@ function openLibraryFromEdge(payload: { edgeId: string; x: number; y: number }) 
 }
 
 function focusNode(nodeId: string) {
-  validationPanelOpen.value = false
   selectedNodeId.value = nodeId
   canvasRef.value?.fitNode(nodeId)
+}
+
+function updateWorkflowTitle(value: string) {
+  if (locked.value) return
+  workflow.value.name = value
+}
+
+async function goBack() {
+  store.markListDirty()
+  await router.push('/workflow')
+}
+
+async function toggleWorkflowLock() {
+  const nextLocked = locked.value ? 0 : 1
+  if (!workflow.value.id) {
+    locked.value = Boolean(nextLocked)
+    workflow.value.locked = nextLocked
+    return
+  }
+  lockToggling.value = true
+  try {
+    await workflowApi.workflowLock(workflow.value.id, nextLocked)
+    locked.value = Boolean(nextLocked)
+    workflow.value.locked = nextLocked
+    store.upsertWorkflow({ ...workflow.value })
+    store.markListDirty()
+    if (locked.value) {
+      selectedNodeId.value = null
+      closeLibrary()
+    }
+    clearAllPanels()
+    message.success(locked.value ? '已锁定编辑' : '已解除锁定')
+  } finally {
+    lockToggling.value = false
+  }
+}
+
+function clearAllPanels() {
+  selectedNodeId.value = null
+  validationPanelOpen.value = false
+  runDockOpen.value = false
+  closeLibrary()
+  closeContextMenu()
+  publishModalOpen.value = false
+  versionModalOpen.value = false
 }
 </script>
 
@@ -677,13 +758,15 @@ function focusNode(nodeId: string) {
       :status="workflow.status"
       :version="workflow.version"
       :saving="saving"
-      @back="router.push('/workflow')"
-      @update-title="(value) => (workflow.name = value)"
+      :locked="locked"
+      @back="goBack"
+      @update-title="updateWorkflowTitle"
     />
 
     <WorkflowTopActions
       :saving="saving"
       :running="running"
+      :locked="locked"
       @save="saveWorkflow"
       @validate="validateWorkflow"
       @publish="publishWorkflow"
@@ -697,16 +780,17 @@ function focusNode(nodeId: string) {
       :can-redo="canRedo"
       :has-nodes="nodes.length > 0"
       :library-open="libraryOpen"
+      :lock-toggling="lockToggling"
       @add-node="toggleLibrary"
       @fit="canvasRef?.fitAll()"
       @zoom-in="canvasRef?.zoomInCanvas()"
       @zoom-out="canvasRef?.zoomOutCanvas()"
       @reset-zoom="canvasRef?.resetZoom()"
-      @toggle-lock="locked = !locked"
+      @toggle-lock="toggleWorkflowLock"
       @undo="undo"
       @redo="redo"
       @layout="autoLayout"
-      @clear-selection="selectedNodeId = null"
+      @clear-selection="clearAllPanels"
     />
 
     <NodeLibraryPopover
@@ -724,11 +808,13 @@ function focusNode(nodeId: string) {
       :node="selectedNode"
       :nodes="nodes"
       :resources="resources"
+      :right-offset="configPanelRightOffset"
       @update="updateNode"
       @close="selectedNodeId = null"
     />
 
     <WorkflowValidationPanel
+      v-model:width="validationPanelWidth"
       :open="validationPanelOpen"
       :result="validationResult"
       :node-names="nodeNames"
@@ -738,6 +824,7 @@ function focusNode(nodeId: string) {
 
     <WorkflowRunDock
       v-model:input-text="runInput"
+      v-model:width="runDockWidth"
       :open="runDockOpen"
       :result="store.lastRun"
       :nodes="nodes"
@@ -772,7 +859,7 @@ function focusNode(nodeId: string) {
       @copy="copyNode(contextMenu.nodeId)"
       @delete="deleteNode(contextMenu.nodeId)"
       @fit="focusNode(contextMenu.nodeId); closeContextMenu()"
-      @logs="runDockOpen = true; closeContextMenu()"
+      @logs="openDebugPanel(); closeContextMenu()"
     />
   </main>
 </template>

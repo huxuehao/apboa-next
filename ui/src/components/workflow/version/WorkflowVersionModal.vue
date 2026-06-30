@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { DeleteOutlined, DownloadOutlined, HistoryOutlined, ReloadOutlined } from '@ant-design/icons-vue'
+import { DeleteOutlined, DownloadOutlined, HistoryOutlined, ReloadOutlined, FlagOutlined } from '@ant-design/icons-vue'
 import { message, Modal } from 'ant-design-vue'
 import * as workflowApi from '@/api/workflow'
 import type { Workflow, WorkflowStatus, WorkflowVersion } from '@/types/workflow'
@@ -129,15 +129,12 @@ function handleDelete(item: WorkflowVersion) {
       <ASpin :spinning="loading">
         <div v-if="hasVersions" class="version-list">
           <div v-for="item in versions" :key="item.id" class="version-item">
-            <div class="version-marker"></div>
             <div class="version-info">
               <div class="version-line">
-                <span class="version-name">v{{ item.version }}</span>
-                <ATag :color="isLoaded(item) ? 'green' : 'blue'" :bordered="false">{{ currentTagText(item) }}</ATag>
-              </div>
-              <div class="version-meta">
-                <span>{{ formatTime(item.createdAt) }}</span>
-                <span>{{ nodeCount(item) }} 个节点</span>
+                <span class="version-name">v{{ item.version.toUpperCase() }} 版本 · {{ formatTime(item.createdAt) }}</span>
+                <ATooltip title="当前版本">
+                  <span v-if="isLoaded(item)"> · <FlagOutlined style="color: #2782FF" /></span>
+                </ATooltip>
               </div>
               <div class="version-remark" :title="item.remark || '暂无备注'">
                 {{ item.remark || '暂无备注' }}

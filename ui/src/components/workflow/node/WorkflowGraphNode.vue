@@ -9,6 +9,7 @@ import type { IconName } from '@/components/common/icons'
 const props = defineProps<{
   data: FlowNodeData & { resources?: WorkflowResourceMaps }
   selected?: boolean
+  locked?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -26,6 +27,7 @@ function onAddClick(event: MouseEvent, sourceHandle: string) {
   event.preventDefault()
   event.stopPropagation()
   event.stopImmediatePropagation()
+  if (props.locked) return
   if (!isAddModifierEvent(event)) return
   emit('add-node', { x: event.clientX, y: event.clientY, sourceHandle })
 }
@@ -82,7 +84,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="graph-node" :class="{ selected, hovered, [`status-${data.status || 'IDLE'}`]: true }"
     @mouseenter="hovered = true" @mouseleave="hovered = false">
-    <div v-if="hovered" class="node-operation-hint">按住 Ctrl 添加节点</div>
+    <div v-if="hovered && !locked" class="node-operation-hint">按住 Ctrl 添加节点</div>
     <Handle v-if="!isStart" type="target" :position="Position.Left" class="node-handle target-handle" id="input" />
     <div class="node-top">
       <div class="node-avatar" :style="{ backgroundColor: `${color}CC` }">
@@ -114,7 +116,7 @@ onBeforeUnmount(() => {
       >
         <Handle type="source" :id="handle.id" :position="Position.Right" class="node-handle branch-handle" />
         <button
-          v-if="hovered && addModifierPressed"
+          v-if="hovered && addModifierPressed && !locked"
           type="button"
           class="handle-add-button"
           :aria-label="`从 ${handle.label || handle.id} 分支添加节点`"
@@ -129,7 +131,7 @@ onBeforeUnmount(() => {
     <div v-else-if="!isEnd" class="source-port">
       <Handle type="source" :position="Position.Right" class="node-handle source-handle" id="output" />
       <button
-        v-if="hovered && addModifierPressed"
+        v-if="hovered && addModifierPressed && !locked"
         type="button"
         class="handle-add-button"
         aria-label="添加下一个节点"

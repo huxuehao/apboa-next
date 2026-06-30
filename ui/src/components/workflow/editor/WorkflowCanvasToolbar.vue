@@ -19,6 +19,7 @@ defineProps<{
   canRedo: boolean
   hasNodes: boolean
   libraryOpen: boolean
+  lockToggling?: boolean
 }>()
 
 defineEmits<{
@@ -38,7 +39,7 @@ defineEmits<{
 <template>
   <div class="canvas-toolbar" aria-label="画布快捷工具栏">
     <ATooltip placement="right" title="添加节点">
-      <AButton :type="libraryOpen ? 'primary' : 'text'" @click="$emit('addNode')">
+      <AButton :type="libraryOpen ? 'primary' : 'text'" :disabled="locked" @click="$emit('addNode')">
         <template #icon><PlusCircleOutlined /></template>
       </AButton>
     </ATooltip>
@@ -65,7 +66,7 @@ defineEmits<{
     </ATooltip>
     <div class="toolbar-divider" />
     <ATooltip placement="right" :title="locked ? '解除画布锁定' : '锁定画布编辑'">
-      <AButton :type="locked ? 'primary' : 'text'" @click="$emit('toggleLock')">
+      <AButton :type="locked ? 'primary' : 'text'" :loading="lockToggling" @click="$emit('toggleLock')">
         <template #icon>
           <LockOutlined v-if="locked" />
           <UnlockOutlined v-else />
@@ -73,12 +74,12 @@ defineEmits<{
       </AButton>
     </ATooltip>
     <ATooltip placement="right" title="撤销">
-      <AButton type="text" :disabled="!canUndo" @click="$emit('undo')">
+      <AButton type="text" :disabled="!canUndo || locked" @click="$emit('undo')">
         <template #icon><UndoOutlined /></template>
       </AButton>
     </ATooltip>
     <ATooltip placement="right" title="重做">
-      <AButton type="text" :disabled="!canRedo" @click="$emit('redo')">
+      <AButton type="text" :disabled="!canRedo || locked" @click="$emit('redo')">
         <template #icon><RedoOutlined /></template>
       </AButton>
     </ATooltip>

@@ -62,24 +62,29 @@ function onConnect(connection: Connection) {
 }
 
 function onNodeClick(event: any) {
+  if (props.locked) return
   emit('selectNode', event.node.id)
 }
 
 function onNodeContextMenu(event: any) {
+  if (props.locked) return
   event.event?.preventDefault()
   emit('nodeContext', { nodeId: event.node.id, x: event.event?.clientX || 0, y: event.event?.clientY || 0 })
 }
 
 function onPaneClick() {
+  if (props.locked) return
   emit('selectNode', null)
   emit('paneClick')
 }
 
 function onNodeAddClick(nodeId: string, payload: { x: number; y: number; sourceHandle: string }) {
+  if (props.locked) return
   emit('showLibrary', { sourceNodeId: nodeId, ...payload })
 }
 
 function onEdgeAddClick(payload: { edgeId: string; x: number; y: number }) {
+  if (props.locked) return
   emit('showLibraryFromEdge', payload)
 }
 
@@ -131,10 +136,14 @@ defineExpose({ addAtCenter, fitAll, zoomInCanvas, zoomOutCanvas, resetZoom, fitN
       @pane-click="onPaneClick"
     >
       <template #node-workflow="slotProps">
-        <WorkflowGraphNode v-bind="slotProps" @add-node="(pos: any) => onNodeAddClick(String(slotProps.id), pos)" />
+        <WorkflowGraphNode
+          v-bind="slotProps"
+          :locked="locked"
+          @add-node="(pos: any) => onNodeAddClick(String(slotProps.id), pos)"
+        />
       </template>
       <template #edge-workflow="slotProps">
-        <WorkflowGraphEdge v-bind="slotProps" @add-node="onEdgeAddClick" />
+        <WorkflowGraphEdge v-bind="slotProps" :locked="locked" @add-node="onEdgeAddClick" />
       </template>
       <Background :gap="18" :size="2" color="#DBDCDE" />
       <MiniMap

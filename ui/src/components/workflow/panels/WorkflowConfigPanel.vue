@@ -9,6 +9,7 @@ const props = defineProps<{
   node: WorkflowFlowNode | null
   nodes: WorkflowFlowNode[]
   resources: WorkflowResourceMaps
+  rightOffset?: number
 }>()
 
 const emit = defineEmits<{
@@ -19,18 +20,36 @@ const emit = defineEmits<{
 const width = ref(440)
 const dragging = ref(false)
 
-const maxWidth = computed(() => Math.floor(window.innerWidth * 0.5))
+const maxWidth = computed(() =>
+  Math.max(440, Math.floor((window.innerWidth - (props.rightOffset || 16) - 48) * 0.55)),
+)
 
 const nodeIconMap: Record<string, IconName> = {
-  START: 'nodestart', END: 'nodeend', IF_ELSE: 'nodeif_else',
-  CACHE_FETCH: 'nodecache', CACHE_SET: 'nodecache', CACHE_REMOVE: 'nodecache', CACHE_REFRESH: 'nodecache',
-  DB_SELECT: 'nodedb_select', DB_INSERT: 'nodedb_insert', DB_UPDATE: 'nodedb_update', DB_DELETE: 'nodedb_delete',
-  MQ_PUSH: 'nodemq_push', HTTP_EXTERNAL: 'nodehttp_external',
-  CODE: 'nodecode', ITERATE: 'nodeiterate', LOOP: 'nodeloop',
-  LIST_FILTER: 'nodelist_filter', LIST_SORT: 'nodelist_sort',
-  STRING_SPLIT: 'nodestring_split', STRING_TEMPLATE: 'nodestring_template',
-  SERIALIZE: 'nodeserialize', UNSERIALIZE: 'nodeunserialize',
-  VARIABLE_AGG: 'nodevariable_agg', NON_EMPTY_SELECT: 'nodenon_empty_select', MATCH_RESULT: 'nodematch_result',
+  START: 'nodestart',
+  END: 'nodeend',
+  IF_ELSE: 'nodeif_else',
+  CACHE_FETCH: 'nodecache',
+  CACHE_SET: 'nodecache',
+  CACHE_REMOVE: 'nodecache',
+  CACHE_REFRESH: 'nodecache',
+  DB_SELECT: 'nodedb_select',
+  DB_INSERT: 'nodedb_insert',
+  DB_UPDATE: 'nodedb_update',
+  DB_DELETE: 'nodedb_delete',
+  MQ_PUSH: 'nodemq_push',
+  HTTP_EXTERNAL: 'nodehttp_external',
+  CODE: 'nodecode',
+  ITERATE: 'nodeiterate',
+  LOOP: 'nodeloop',
+  LIST_FILTER: 'nodelist_filter',
+  LIST_SORT: 'nodelist_sort',
+  STRING_SPLIT: 'nodestring_split',
+  STRING_TEMPLATE: 'nodestring_template',
+  SERIALIZE: 'nodeserialize',
+  UNSERIALIZE: 'nodeunserialize',
+  VARIABLE_AGG: 'nodevariable_agg',
+  NON_EMPTY_SELECT: 'nodenon_empty_select',
+  MATCH_RESULT: 'nodematch_result',
 }
 
 function getNodeIconName(type: string): IconName {
@@ -64,7 +83,12 @@ function beginResize(event: MouseEvent) {
 </script>
 
 <template>
-  <aside v-if="node" class="config-panel" :class="{ dragging }" :style="{ width: `${width}px` }">
+  <aside
+    v-if="node"
+    class="config-panel"
+    :class="{ dragging }"
+    :style="{ width: `${width}px`, right: `${rightOffset || 16}px` }"
+  >
     <div class="resize-handle" @mousedown.prevent="beginResize" />
 
     <header class="panel-header">
@@ -96,37 +120,96 @@ function beginResize(event: MouseEvent) {
 
 <style scoped lang="scss">
 .config-panel {
-  position: absolute; right: 16px; top: 60px; bottom: 18px; z-index: 16;
-  min-width: 440px; max-width: 50vw;
-  box-shadow: 0px 3px 10px rgba(0, 0, 0, 0.08); border-radius: 8px; background: #fff;
-  display: grid; grid-template-rows: auto minmax(0, 1fr);
+  position: absolute;
+  top: 60px;
+  bottom: 18px;
+  z-index: 16;
+  min-width: 440px;
+  max-width: 50vw;
+  box-shadow: 0px 3px 10px rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+  background: #fff;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
 }
 .resize-handle {
-  position: absolute; left: -5px; top: 0; bottom: 0; width: 3px;
-  cursor: col-resize; background: transparent; transition: background 0.2s ease;
+  position: absolute;
+  left: -5px;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  cursor: col-resize;
+  background: transparent;
+  transition: background 0.2s ease;
 }
 .resize-handle::after {
-  content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
-  width: 3px; height: 40px; border-radius: 1px; background: #c9c9c9; transition: background 0.2s ease;
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 40px;
+  border-radius: 1px;
+  background: #c9c9c9;
+  transition: background 0.2s ease;
 }
-.resize-handle:hover::after, .dragging .resize-handle::after { display: none; }
-.resize-handle:hover, .dragging .resize-handle { background: #1677FF; }
+.resize-handle:hover::after,
+.dragging .resize-handle::after {
+  display: none;
+}
+.resize-handle:hover,
+.dragging .resize-handle {
+  background: #1677ff;
+}
 .panel-header {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 12px; padding: 6px 16px; border-bottom: 1px solid #f0f0f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 16px;
+  border-bottom: 1px solid #f0f0f0;
 }
-.panel-title-wrap { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.panel-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
 .panel-avatar {
-  display: flex; align-items: center; justify-content: center;
-  width: 24px; height: 24px; border-radius: 6px; flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  flex-shrink: 0;
 }
 .panel-title {
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  color: #262626; font-size: 15px; font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #262626;
+  font-size: 15px;
+  font-weight: 700;
 }
-.panel-body { min-height: 0; overflow: auto; padding: 12px 16px 18px; }
+.panel-body {
+  min-height: 0;
+  overflow: auto;
+  padding: 12px 16px 18px;
+}
 @media (max-width: 900px) {
-  .config-panel { left: 12px; right: 12px; top: auto; width: auto !important; min-width: 0; max-width: none; height: 70vh; }
-  .resize-handle { display: none; }
+  .config-panel {
+    left: 12px;
+    right: 12px;
+    top: auto;
+    width: auto !important;
+    min-width: 0;
+    max-width: none;
+    height: 70vh;
+  }
+  .resize-handle {
+    display: none;
+  }
 }
 </style>

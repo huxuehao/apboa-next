@@ -1,5 +1,5 @@
 /**
- * 工作流管理主页面
+ * 工作流管理主页
  *
  * @author huxuehao
  */
@@ -14,10 +14,11 @@ import * as workflowApi from '@/api/workflow'
 import * as workflowResourcesApi from '@/api/workflowResources'
 import WorkflowCard from '@/components/workflow/list/WorkflowCard.vue'
 import WorkflowCreateCard from '@/components/workflow/list/WorkflowCreateCard.vue'
+import WorkflowInfoModal from '@/components/workflow/list/WorkflowInfoModal.vue'
 import WorkflowResourceModal from '@/components/workflow/resources/WorkflowResourceModal.vue'
 import ApboaInfiniteLoading from '@/components/common/ApboaInfiniteLoading.vue'
-import { cloneDefaultConfig, cloneDefaultInputs, cloneDefaultOutputs, getWorkflowNodeSchema } from '@/config/workflow/nodeSchemas'
-import type { Workflow, WorkflowDefinition, WorkflowNodeDefinition } from '@/types/workflow'
+import { createDefaultWorkflowDefinition } from '@/utils/workflow/defaultDefinition'
+import type { Workflow } from '@/types/workflow'
 import type { WorkflowResourceSummary } from '@/types/workflowResources'
 
 const router = useRouter()
@@ -28,6 +29,11 @@ const filterName = ref('')
 const filterStatus = ref<'DRAFT' | 'PUBLISHED' | undefined>(undefined)
 const filterEnabled = ref<boolean | undefined>(undefined)
 const resourceModalVisible = ref(false)
+const infoModalVisible = ref(false)
+const infoModalMode = ref<'create' | 'edit'>('create')
+const infoModalLoading = ref(false)
+const editingWorkflow = ref<Workflow | null>(null)
+const infoModalInitial = ref<{ name?: string; remark?: string }>({})
 const resourceSummary = ref<WorkflowResourceSummary>({
   total: 0,
   datasourceTotal: 0,
@@ -43,9 +49,6 @@ const infiniteLoadingKey = ref(0)
 /** 是否首次加载 */
 const isFirstLoad = ref(true)
 
-/**
- * 重置列表状态并重建 InfiniteLoading 组件
- */
 function resetListAndRebuild() {
   workflows.value = []
   store.resetPagination()
@@ -53,9 +56,14 @@ function resetListAndRebuild() {
   infiniteLoadingKey.value++
 }
 
-/**
- * 执行搜索
- */
+async function refreshListFromServer() {
+  workflows.value = []
+  store.resetPagination()
+  isFirstLoad.value = false
+  await store.fetchPage(1)
+  infiniteLoadingKey.value++
+}
+
 function search() {
   store.query = {
     ...store.query,
@@ -79,105 +87,91 @@ function handleResourceChanged(summary?: WorkflowResourceSummary) {
   loadResourceSummary()
 }
 
-async function createWorkflow() {
-  const response = await workflowApi.workflowSave({
-    name: '未命名工作流',
-    remark: '用于编排智能体业务流程',
-    status: 'DRAFT',
-    version: '0',
-    locked: 0,
-    enabled: true,
-    config: defaultDefinition(),
-  })
-  message.success('工作流已创建')
-  const id = response.data.data.id
-  if (id) await router.push(`/workflow/${id}/edit`)
+function openCreateWorkflow() {
+  infoModalMode.value = 'create'
+  editingWorkflow.value = null
+  infoModalInitial.value = {}
+  infoModalVisible.value = true
 }
 
 function editWorkflow(record: Workflow) {
+  infoModalMode.value = 'edit'
+  editingWorkflow.value = record
+  infoModalInitial.value = {
+    name: record.name,
+    remark: record.remark,
+  }
+  infoModalVisible.value = true
+}
+
+function designWorkflow(record: Workflow) {
   if (record.id) router.push(`/workflow/${record.id}/edit`)
+}
+
+async function submitWorkflowInfo(payload: { name: string; remark?: string }) {
+  infoModalLoading.value = true
+  try {
+    if (infoModalMode.value === 'create') {
+      const response = await workflowApi.workflowSave({
+        name: payload.name,
+        remark: payload.remark,
+        status: 'DRAFT',
+        version: '0',
+        locked: 0,
+        enabled: true,
+        config: createDefaultWorkflowDefinition(),
+      })
+      message.success('工作流已创建')
+      infoModalVisible.value = false
+      store.markListDirty()
+      const id = response.data.data.id
+      if (id) await router.push(`/workflow/${id}/edit`)
+      return
+    }
+
+    if (!editingWorkflow.value?.id) return
+    await workflowApi.workflowUpdate({
+      ...editingWorkflow.value,
+      name: payload.name,
+      remark: payload.remark,
+    })
+    message.success('工作流信息已保存')
+    infoModalVisible.value = false
+    store.markListDirty()
+    await refreshListFromServer()
+    store.listDirty = false
+  } finally {
+    infoModalLoading.value = false
+  }
 }
 
 async function copyWorkflow(record: Workflow) {
   if (!record.id) return
-  const response = await workflowApi.workflowCopy(record.id)
+  await workflowApi.workflowCopy(record.id)
   message.success('工作流已复制')
-  await router.push(`/workflow/${response.data.data.id}/edit`)
-}
-
-async function publishWorkflow(record: Workflow) {
-  if (!record.id) return
-  Modal.confirm({
-    title: '发布工作流',
-    content: '发布会生成不可变版本，正式运行将使用最新发布版本。',
-    okText: '发布',
-    cancelText: '取消',
-    onOk: async () => {
-      await workflowApi.workflowPublish(record.id!)
-      message.success('发布成功')
-      resetListAndRebuild()
-    },
-  })
-}
-
-async function lockWorkflow(record: Workflow) {
-  if (!record.id) return
-  await workflowApi.workflowLock(record.id, record.locked ? 0 : 1)
-  message.success(record.locked ? '已解锁' : '已锁定')
-  resetListAndRebuild()
-}
-
-function debugWorkflow(record: Workflow) {
-  editWorkflow(record)
+  store.markListDirty()
+  await refreshListFromServer()
+  store.listDirty = false
 }
 
 async function removeWorkflow(record: Workflow) {
   if (!record.id) return
   Modal.confirm({
     title: '删除工作流',
-    content: '删除后无法恢复；若存在运行记录或资源绑定，后端会阻止普通删除。',
+    content: '删除后无法恢复；如果存在运行记录或资源绑定，后端会阻止普通删除。',
     okText: '删除',
     okType: 'danger',
     cancelText: '取消',
     onOk: async () => {
       await workflowApi.workflowRemove([record.id!], 0)
       message.success('删除成功')
-      resetListAndRebuild()
+      store.markListDirty()
+      await refreshListFromServer()
+      store.listDirty = false
     },
   })
 }
 
-function defaultDefinition(): WorkflowDefinition {
-  const start = createNode('start', 'START', { x: 120, y: 180 })
-  const end = createNode('end', 'END', { x: 520, y: 180 })
-  end.inputConfigs = [{ name: 'input', sourceType: 'NODE_OUTPUT', nodeId: 'start', outputName: 'output' }]
-  return {
-    nodes: [start, end],
-    edges: [{ id: 'edge-start-end', source: 'start', target: 'end', sourceHandle: 'output', targetHandle: 'input', label: '' }],
-    viewport: { x: 0, y: 0, zoom: 1 },
-    metadata: { schemaVersion: '1.0', nodeVersion: '1.0', updatedAt: new Date().toISOString() },
-  }
-}
-
-function createNode(id: string, type: string, position: { x: number; y: number }): WorkflowNodeDefinition {
-  const schema = getWorkflowNodeSchema(type)!
-  return {
-    id,
-    type,
-    name: schema.title,
-    position,
-    config: cloneDefaultConfig(schema),
-    inputConfigs: cloneDefaultInputs(schema),
-    outputConfigs: cloneDefaultOutputs(schema, id),
-    ui: {},
-  }
-}
-
-/**
- * 处理无限加载
- *
- * @param $state 加载状态对象
- */
 async function handleInfiniteLoading($state: {
   loaded: () => void
   complete: () => void
@@ -220,18 +214,14 @@ async function handleInfiniteLoading($state: {
   }
 }
 
-/**
- * 监听筛选条件变化，重置状态并重建 InfiniteLoading
- */
 watch([filterStatus, filterEnabled], () => {
   search()
 })
 
-function refreshIfDirty() {
-  if (listDirty.value) {
-    resetListAndRebuild()
-    store.listDirty = false
-  }
+async function refreshIfDirty() {
+  if (!listDirty.value) return
+  await refreshListFromServer()
+  store.listDirty = false
 }
 
 onMounted(() => {
@@ -250,7 +240,7 @@ onActivated(refreshIfDirty)
         工作流是智能体业务编排的核心引擎，通过可视化拖拽将开始、结束、逻辑判断、数据处理等节点自由组合，
         灵活接入缓存、数据源、消息队列等外部资源，实现节点间变量的精准传递与条件路由。
         调试运行让每一步执行状态一目了然，发布后生成不可变版本并绑定路由，
-        将复杂的业务过程真正沉淀为可调用、可追踪、可复用的标准化流程。
+        将复杂的业务过程沉淀为可调用、可追踪、可复用的标准化流程。
       </p>
     </section>
 
@@ -306,7 +296,7 @@ onActivated(refreshIfDirty)
       <div class="card-grid">
         <WorkflowCreateCard
           v-permission="['TENANT_EDITOR','TENANT_ADMIN','TENANT_OWNER']"
-          @create="createWorkflow"
+          @create="openCreateWorkflow"
         />
         <WorkflowCard
           v-for="workflow in workflows"
@@ -314,9 +304,7 @@ onActivated(refreshIfDirty)
           :data="workflow"
           @edit="editWorkflow"
           @copy="copyWorkflow"
-          @publish="publishWorkflow"
-          @debug="debugWorkflow"
-          @lock="lockWorkflow"
+          @design="designWorkflow"
           @remove="removeWorkflow"
         />
       </div>
@@ -326,6 +314,14 @@ onActivated(refreshIfDirty)
         @infinite="handleInfiniteLoading"
       />
     </section>
+
+    <WorkflowInfoModal
+      v-model:open="infoModalVisible"
+      :mode="infoModalMode"
+      :initial="infoModalInitial"
+      :loading="infoModalLoading"
+      @submit="submitWorkflowInfo"
+    />
 
     <AModal
       v-model:open="resourceModalVisible"

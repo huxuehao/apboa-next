@@ -13,6 +13,7 @@ const props = defineProps<{
 }>()
 
 const inputText = defineModel<string>('inputText', { default: '{\n  "params": [],\n  "variables": {}\n}' })
+const width = defineModel<number>('width', { default: 440 })
 
 const emit = defineEmits<{
   run: []
@@ -21,7 +22,6 @@ const emit = defineEmits<{
 }>()
 
 const activeKey = ref('input')
-const width = ref(440)
 const maxWidth = computed(() => Math.floor(window.innerWidth * 0.55))
 const dragging = ref(false)
 const paramValues = ref<Record<string, unknown>>({})
@@ -178,7 +178,7 @@ function beginResize(event: MouseEvent) {
   const startWidth = width.value
   const onMove = (moveEvent: MouseEvent) => {
     const next = startWidth + (startX - moveEvent.clientX)
-    width.value = Math.max(420, Math.min(maxWidth.value, next))
+    width.value = Math.max(440, Math.min(maxWidth.value, next))
   }
   const onUp = () => {
     dragging.value = false

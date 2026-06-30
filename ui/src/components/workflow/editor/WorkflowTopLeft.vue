@@ -6,6 +6,7 @@ defineProps<{
   status?: string
   version?: string
   saving?: boolean
+  locked?: boolean
 }>()
 
 defineEmits<{
@@ -25,6 +26,7 @@ defineEmits<{
         <AInput
           class="title-input"
           :value="title"
+          :disabled="locked"
           placeholder="未命名工作流"
           @update:value="(value: string) => $emit('updateTitle', value)"
         />

@@ -10,6 +10,7 @@ import {
 defineProps<{
   saving?: boolean
   running?: boolean
+  locked?: boolean
 }>()
 
 defineEmits<{
@@ -22,7 +23,7 @@ defineEmits<{
 </script>
 
 <template>
-  <div class="top-actions">
+  <div v-if="!locked" class="top-actions">
     <ATooltip title="保存草稿">
       <AButton :loading="saving" @click="$emit('save')">
         <template #icon><SaveOutlined /></template>
@@ -42,7 +43,7 @@ defineEmits<{
       </AButton>
     </ATooltip>
     <ATooltip title="发布为不可变版本">
-      <AButton @click="$emit('publish')">
+      <AButton  @click="$emit('publish')">
         <template #icon><CloudUploadOutlined /></template>
         发布
       </AButton>
