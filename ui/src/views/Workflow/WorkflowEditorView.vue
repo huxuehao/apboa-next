@@ -1037,6 +1037,7 @@ function clearAllPanels() {
       :closable="false"
       :mask-closable="false"
       :keyboard="false"
+      style="width: 450px"
     >
       <p class="leave-confirm-message">{{ leaveConfirmMessage }}</p>
       <template #footer>
