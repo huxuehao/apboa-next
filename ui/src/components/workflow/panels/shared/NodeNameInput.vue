@@ -9,7 +9,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <AFormItem label="节点名称" required>
+  <AFormItem label="" required>
     <AInput
       :value="modelValue"
       placeholder="输入节点名称"

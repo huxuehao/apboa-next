@@ -45,7 +45,6 @@ const variableTypeOptions = [
     </PanelSection>
 
     <PanelSection title="节点配置">
-      <div class="config-desc">定义工作流的对外输入参数，可在后续节点中通过变量引用。</div>
       <WorkflowArrayEditors
         :model-value="node.data.config?.params"
         type="startParams"

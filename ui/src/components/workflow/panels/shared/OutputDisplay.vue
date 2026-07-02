@@ -10,7 +10,7 @@ defineProps<{
   <div class="output-list">
     <div v-for="output in outputs" :key="output.name" class="output-item">
       <div class="output-head">
-        <span class="output-name">{{ output.name }}</span>
+        <span class="output-name">{{ output.name }}: </span>
         <span class="output-type-tag" :class="`type-${(output.type || 'Object').toLowerCase()}`">{{ output.type || 'Object' }}</span>
       </div>
       <span class="output-desc">{{ output.description || '节点运行输出' }}</span>
@@ -26,17 +26,13 @@ defineProps<{
 }
 
 .output-item {
-  display: grid;
-  gap: 4px;
-  padding: 10px 12px;
-  border: 1px solid #f0f0f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 12px;
   border-radius: 8px;
-  background: #fafafa;
+  background: #F2F4F7;
   transition: border-color 0.2s ease;
-
-  &:hover {
-    border-color: #d9d9d9;
-  }
 }
 
 .output-head {

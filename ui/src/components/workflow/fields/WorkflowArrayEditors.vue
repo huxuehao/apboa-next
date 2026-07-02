@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { DeleteOutlined, PlusOutlined } from '@ant-design/icons-vue'
+import { DeleteOutlined, FileTextOutlined, PlusOutlined } from '@ant-design/icons-vue'
 import type { WorkflowFieldOption } from '@/types/workflow'
 
 type EditorType = 'keyValue' | 'dbParams' | 'startParams' | 'stringList' | 'matchList'
@@ -67,11 +67,45 @@ function updateString(index: number, value: string) {
         </template>
 
         <template v-else-if="type === 'startParams'">
-          <AInput :value="(row as any).name" placeholder="参数名" @update:value="(value: string) => updateObject(index, 'name', value)" />
-          <AInput :value="(row as any).value" placeholder="默认值" @update:value="(value: string) => updateObject(index, 'value', value)" />
-          <ASelect :value="(row as any).type || 'String'" :options="options" @update:value="(value: string) => updateObject(index, 'type', value)" />
-          <ACheckbox :checked="Boolean((row as any).required)" @update:checked="(value: boolean) => updateObject(index, 'required', value)">必填</ACheckbox>
-          <AInput :value="(row as any).remark" placeholder="备注" @update:value="(value: string) => updateObject(index, 'remark', value)" />
+          <div class="field-cell">
+            <span v-if="index === 0" class="field-title">参数名</span>
+            <AInput :value="(row as any).name" placeholder="参数名" @update:value="(value: string) => updateObject(index, 'name', value)" />
+          </div>
+          <div class="field-cell">
+            <span v-if="index === 0" class="field-title">默认值</span>
+            <AInput :value="(row as any).value" placeholder="默认值" @update:value="(value: string) => updateObject(index, 'value', value)" />
+          </div>
+          <div class="field-cell">
+            <span v-if="index === 0" class="field-title">类型</span>
+            <ASelect :value="(row as any).type || 'String'" :options="options" @update:value="(value: string) => updateObject(index, 'type', value)" />
+          </div>
+          <div class="field-cell">
+            <span v-if="index === 0" class="field-title-spacer" />
+            <ACheckbox :checked="Boolean((row as any).required)" @update:checked="(value: boolean) => updateObject(index, 'required', value)">必填</ACheckbox>
+          </div>
+          <div class="field-cell">
+            <span v-if="index === 0" class="field-title-spacer" />
+            <APopover trigger="click" placement="bottomLeft" :overlay-style="{ minWidth: '260px' }">
+              <template #content>
+                <div class="desc-popover">
+                  <ATextarea
+                    :value="(row as any).remark"
+                    placeholder="请输入描述"
+                    :rows="3"
+                    @update:value="(value: string) => updateObject(index, 'remark', value)"
+                  />
+                </div>
+              </template>
+              <ATooltip
+                :title="(row as any).remark || undefined"
+                :overlay-style="{ maxWidth: 'none', whiteSpace: 'nowrap' }"
+              >
+                <span class="desc-icon" :class="{ 'has-content': (row as any).remark }" title="描述">
+                  <FileTextOutlined />
+                </span>
+              </ATooltip>
+            </APopover>
+          </div>
         </template>
 
         <template v-else-if="type === 'matchList'">
@@ -84,7 +118,15 @@ function updateString(index: number, value: string) {
           <AInput :value="(row as any).value" placeholder="Value" @update:value="(value: string) => updateObject(index, 'value', value)" />
         </template>
 
-        <AButton type="text" danger @click="removeRow(index)">
+        <template v-if="type === 'startParams'">
+          <div class="field-cell">
+            <span v-if="index === 0" class="field-title-spacer" />
+            <AButton type="text" danger @click="removeRow(index)">
+              <template #icon><DeleteOutlined /></template>
+            </AButton>
+          </div>
+        </template>
+        <AButton v-else type="text" danger @click="removeRow(index)">
           <template #icon><DeleteOutlined /></template>
         </AButton>
       </div>
@@ -122,7 +164,7 @@ function updateString(index: number, value: string) {
 }
 
 .row-startParams {
-  grid-template-columns: minmax(90px, 1fr) minmax(90px, 1fr) minmax(80px, 1fr) 60px minmax(50px, 1fr) 22px;
+  grid-template-columns: minmax(90px, 2fr) minmax(90px, 2fr) minmax(80px, 1fr) 60px 22px 28px;
 }
 
 .array-empty {
@@ -132,6 +174,49 @@ function updateString(index: number, value: string) {
   color: #8c8c8c;
   font-size: 12px;
   text-align: center;
+}
+
+.field-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.field-title-spacer {
+  height: 18px;
+  visibility: hidden;
+}
+
+.field-title {
+  font-size: 12px;
+  color: #bfbfbf;
+  text-align: left;
+  line-height: 1.5;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.desc-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: #d9d9d9;
+  transition: color 0.2s, background-color 0.2s;
+  font-size: 13px;
+
+  &:hover {
+    color: #1677ff;
+    background-color: rgba(22, 119, 255, 0.06);
+  }
+
+  &.has-content {
+    color: #1677ff;
+  }
 }
 
 .add-row {
