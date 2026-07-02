@@ -76,7 +76,7 @@ const isExpression = computed(() => (props.node.data.config?.symbol as string) =
           @update:value="(v: any) => updateConfig('evaluatorType', v)"
         />
       </AFormItem>
-      <AFormItem label="计算范围">
+      <AFormItem label="计算对象">
         <ASegmented
           :value="node.data.config?.scope || 'SELF'"
           :options="[

@@ -1,11 +1,8 @@
 import type {
-  SummaryItem,
   WorkflowFieldOption,
   WorkflowInputConfig,
   WorkflowNodeSchema,
   WorkflowOutputConfig,
-  WorkflowResource,
-  WorkflowResourceMaps,
 } from '@/types/workflow'
 
 export const WORKFLOW_GROUPS = [
@@ -64,27 +61,6 @@ function groupTitle(group: string) {
   return WORKFLOW_GROUPS.find((item) => item.key === group)?.title || group
 }
 
-function resourceName(list: WorkflowResource[], id: unknown) {
-  return list.find((item) => item.id === id)?.name || String(id || '未选择')
-}
-
-function line(label: string, value: unknown): SummaryItem {
-  if (value === undefined || value === null || value === '') return { type: 'text', label, value: '' }
-  return { type: 'text', label, value }
-}
-
-function badge(value: unknown, color?: string): SummaryItem {
-  return { type: 'badge', value: String(value ?? ''), color }
-}
-
-function tag(value: unknown, color?: string): SummaryItem {
-  return { type: 'tag', value: String(value ?? ''), color }
-}
-
-function code(value: unknown): SummaryItem {
-  return { type: 'code-snippet', value: String(value ?? '') }
-}
-
 function schema(item: Omit<WorkflowNodeSchema, 'groupTitle'>): WorkflowNodeSchema {
   return { ...item, groupTitle: groupTitle(item.group) }
 }
@@ -110,15 +86,8 @@ export const workflowNodeSchemas: WorkflowNodeSchema[] = [
     defaultConfig: { params: [] },
     fields: [{ name: 'params', label: '输入参数', control: 'startParams', defaultValue: [], options: variableTypeOptions }],
     inputConfigs: [], outputConfigs: output(),
-    summary: (config) => {
-      const params = Array.isArray(config.params) ? config.params : []
-      const items: SummaryItem[] = []
-      if (params.length > 0) {
-        items.push(tag(`${params.length} 个参数`, '#1677ff'))
-        items.push(code(params.map((p: Record<string, unknown>) => p.name || '?').filter(Boolean).join(', ')))
-      }
-      return items
-    },
+    summaryComponent: 'StartNodeSummary',
+    showSummary: false,
   }),
   schema({
     type: 'END', title: '结束', group: 'basic',
@@ -130,7 +99,8 @@ export const workflowNodeSchemas: WorkflowNodeSchema[] = [
       { name: 'formatterType', label: '响应模板格式', control: 'select', options: formatterOptions, defaultValue: 'JACKSON' },
     ],
     inputConfigs: input(), outputConfigs: output(),
-    summary: (config) => [line('格式', config.formatterType || 'JACKSON')],
+    summaryComponent: 'EndNodeSummary',
+    showSummary: false,
   }),
   schema({
     type: 'IF_ELSE', title: '条件分支', group: 'logic',
@@ -150,10 +120,8 @@ export const workflowNodeSchemas: WorkflowNodeSchema[] = [
     ],
     inputConfigs: input(), outputConfigs: output('Boolean'),
     branchHandles: [{ id: 'true', label: 'true' }, { id: 'false', label: 'false' }],
-    summary: (config) => [
-      line('运算符', config.symbol),
-      badge(config.scope === 'LENGTH' ? '长度' : '值本身', config.scope === 'LENGTH' ? '#722ed1' : '#1677ff'),
-    ],
+    summaryComponent: 'IfElseNodeSummary',
+    showSummary: true,
   }),
   schema({
     type: 'ITERATE', title: '迭代处理', group: 'logic',
@@ -165,7 +133,8 @@ export const workflowNodeSchemas: WorkflowNodeSchema[] = [
       { name: 'iterateCode', label: '迭代代码', control: 'code', language: 'java', required: true },
     ],
     inputConfigs: input(), outputConfigs: output('Array'),
-    summary: (config) => [badge(config.language || 'JAVA', '#fa8c16')],
+    summaryComponent: 'IterateNodeSummary',
+    showSummary: true,
   }),
   schema({
     type: 'LOOP', title: '循环', group: 'logic',
@@ -184,7 +153,8 @@ export const workflowNodeSchemas: WorkflowNodeSchema[] = [
       { name: 'workflow', label: '运行时子工作流实例', control: 'readonlyJson' },
     ],
     inputConfigs: input(), outputConfigs: output(),
-    summary: (config) => [tag(`最多 ${config.maxIterations || 1000} 次`, '#fa8c16'), code(config.itemVariable || 'item')],
+    summaryComponent: 'LoopNodeSummary',
+    showSummary: true,
   }),
   schema({
     type: 'NON_EMPTY_SELECT', title: '非空选择', group: 'logic',
@@ -196,7 +166,8 @@ export const workflowNodeSchemas: WorkflowNodeSchema[] = [
       { name: 'defaultNextNodeId', label: '默认节点ID', control: 'input' },
     ],
     inputConfigs: input(), outputConfigs: output(),
-    summary: (config) => [badge(config.strategy === 'LAST' ? '最后一个' : '第一个', '#fa8c16')],
+    summaryComponent: 'NonEmptySelectNodeSummary',
+    showSummary: true,
   }),
   schema({
     type: 'MATCH_RESULT', title: '结果匹配', group: 'logic',
@@ -211,10 +182,8 @@ export const workflowNodeSchemas: WorkflowNodeSchema[] = [
     ],
     inputConfigs: input(), outputConfigs: output(),
     branchHandles: [{ id: 'match', label: 'match' }, { id: 'default', label: 'default' }],
-    summary: (config) => {
-      const count = Array.isArray(config.matches) ? config.matches.length : 0
-      return [line('匹配方式', config.matchType), tag(`${count} 个匹配项`, count > 0 ? '#fa8c16' : '#d9d9d9')]
-    },
+    summaryComponent: 'MatchResultNodeSummary',
+    showSummary: true,
   }),
   schema({
     type: 'CACHE_FETCH', title: '读取缓存', group: 'cache',
@@ -222,7 +191,8 @@ export const workflowNodeSchemas: WorkflowNodeSchema[] = [
     icon: 'database', color: '#13a8a8', panelComponent: 'CacheFetchNodePanel',
     defaultConfig: { formatterType: 'VELOCITY' },
     fields: cacheFields, inputConfigs: input(), outputConfigs: output(),
-    summary: (config, resources) => [tag(resourceName(resources?.caches || [], config.cacheId), '#13a8a8'), code(config.key)],
+    summaryComponent: 'CacheFetchNodeSummary',
+    showSummary: true,
   }),
   schema({
     type: 'CACHE_SET', title: '写入缓存', group: 'cache',
@@ -231,7 +201,8 @@ export const workflowNodeSchemas: WorkflowNodeSchema[] = [
     defaultConfig: { formatterType: 'VELOCITY', expire: 0 },
     fields: [...cacheFields, { name: 'value', label: '缓存值', control: 'json' as const, language: 'json' as const, required: true, description: '支持字符串、数字、对象或数组。' }, { name: 'expire', label: '过期时间(秒)', control: 'number' as const, min: 0, defaultValue: 0 }],
     inputConfigs: input(), outputConfigs: output('Boolean'),
-    summary: (config, resources) => [tag(resourceName(resources?.caches || [], config.cacheId), '#13a8a8'), line('过期', config.expire || '不过期')],
+    summaryComponent: 'CacheSetNodeSummary',
+    showSummary: true,
   }),
   schema({
     type: 'CACHE_REMOVE', title: '删除缓存', group: 'cache',
@@ -239,7 +210,8 @@ export const workflowNodeSchemas: WorkflowNodeSchema[] = [
     icon: 'delete', color: '#13a8a8', panelComponent: 'CacheRemoveNodePanel',
     defaultConfig: { formatterType: 'VELOCITY' },
     fields: cacheFields, inputConfigs: input(), outputConfigs: output('Boolean'),
-    summary: (config, resources) => [tag(resourceName(resources?.caches || [], config.cacheId), '#13a8a8'), code(config.key)],
+    summaryComponent: 'CacheRemoveNodeSummary',
+    showSummary: true,
   }),
   schema({
     type: 'CACHE_REFRESH', title: '刷新缓存', group: 'cache',
@@ -248,21 +220,21 @@ export const workflowNodeSchemas: WorkflowNodeSchema[] = [
     defaultConfig: { formatterType: 'VELOCITY', expire: 0 },
     fields: [...cacheFields, { name: 'expire', label: '新的过期时间(秒)', control: 'number' as const, min: 0, defaultValue: 0 }],
     inputConfigs: input(), outputConfigs: output('Boolean'),
-    summary: (config, resources) => [tag(resourceName(resources?.caches || [], config.cacheId), '#13a8a8'), line('过期', config.expire || '不过期')],
+    summaryComponent: 'CacheRefreshNodeSummary',
+    showSummary: true,
   }),
   ...(['DB_SELECT', 'DB_INSERT', 'DB_UPDATE', 'DB_DELETE'] as const).map((type) => {
     const titleMap = { DB_SELECT: '数据库查询', DB_INSERT: '数据库插入', DB_UPDATE: '数据库更新', DB_DELETE: '数据库删除' }
     const panelMap: Record<string, string> = { DB_SELECT: 'DbSelectNodePanel', DB_INSERT: 'DbInsertNodePanel', DB_UPDATE: 'DbUpdateNodePanel', DB_DELETE: 'DbDeleteNodePanel' }
+    const summaryMap: Record<string, string> = { DB_SELECT: 'DbSelectNodeSummary', DB_INSERT: 'DbInsertNodeSummary', DB_UPDATE: 'DbUpdateNodeSummary', DB_DELETE: 'DbDeleteNodeSummary' }
     return schema({
       type, title: titleMap[type], group: 'data',
       description: '执行使用 ? 占位符的 SQL，并按顺序绑定参数。',
       icon: 'table', color: '#2f54eb', panelComponent: panelMap[type] || 'DbSelectNodePanel',
       defaultConfig: { params: [], formatterType: 'VELOCITY' },
       fields: dbFields, inputConfigs: input(), outputConfigs: output(type === 'DB_SELECT' ? 'Array' : 'Integer'),
-      summary: (config, resources) => {
-        const paramCount = Array.isArray(config.params) ? config.params.length : 0
-        return [tag(resourceName(resources?.datasources || [], config.datasourceId), '#2f54eb'), tag(paramCount > 0 ? `${paramCount} 个参数` : '无参数', paramCount > 0 ? '#2f54eb' : '#d9d9d9')]
-      },
+      summaryComponent: summaryMap[type] || 'DbSelectNodeSummary',
+      showSummary: true,
     })
   }),
   schema({
@@ -279,7 +251,8 @@ export const workflowNodeSchemas: WorkflowNodeSchema[] = [
       { name: 'templateType', label: '模板格式', control: 'select' as const, options: formatterOptions, defaultValue: 'STRING' },
     ],
     inputConfigs: input(), outputConfigs: output('Boolean'),
-    summary: (config, resources) => [tag(resourceName(resources?.mqs || [], config.mqId), '#722ed1'), code(config.topicOrQueue)],
+    summaryComponent: 'MqPushNodeSummary',
+    showSummary: true,
   }),
   schema({
     type: 'HTTP_EXTERNAL', title: 'HTTP 请求', group: 'integration',
@@ -299,12 +272,8 @@ export const workflowNodeSchemas: WorkflowNodeSchema[] = [
       { name: 'bodyToObject', label: '响应体转 JSON', control: 'switch', defaultValue: true },
     ],
     inputConfigs: input(), outputConfigs: output(),
-    summary: (config) => {
-      const request = (config.request || {}) as Record<string, unknown>
-      const method = String(request.method || 'GET')
-      const methodColorMap: Record<string, string> = { GET: '#52c41a', POST: '#1677ff', PUT: '#fa8c16', DELETE: '#ff4d4f', PATCH: '#722ed1' }
-      return [badge(method, methodColorMap[method] || '#8c8c8c'), code(request.url)]
-    },
+    summaryComponent: 'HttpExternalNodeSummary',
+    showSummary: true,
   }),
   schema({
     type: 'CODE', title: '代码执行', group: 'integration',
@@ -316,7 +285,8 @@ export const workflowNodeSchemas: WorkflowNodeSchema[] = [
       { name: 'codeSource', label: '代码', control: 'code', language: 'java', required: true },
     ],
     inputConfigs: input(), outputConfigs: output(),
-    summary: (config) => [badge(config.language || 'JAVA', '#eb2f96')],
+    summaryComponent: 'CodeNodeSummary',
+    showSummary: true,
   }),
   schema({
     type: 'STRING_SPLIT', title: '字符串分割', group: 'transform',
@@ -339,7 +309,8 @@ export const workflowNodeSchemas: WorkflowNodeSchema[] = [
       { name: 'keyValueCustomFormat', label: '自定义格式', control: 'input', placeholder: '%s===>%s' },
     ],
     inputConfigs: input(), outputConfigs: output('Array'),
-    summary: (config) => [line('模式', config.mode), code(config.delimiter)],
+    summaryComponent: 'StringSplitNodeSummary',
+    showSummary: true,
   }),
   schema({
     type: 'STRING_TEMPLATE', title: '字符串模板', group: 'transform',
@@ -351,7 +322,8 @@ export const workflowNodeSchemas: WorkflowNodeSchema[] = [
       { name: 'template', label: '模板内容', control: 'code', language: 'txt', required: true },
     ],
     inputConfigs: input(), outputConfigs: output('String'),
-    summary: (config) => [badge(config.templateType || 'STRING', '#08979c')],
+    summaryComponent: 'StringTemplateNodeSummary',
+    showSummary: true,
   }),
   schema({
     type: 'SERIALIZE', title: '序列化', group: 'transform',
@@ -366,7 +338,8 @@ export const workflowNodeSchemas: WorkflowNodeSchema[] = [
       { name: 'encoding', label: '编码', control: 'input', defaultValue: 'UTF-8' },
     ],
     inputConfigs: input(), outputConfigs: output('String'),
-    summary: (config) => [badge(config.format || 'JSON', '#08979c'), line('模式', config.mode)],
+    summaryComponent: 'SerializeNodeSummary',
+    showSummary: true,
   }),
   schema({
     type: 'UNSERIALIZE', title: '反序列化', group: 'transform',
@@ -379,7 +352,8 @@ export const workflowNodeSchemas: WorkflowNodeSchema[] = [
       { name: 'encoding', label: '编码', control: 'input', defaultValue: 'UTF-8' },
     ],
     inputConfigs: input(), outputConfigs: output(),
-    summary: (config) => [badge(config.format || 'JSON', '#08979c')],
+    summaryComponent: 'UnserializeNodeSummary',
+    showSummary: true,
   }),
   schema({
     type: 'LIST_FILTER', title: '列表过滤', group: 'list',
@@ -396,7 +370,8 @@ export const workflowNodeSchemas: WorkflowNodeSchema[] = [
       { name: 'compareTo', label: '比较值', control: 'compareTo' },
     ],
     inputConfigs: input(), outputConfigs: output('Array'),
-    summary: (config) => [badge(config.mode === 'EXPRESSION' ? '表达式' : '简单', '#52c41a'), code(config.condition)],
+    summaryComponent: 'ListFilterNodeSummary',
+    showSummary: true,
   }),
   schema({
     type: 'LIST_SORT', title: '列表排序', group: 'list',
@@ -411,7 +386,8 @@ export const workflowNodeSchemas: WorkflowNodeSchema[] = [
       { name: 'strictMode', label: '严格模式', control: 'switch' },
     ],
     inputConfigs: input(), outputConfigs: output('Array'),
-    summary: (config) => [badge(config.direction === 'DESC' ? '降序' : '升序', '#52c41a'), line('严格', config.strictMode ? '是' : '否')],
+    summaryComponent: 'ListSortNodeSummary',
+    showSummary: true,
   }),
   schema({
     type: 'VARIABLE_AGG', title: '变量聚合', group: 'variable',
@@ -424,7 +400,8 @@ export const workflowNodeSchemas: WorkflowNodeSchema[] = [
       { name: 'splicingSymbol', label: '字符串拼接符', control: 'input' },
     ],
     inputConfigs: input(), outputConfigs: output(),
-    summary: (config) => [badge(config.strategy || 'MAP', '#faad14')],
+    summaryComponent: 'VariableAggNodeSummary',
+    showSummary: true,
   }),
 ]
 
@@ -448,12 +425,4 @@ export function cloneDefaultInputs(schema: WorkflowNodeSchema) {
 export function cloneDefaultOutputs(schema: WorkflowNodeSchema, nodeId: string) {
   const outputs = JSON.parse(JSON.stringify(schema.outputConfigs || output())) as WorkflowOutputConfig[]
   return outputs.map((item) => ({ ...item, fromNodeId: nodeId }))
-}
-
-export function buildNodeSummary(schema: WorkflowNodeSchema | undefined, config: Record<string, unknown>, resources?: WorkflowResourceMaps): SummaryItem[] {
-  if (!schema?.summary) return []
-  return schema.summary(config || {}, resources).filter((item) => {
-    if (item.type === 'text' || item.type === 'code-snippet') return item.value !== '' && item.value !== undefined && item.value !== null
-    return item.value !== '' && item.value !== undefined && item.value !== null
-  }).slice(0, 3)
 }

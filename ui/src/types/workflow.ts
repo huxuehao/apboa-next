@@ -250,11 +250,16 @@ export interface WorkflowNodeSchema {
   defaultConfig: Record<string, unknown>
   /** 节点专属配置面板组件名，对应 panels/nodes/ 下的 .vue 文件 */
   panelComponent: string
+  /** 节点卡片底部摘要组件名，对应 node/summaries/ 下的 .vue 文件 */
+  summaryComponent?: string
+  /** 是否显示卡片底部摘要区域，默认 true。START/END 设为 false */
+  showSummary?: boolean
   /** @deprecated 配置表单定义已下沉到各节点专属面板组件 */
   fields: WorkflowFieldSchema[]
   inputConfigs: WorkflowInputConfig[]
   outputConfigs: WorkflowOutputConfig[]
   branchHandles?: Array<{ id: string; label: string }>
+  /** @deprecated 摘要渲染已迁移到 summaryComponent */
   summary?: (config: Record<string, unknown>, resources?: WorkflowResourceMaps) => SummaryItem[]
 }
 
