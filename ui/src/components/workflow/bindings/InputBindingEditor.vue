@@ -13,12 +13,16 @@ const sourceTypeOptions = [
   { label: '表达式', value: 'EXPRESSION' as const, description: '使用 GroovyShell 表达式动态计算值' },
 ]
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   modelValue?: WorkflowInputConfig[]
   nodes: WorkflowFlowNode[]
   edges: WorkflowFlowEdge[]
   currentNodeId?: string
-}>()
+  maxBindings?: number
+  readonlyName?: boolean
+}>(), {
+  readonlyName: false,
+})
 
 const emit = defineEmits<{
   'update:modelValue': [value: WorkflowInputConfig[]]
@@ -94,10 +98,12 @@ function removeBinding(index: number) {
     <div v-for="(binding, index) in bindings" :key="index" class="binding-card">
       <div class="binding-head">
         <BlurInput
+          v-if="!readonlyName"
           :model-value="binding.name"
           placeholder="输入名"
           @update:model-value="(value: string) => update(index, { name: value })"
         />
+        <span v-else class="binding-name-readonly">{{ binding.name }}</span>
         <AButton v-if="bindings.length > 1" danger type="text" @click="removeBinding(index)" style="margin-left: 5px">删除</AButton>
       </div>
 
@@ -153,7 +159,7 @@ function removeBinding(index: number) {
       />
     </div>
 
-    <AButton block size="small" class="add-binding" @click="addBinding">添加输入绑定</AButton>
+    <AButton v-if="!props.maxBindings || bindings.length < props.maxBindings" block size="small" class="add-binding" @click="addBinding">添加输入绑定</AButton>
   </div>
 </template>
 
@@ -225,5 +231,16 @@ function removeBinding(index: number) {
 
 .add-binding {
   border-style: dashed;
+}
+
+.binding-name-readonly {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 11px;
+  font-size: 14px;
+  color: rgba(0, 0, 0, 0.88);
+  background: #F2F4F7;
+  border-radius: 6px;
 }
 </style>

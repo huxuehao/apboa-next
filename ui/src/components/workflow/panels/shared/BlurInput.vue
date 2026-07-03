@@ -8,11 +8,13 @@ const props = withDefaults(
     maxlength?: number
     showCount?: boolean
     type?: string
+    disabled?: boolean
   }>(),
   {
     modelValue: '',
     placeholder: '',
     type: 'text',
+    disabled: false,
   },
 )
 
@@ -43,6 +45,7 @@ function handleBlur() {
     :maxlength="maxlength"
     :show-count="showCount"
     :type="type"
+    :disabled="disabled"
     @blur="handleBlur"
   />
 </template>

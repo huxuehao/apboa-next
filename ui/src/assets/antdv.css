@@ -62,6 +62,10 @@
   }
 }
 
+.ant-input {
+  border: 1px solid var(--ant-filled-bg) !important;
+}
+
 /* 针对不同组件的特殊调整 */
 .ant-select-dropdown {
   /* 下拉菜单也稍微调整 */

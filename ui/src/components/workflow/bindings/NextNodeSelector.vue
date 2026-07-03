@@ -3,16 +3,17 @@ import { computed, ref, watch } from 'vue'
 import { SearchOutlined, CloseCircleFilled } from '@ant-design/icons-vue'
 import IconFont from '@/components/common/IconFont.vue'
 import type { IconName } from '@/components/common/icons'
-import type { WorkflowFlowNode, WorkflowOutputConfig } from '@/types/workflow'
+import type { WorkflowFlowNode, WorkflowFlowEdge } from '@/types/workflow'
 
 const props = defineProps<{
-  upstreamNodes: WorkflowFlowNode[]
-  nodeId?: string
-  outputName?: string
+  nodes: WorkflowFlowNode[]
+  edges: WorkflowFlowEdge[]
+  currentNodeId: string
+  selectedNodeId?: string
 }>()
 
 const emit = defineEmits<{
-  select: [payload: { nodeId: string; outputName: string }]
+  select: [nodeId: string]
   clear: []
 }>()
 
@@ -51,73 +52,39 @@ function getIconName(type: string): IconName {
   return nodeIconMap[type] || 'nodecode'
 }
 
-function getNodeOutputs(node: WorkflowFlowNode): WorkflowOutputConfig[] {
-  if (node.data.type === 'START') {
-    const params = (node.data.config?.params as Array<{ name: string; type: string; description?: string }>) || []
-    return params.map((p) => ({
-      name: p.name,
-      type: p.type || 'Object',
-      description: p.description || '',
-    }))
-  }
-  return node.data.outputConfigs || []
-}
+// 下游节点：仅直接相连的下游节点（source 为当前节点）
+const downstreamNodes = computed(() => {
+  if (!props.edges.length || !props.currentNodeId) return []
 
-interface OutputItem {
-  node: WorkflowFlowNode
-  output: WorkflowOutputConfig
-}
+  const targetIds = new Set(
+    props.edges
+      .filter((e) => e.source === props.currentNodeId)
+      .map((e) => e.target),
+  )
 
-const outputItems = computed<OutputItem[]>(() => {
-  const items: OutputItem[] = []
-  for (const node of props.upstreamNodes) {
-    for (const output of getNodeOutputs(node)) {
-      items.push({ node, output })
-    }
-  }
-  return items
+  return props.nodes.filter((n) => targetIds.has(n.id))
 })
 
 const selectedNode = computed(() =>
-  props.nodeId ? props.upstreamNodes.find((n) => n.id === props.nodeId) : null,
+  props.selectedNodeId ? props.nodes.find((n) => n.id === props.selectedNodeId) : null,
 )
 
 const selectedLabel = computed(() => {
-  if (!props.nodeId) return ''
-  const node = props.upstreamNodes.find((n) => n.id === props.nodeId)
-  if (!node) return ''
-  const outputs = getNodeOutputs(node)
-  const output = outputs.find((o) => o.name === props.outputName)
-  if (!output) return `${node.data.label} · ${props.outputName || 'output'}`
-  return `${node.data.label}  ›  ${output.name}`
+  if (!selectedNode.value) return ''
+  return selectedNode.value.data.label
 })
 
-const filteredOutputItems = computed(() => {
+const filteredNodes = computed(() => {
   const query = searchText.value.trim().toLowerCase()
-  if (!query) return outputItems.value
-  return outputItems.value.filter(
-    (item) =>
-      item.node.data.label.toLowerCase().includes(query) ||
-      item.output.name.toLowerCase().includes(query),
+  if (!query) return downstreamNodes.value
+  return downstreamNodes.value.filter((n) =>
+    n.data.label.toLowerCase().includes(query) ||
+    n.data.type.toLowerCase().includes(query),
   )
 })
 
-// Group filtered items by node
-const groupedItems = computed(() => {
-  const map = new Map<string, { node: WorkflowFlowNode; outputs: WorkflowOutputConfig[] }>()
-  for (const item of filteredOutputItems.value) {
-    const existing = map.get(item.node.id)
-    if (existing) {
-      existing.outputs.push(item.output)
-    } else {
-      map.set(item.node.id, { node: item.node, outputs: [item.output] })
-    }
-  }
-  return [...map.values()]
-})
-
-function selectOutput(nodeId: string, outputName: string) {
-  emit('select', { nodeId, outputName })
+function selectNode(nodeId: string) {
+  emit('select', nodeId)
   popoverOpen.value = false
   searchText.value = ''
 }
@@ -145,7 +112,7 @@ watch(popoverOpen, (open) => {
           <span style="margin-left: 4px;">{{ selectedLabel }}</span>
         </span>
       </span>
-      <span v-else class="trigger-placeholder">选择节点输出...</span>
+      <span v-else class="trigger-placeholder">选择下游节点...</span>
       <CloseCircleFilled
         v-if="selectedLabel"
         class="trigger-clear"
@@ -161,40 +128,31 @@ watch(popoverOpen, (open) => {
             v-model="searchText"
             type="text"
             class="search-input"
-            placeholder="搜索节点或输出名..."
+            placeholder="搜索节点名称或类型..."
             @click.stop
           />
         </div>
 
-        <div class="dropdown-list" :class="{ empty: !groupedItems.length }">
-          <template v-if="groupedItems.length">
-            <div v-for="group in groupedItems" :key="group.node.id" class="node-group">
-              <div class="node-group-header">
-                <IconFont :name="getIconName(group.node.data.type)" :size="14" :color="group.node.data.schema?.color || '#1677ff'" />
-                <span class="node-group-name">{{ group.node.data.label }}</span>
-              </div>
-
-              <div class="node-group-outputs">
-                <div
-                  v-for="output in group.outputs"
-                  :key="`${group.node.id}-${output.name}`"
-                  class="output-row"
-                  :class="{ selected: nodeId === group.node.id && outputName === output.name }"
-                  :title="`${output.name} · ${output.type} · ${output.description || '无描述' }`"
-                  @click="selectOutput(group.node.id, output.name)"
-                >
-                  <span class="output-row-text">{{ output.name }}&ensp;·&ensp;{{ output.type || 'Object' }}</span>
-                  <span class="output-row-desc">{{ output.description || '无描述' }}</span>
-                </div>
-              </div>
+        <div class="dropdown-list" :class="{ empty: !filteredNodes.length }">
+          <template v-if="filteredNodes.length">
+            <div
+              v-for="node in filteredNodes"
+              :key="node.id"
+              class="node-row"
+              :class="{ selected: selectedNodeId === node.id }"
+              @click="selectNode(node.id)"
+            >
+              <IconFont :name="getIconName(node.data.type)" :size="14" :color="node.data.schema?.color || '#1677ff'" />
+              <span class="node-row-name">{{ node.data.label }}</span>
+              <span class="node-row-type">{{ node.data.type }}</span>
             </div>
           </template>
 
-          <div v-else-if="upstreamNodes.length === 0" class="dropdown-empty">
-            当前节点无上游，请先连线
+          <div v-else-if="downstreamNodes.length === 0" class="dropdown-empty">
+            当前节点无下游，请先连线
           </div>
           <div v-else class="dropdown-empty">
-            无匹配的输出
+            无匹配的节点
           </div>
         </div>
       </div>
@@ -254,7 +212,7 @@ watch(popoverOpen, (open) => {
 }
 
 .selector-dropdown {
-  width: 386px;
+  width: 320px;
   padding: 8px;
 }
 
@@ -291,7 +249,11 @@ watch(popoverOpen, (open) => {
 }
 
 .dropdown-list {
-  max-height: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 5px;
+  max-height: 280px;
   overflow-y: auto;
 
   &.empty {
@@ -299,32 +261,11 @@ watch(popoverOpen, (open) => {
   }
 }
 
-.node-group-header {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 12px 4px;
-  cursor: default;
-}
-
-.node-group-name {
-  font-size: 13px;
-  color: #262626;
-}
-
-.node-group-outputs {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.output-row {
+.node-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  width: calc(100% - 18px);
-  margin-left: 12px;
-  padding: 5px 12px 5px 18px;
+  padding: 5px 12px;
   border-radius: 4px;
   cursor: pointer;
   transition: background 0.15s;
@@ -338,21 +279,20 @@ watch(popoverOpen, (open) => {
   }
 }
 
-.output-row-text {
-  font-size: 13px;
-  color: #595959;
-  flex-shrink: 0;
-}
-
-.output-row-desc {
+.node-row-name {
   flex: 1;
   min-width: 0;
-  font-size: 12px;
-  color: #a8a8a8;
-  text-align: right;
+  font-size: 13px;
+  color: #262626;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.node-row-type {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: #a8a8a8;
 }
 
 .dropdown-empty {

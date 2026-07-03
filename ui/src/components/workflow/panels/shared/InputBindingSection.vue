@@ -8,6 +8,8 @@ defineProps<{
   nodes: WorkflowFlowNode[]
   edges?: WorkflowFlowEdge[]
   currentNodeId?: string
+  maxBindings?: number
+  readonlyName?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -22,6 +24,8 @@ const emit = defineEmits<{
       :nodes="nodes"
       :edges="edges || []"
       :current-node-id="currentNodeId"
+      :max-bindings="maxBindings"
+      :readonly-name="readonlyName"
       @update:model-value="(value) => emit('update:modelValue', value)"
     />
   </PanelSection>

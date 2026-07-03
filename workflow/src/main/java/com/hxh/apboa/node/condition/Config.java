@@ -19,8 +19,6 @@ public class Config implements NodeConfig {
     private String evaluatorType = "GROOVY";
     // 条件表达式
     private String conditionExpression;
-    // 允许的输入值类型
-    private List<OutputConfig.VariableType> allowInputType;
     /*
      * 计算范围（本身或长度）
      * 本身：元素本身计算

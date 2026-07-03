@@ -40,7 +40,7 @@ defineEmits<{
   margin-bottom: 10px;
   padding: 0 0 6px 10px;
   color: #2D2626;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 700;
   user-select: none;
 
@@ -64,5 +64,10 @@ defineEmits<{
   display: flex;
   align-items: center;
   gap: 4px;
+  padding-left: 4px
+}
+
+.section-body {
+  padding-left: 2px;
 }
 </style>
