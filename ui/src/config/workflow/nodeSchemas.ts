@@ -127,7 +127,30 @@ export const workflowNodeSchemas: WorkflowNodeSchema[] = [
     type: 'ITERATE', title: '迭代处理', group: 'logic',
     description: '对集合输入逐项执行迭代处理代码。',
     icon: 'iterate', color: '#fa8c16', panelComponent: 'IterateNodePanel',
-    defaultConfig: { language: 'JAVA', iterateCode: '' },
+    defaultConfig: { language: 'JAVA', iterateCode: `package com.hxh.apboa.node.iterate.load;
+
+import com.hxh.apboa.node.iterate.IteratorExecutor;
+
+/**
+ * 数据加载处理实现类。
+ * 作为迭代器执行器，对可迭代对象中的每个元素进行处理。
+ */
+public class DataProcess implements IteratorExecutor {
+
+    /**
+     * 处理迭代过程中的单个元素，该方法会在遍历可迭代对象时被逐一调用。
+     *
+     * @param item  当前迭代到的子元素
+     * @param index 当前子元素在可迭代对象中的位置索引
+     * @return 处理后的子元素对象
+     */
+    @Override
+    public Object doIterate(Object item, Integer index) {
+        // 对item进行处理
+        
+        return item;
+    }
+}` },
     fields: [
       { name: 'language', label: '语言', control: 'segmented', options: [{ label: 'Java', value: 'JAVA' }, { label: 'JavaScript', value: 'JAVASCRIPT' }] },
       { name: 'iterateCode', label: '迭代代码', control: 'code', language: 'java', required: true },

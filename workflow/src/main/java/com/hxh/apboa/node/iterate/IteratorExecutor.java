@@ -8,11 +8,11 @@ package com.hxh.apboa.node.iterate;
  **/
 public interface IteratorExecutor {
     /**
-     * 执行代码
+     * 处理迭代过程中的单个元素，该方法会在遍历可迭代对象时被逐一调用。
      *
-     * @param item 列表对象
-     * @param index 列表索引
-     * @return 输出参数
+     * @param item  当前迭代到的子元素
+     * @param index 当前子元素在可迭代对象中的位置索引
+     * @return 处理后的子元素对象
      */
     Object doIterate(Object item, Integer  index) throws Exception;
 }

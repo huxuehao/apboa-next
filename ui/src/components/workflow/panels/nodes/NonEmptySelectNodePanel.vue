@@ -1,8 +1,8 @@
 ﻿<script setup lang="ts">
 import PanelSection from '../shared/PanelSection.vue'
 import NodeNameInput from '../shared/NodeNameInput.vue'
-import BlurInput from '../shared/BlurInput.vue'
-import InputBindingSection from '../shared/InputBindingSection.vue'
+import AutoInputBinding from '@/components/workflow/bindings/AutoInputBinding.vue'
+import PrevNodeSelector from '@/components/workflow/bindings/PrevNodeSelector.vue'
 import OutputDisplay from '../shared/OutputDisplay.vue'
 import type { WorkflowFlowEdge, WorkflowFlowNode, WorkflowResourceMaps } from '@/types/workflow'
 
@@ -30,7 +30,7 @@ function updateConfig(key: string, value: unknown) {
         @update:model-value="(v: any) => updateNode({ label: v })"
       />
     </PanelSection>
-    <InputBindingSection
+    <AutoInputBinding
       :model-value="node.data.inputConfigs"
       :nodes="nodes"
       :edges="edges"
@@ -39,7 +39,8 @@ function updateConfig(key: string, value: unknown) {
     />
     <PanelSection title="节点配置">
       <div class="config-desc">从多个候选输入中选择第一个或最后一个非空值。</div>
-      <AFormItem label="选择策略">
+      <div class="config-row">
+        <span class="config-row-label">选择策略</span>
         <ASegmented
           :value="node.data.config?.strategy || 'FIRST'"
           :options="[
@@ -48,13 +49,21 @@ function updateConfig(key: string, value: unknown) {
           ]"
           @update:value="(v: any) => updateConfig('strategy', v)"
         />
-      </AFormItem>
-      <AFormItem label="默认节点ID">
-        <BlurInput
-          :model-value="String(node.data.config?.defaultNextNodeId || '')"
-          @update:model-value="(v: any) => updateConfig('defaultNextNodeId', v)"
-        />
-      </AFormItem>
+      </div>
+      <div class="config-row">
+        <span class="config-row-label" style="margin-right: 70px;">默认选择</span>
+        <div class="prev-node-selector">
+          <PrevNodeSelector
+            :nodes="nodes"
+            :edges="edges"
+            :current-node-id="node.id"
+            :selected-node-id="(node.data.config?.defaultNextNodeId as string) || undefined"
+            @select="(id: string) => updateConfig('defaultNextNodeId', id)"
+            @clear="updateConfig('defaultNextNodeId', undefined)"
+          />
+        </div>
+        
+      </div>
     </PanelSection>
     <PanelSection title="输出说明">
       <OutputDisplay :outputs="node.data.outputConfigs || []" />
@@ -65,11 +74,30 @@ function updateConfig(key: string, value: unknown) {
 <style scoped lang="scss">
 .config-desc {
   margin-bottom: 12px;
-  padding: 8px 10px;
-  border-radius: 6px;
-  background: #f6f8fa;
   color: #8c8c8c;
   font-size: 12px;
   line-height: 1.6;
+}
+
+.config-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 32px;
+  margin-bottom: 16px;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
+.config-row-label {
+  flex-shrink: 0;
+  font-size: 14px;
+  color: rgba(0, 0, 0, 0.88);
+}
+
+.prev-node-selector {
+  flex: 1;
 }
 </style>
