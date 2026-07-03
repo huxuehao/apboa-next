@@ -204,7 +204,6 @@ public class DataProcess implements IteratorExecutor {
       { name: 'defaultNextNodeId', label: '默认节点ID', control: 'input' },
     ],
     inputConfigs: input(), outputConfigs: output(),
-    branchHandles: [{ id: 'match', label: 'match' }, { id: 'default', label: 'default' }],
     summaryComponent: 'MatchResultNodeSummary',
     showSummary: true,
   }),

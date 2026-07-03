@@ -64,6 +64,7 @@ const props = defineProps<{
   nodes: WorkflowFlowNode[]
   edges: WorkflowFlowEdge[]
   currentNodeId: string
+  draggable: boolean
 }>()
 
 const emit = defineEmits<{
@@ -250,7 +251,7 @@ onUnmounted(() => {
         :key="item.nodeId"
         class="auto-binding-item"
       >
-        <span class="auto-binding-drag-handle">
+        <span v-if="draggable" class="auto-binding-drag-handle">
           <HolderOutlined />
         </span>
         <div class="auto-binding-display selector-trigger">

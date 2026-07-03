@@ -35,6 +35,7 @@ function updateConfig(key: string, value: unknown) {
       :nodes="nodes"
       :edges="edges"
       :current-node-id="node.id"
+      :draggable="true"
       @update:model-value="(v: any) => updateNode({ inputConfigs: v })"
     />
     <PanelSection title="节点配置">
@@ -62,7 +63,6 @@ function updateConfig(key: string, value: unknown) {
             @clear="updateConfig('defaultNextNodeId', undefined)"
           />
         </div>
-        
       </div>
     </PanelSection>
     <PanelSection title="输出说明">
