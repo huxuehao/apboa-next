@@ -39,24 +39,28 @@ function updateConfig(key: string, value: unknown) {
       :draggable="false"
       @update:model-value="(v: any) => updateNode({ inputConfigs: v })"
     />
-    <AutoMatchBinding
-      :model-value="(node.data.config?.matches as any) || []"
-      :nodes="nodes"
-      :edges="edges"
-      :current-node-id="node.id"
-      @update:model-value="(v: any) => updateConfig('matches', v)"
-    />
     <PanelSection title="节点配置">
       <div class="config-row">
-        <span class="config-row-label">匹配方式</span>
-        <ASegmented
-          :value="node.data.config?.matchType || 'EQUALS'"
-          :options="[
-            { label: '等于', value: 'EQUALS' },
-            { label: '包含', value: 'CONTAINS' },
-          ]"
-          @update:value="(v: any) => updateConfig('matchType', v)"
+        <span class="config-row-label">
+          <ASelect
+            :value="node.data.config?.matchType || 'EQUALS'"
+            :options="[
+              { label: '等于', value: 'EQUALS' },
+              { label: '包含', value: 'CONTAINS' },
+            ]"
+            style="width: 70px; margin-right: 5px;"
+            @update:value="(v: any) => updateConfig('matchType', v)"
+          />
+        </span>
+        <div class="match-binding-wrap">
+        <AutoMatchBinding
+          :model-value="(node.data.config?.matches as any) || []"
+          :nodes="nodes"
+          :edges="edges"
+          :current-node-id="node.id"
+          @update:model-value="(v: any) => updateConfig('matches', v)"
         />
+        </div>
       </div>
       <div class="config-row">
         <span class="config-row-label">区分大小写</span>
@@ -66,7 +70,7 @@ function updateConfig(key: string, value: unknown) {
         />
       </div>
       <div class="config-row">
-        <span class="config-row-label" style="margin-right: 70px;">默认输出</span>
+        <span class="config-row-label" style="margin-right: 120px;">默认输出</span>
         <div class="prev-node-selector">
           <NextNodeSelector
             :nodes="nodes"
@@ -79,6 +83,7 @@ function updateConfig(key: string, value: unknown) {
         </div>
       </div>
     </PanelSection>
+    
     <PanelSection title="输出说明">
       <OutputDisplay :outputs="node.data.outputConfigs || []" />
     </PanelSection>
@@ -106,5 +111,10 @@ function updateConfig(key: string, value: unknown) {
 
 .prev-node-selector {
   flex: 1;
+}
+
+.match-binding-wrap {
+  flex: 1;
+  min-width: 0;
 }
 </style>

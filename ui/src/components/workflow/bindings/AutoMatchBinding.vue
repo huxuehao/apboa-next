@@ -4,7 +4,6 @@ import type { ComputedRef } from 'vue'
 import IconFont from '@/components/common/IconFont.vue'
 import type { IconName } from '@/components/common/icons'
 import type { WorkflowFlowEdge, WorkflowFlowNode } from '@/types/workflow'
-import PanelSection from '@/components/workflow/panels/shared/PanelSection.vue'
 
 const nodeIconMap: Record<string, IconName> = {
   START: 'nodestart',
@@ -54,7 +53,10 @@ const emit = defineEmits<{
   'update:modelValue': [value: MatchItem[]]
 }>()
 
-const injectedEdges = inject<ComputedRef<WorkflowFlowEdge[]>>('workflowEdges', computed(() => []))
+const injectedEdges = inject<ComputedRef<WorkflowFlowEdge[]>>(
+  'workflowEdges',
+  computed(() => []),
+)
 
 // 收集当前节点连接的所有下游节点 ID
 const matchTargetNodeIds = computed(() => {
@@ -154,7 +156,9 @@ watch(
     if (needUpdate) {
       syncing = true
       emit('update:modelValue', filtered)
-      nextTick(() => { syncing = false })
+      nextTick(() => {
+        syncing = false
+      })
     }
   },
   { immediate: true, deep: false },
@@ -167,45 +171,38 @@ function updateMatchValue(nextNodeId: string, value: string) {
   )
   syncing = true
   emit('update:modelValue', matches)
-  nextTick(() => { syncing = false })
+  nextTick(() => {
+    syncing = false
+  })
 }
 </script>
 
 <template>
-  <PanelSection title="匹配项">
-    <div class="match-binding-list" :class="{ empty: !displayItems.length }">
-      <div
-        v-for="item in displayItems"
-        :key="item.nextNodeId"
-        class="match-binding-row"
-      >
-        <div class="match-value-cell">
-          <AInput
-            :value="item.matchValue"
-            placeholder="匹配值"
-            @update:value="(v: string) => updateMatchValue(item.nextNodeId, v)"
-          />
-        </div>
-        <div class="match-next-cell">
-          <div class="match-next-display selector-trigger">
-            <span class="trigger-text">
-              <span class="trigger-icon">
-                <IconFont
-                  :name="getIconName(item.nodeType)"
-                  :size="14"
-                  :color="item.nodeColor"
-                />
-                <span style="margin-left: 4px;">{{ item.nodeLabel }}</span>
-              </span>
-            </span>
-          </div>
-        </div>
+  <div class="match-binding-list" :class="{ empty: !displayItems.length }">
+    <div v-for="item in displayItems" :key="item.nextNodeId" class="match-binding-row">
+      <div class="match-value-cell">
+        <AInput
+          :value="item.matchValue"
+          placeholder="匹配值"
+          @update:value="(v: string) => updateMatchValue(item.nextNodeId, v)"
+        />
       </div>
-      <div v-if="!displayItems.length" class="match-binding-empty">
-        暂无匹配分支，请先连线到下游节点
+      <div>→</div>
+      <div class="match-next-cell">
+        <div class="match-next-display selector-trigger">
+          <span class="trigger-text">
+            <span class="trigger-icon">
+              <IconFont :name="getIconName(item.nodeType)" :size="14" :color="item.nodeColor" />
+              <span style="margin-left: 4px">{{ item.nodeLabel }}</span>
+            </span>
+          </span>
+        </div>
       </div>
     </div>
-  </PanelSection>
+    <div v-if="!displayItems.length" class="match-binding-empty">
+      暂无匹配分支，请先连线到下游节点
+    </div>
+  </div>
 </template>
 
 <style scoped lang="scss">
@@ -244,7 +241,7 @@ function updateMatchValue(nextNodeId: string, value: string) {
   align-items: center;
   gap: 6px;
   padding: 2px 8px;
-  background-color: #F2F4F7;
+  background-color: #f2f4f7;
   border-radius: 6px;
   font-size: 14px;
   min-height: 32px;
