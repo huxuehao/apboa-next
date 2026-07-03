@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { SearchOutlined } from '@ant-design/icons-vue'
+import { SearchOutlined, CloseCircleFilled } from '@ant-design/icons-vue'
 import IconFont from '@/components/common/IconFont.vue'
 import type { IconName } from '@/components/common/icons'
 import type { WorkflowFlowNode, WorkflowOutputConfig } from '@/types/workflow'
@@ -13,6 +13,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   select: [payload: { nodeId: string; outputName: string }]
+  clear: []
 }>()
 
 const popoverOpen = ref(false)
@@ -121,6 +122,10 @@ function selectOutput(nodeId: string, outputName: string) {
   searchText.value = ''
 }
 
+function clearSelection() {
+  emit('clear')
+}
+
 watch(popoverOpen, (open) => {
   if (!open) searchText.value = ''
 })
@@ -134,7 +139,6 @@ watch(popoverOpen, (open) => {
     :overlay-inner-style="{ padding: 0 }"
   >
     <div class="selector-trigger" :class="{ placeholder: !selectedLabel }">
-
       <span v-if="selectedLabel" class="trigger-text">
         <span class="trigger-icon">
           <IconFont v-if="selectedNode" :name="getIconName(selectedNode.data.type)" :size="14" :color="selectedNode.data.schema?.color || '#1677ff'" />
@@ -142,7 +146,11 @@ watch(popoverOpen, (open) => {
         </span>
       </span>
       <span v-else class="trigger-placeholder">选择节点输出...</span>
-      <span class="trigger-arrow">&#9662;</span>
+      <CloseCircleFilled
+        v-if="selectedLabel"
+        class="trigger-clear"
+        @click.stop="clearSelection"
+      />
     </div>
 
     <template #content>
@@ -166,16 +174,18 @@ watch(popoverOpen, (open) => {
                 <span class="node-group-name">{{ group.node.data.label }}</span>
               </div>
 
-              <div
-                v-for="output in group.outputs"
-                :key="`${group.node.id}-${output.name}`"
-                class="output-row"
-                :class="{ selected: nodeId === group.node.id && outputName === output.name }"
-                :title="`${output.name} · ${output.type} · ${output.description || '无描述' }`"
-                @click="selectOutput(group.node.id, output.name)"
-              >
-                <span class="output-row-text">{{ output.name }}&ensp;·&ensp;{{ output.type || 'Object' }}</span>
-                <span class="output-row-desc">{{ output.description || '无描述' }}</span>
+              <div class="node-group-outputs">
+                <div
+                  v-for="output in group.outputs"
+                  :key="`${group.node.id}-${output.name}`"
+                  class="output-row"
+                  :class="{ selected: nodeId === group.node.id && outputName === output.name }"
+                  :title="`${output.name} · ${output.type} · ${output.description || '无描述' }`"
+                  @click="selectOutput(group.node.id, output.name)"
+                >
+                  <span class="output-row-text">{{ output.name }}&ensp;·&ensp;{{ output.type || 'Object' }}</span>
+                  <span class="output-row-desc">{{ output.description || '无描述' }}</span>
+                </div>
               </div>
             </div>
           </template>
@@ -204,6 +214,7 @@ watch(popoverOpen, (open) => {
   font-size: 14px;
   transition: border-color 0.2s;
   min-height: 32px;
+  position: relative;
 
   &:hover {
     border-color: #1677ff;
@@ -211,6 +222,18 @@ watch(popoverOpen, (open) => {
 
   &.placeholder {
     color: #bfbfbf;
+  }
+}
+
+.trigger-clear {
+  flex-shrink: 0;
+  color: #bfbfbf;
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.2s;
+
+  &:hover {
+    color: #595959;
   }
 }
 
@@ -234,16 +257,9 @@ watch(popoverOpen, (open) => {
   color: #bfbfbf;
 }
 
-.trigger-arrow {
-  flex-shrink: 0;
-  font-size: 10px;
-  color: #bfbfbf;
-  transition: transform 0.2s;
-}
-
 .selector-dropdown {
   width: 386px;
-  padding: 4px 8px;
+  padding: 8px;
 }
 
 .dropdown-search {
@@ -291,13 +307,19 @@ watch(popoverOpen, (open) => {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 8px 12px 6px;
+  padding: 6px 12px 4px;
   cursor: default;
 }
 
 .node-group-name {
   font-size: 13px;
   color: #262626;
+}
+
+.node-group-outputs {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .output-row {

@@ -98,7 +98,7 @@ function removeBinding(index: number) {
           placeholder="输入名"
           @update:model-value="(value: string) => update(index, { name: value })"
         />
-        <AButton v-if="bindings.length > 1" danger type="text" @click="removeBinding(index)">删除</AButton>
+        <AButton v-if="bindings.length > 1" danger type="text" @click="removeBinding(index)" style="margin-left: 5px">删除</AButton>
       </div>
 
       <div class="source-type-segmented">
@@ -141,6 +141,7 @@ function removeBinding(index: number) {
         :node-id="binding.nodeId"
         :output-name="binding.outputName"
         @select="({ nodeId, outputName }) => update(index, { nodeId, outputName })"
+        @clear="update(index, { nodeId: undefined, outputName: undefined })"
       />
 
       <ATextarea
@@ -174,7 +175,7 @@ function removeBinding(index: number) {
 .binding-head {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
+  //gap: 8px;
   align-items: center;
 }
 
