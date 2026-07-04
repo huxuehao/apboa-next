@@ -104,7 +104,7 @@ function removeBinding(index: number) {
           @update:model-value="(value: string) => update(index, { name: value })"
         />
         <span v-else class="binding-name-readonly">{{ binding.name }}</span>
-        <AButton v-if="bindings.length > 1" danger type="text" @click="removeBinding(index)" style="margin-left: 5px">删除</AButton>
+        <AButton v-if="bindings.length > 1" danger type="text" @click="removeBinding(index)" style="margin-left: 5px; background-color: #FFF2F0;">删除</AButton>
       </div>
 
       <div class="source-type-segmented">

@@ -123,12 +123,12 @@ function updateString(index: number, value: string) {
         <template v-if="type === 'startParams'">
           <div class="field-cell">
             <span v-if="index === 0" class="field-title-spacer" />
-            <AButton type="text" danger @click="removeRow(index)">
+            <AButton type="text" danger @click="removeRow(index)" >
               <template #icon><DeleteOutlined /></template>
             </AButton>
           </div>
         </template>
-        <AButton v-else type="text" danger @click="removeRow(index)">
+        <AButton v-else type="text" danger @click="removeRow(index)" style="background-color: #FFF2F0;">
           <template #icon><DeleteOutlined /></template>
         </AButton>
       </div>

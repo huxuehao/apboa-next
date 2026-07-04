@@ -15,6 +15,11 @@ const props = defineProps<{
 const emit = defineEmits<{ update: [node: WorkflowFlowNode] }>()
 
 const panelRoot = ref<HTMLElement>()
+const isEditorMaximized = ref(false)
+
+function onEditorMaximizeChange(val: boolean) {
+  isEditorMaximized.value = val
+}
 
 const languageOptions = [
   { label: 'Java', value: 'JAVA' },
@@ -42,7 +47,7 @@ function updateConfig(key: string, value: unknown) {
 </script>
 
 <template>
-  <div ref="panelRoot" class="iterate-panel">
+  <div ref="panelRoot" class="iterate-panel" :class="{ 'editor-maximized': isEditorMaximized }">
     <AForm layout="vertical">
     <PanelSection title="节点名称">
       <NodeNameInput
@@ -75,6 +80,7 @@ function updateConfig(key: string, value: unknown) {
         placeholder="编写迭代处理逻辑..."
         :maximize-target="panelRoot"
         @update:model-value="(v: any) => updateConfig('iterateCode', v)"
+        @maximize-change="onEditorMaximizeChange"
       />
     </PanelSection>
     <PanelSection title="输出说明">
@@ -87,7 +93,11 @@ function updateConfig(key: string, value: unknown) {
 <style scoped lang="scss">
 .iterate-panel {
   position: relative;
-  height: 100%;
+  
+  &.editor-maximized {
+    height: 100%;
+    overflow: hidden;
+  }
 }
 
 .config-desc {

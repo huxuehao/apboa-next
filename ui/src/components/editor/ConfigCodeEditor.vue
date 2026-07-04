@@ -67,6 +67,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   'update:modelValue': [value: string]
+  maximizeChange: [value: boolean]
 }>()
 
 const editorContainer = ref<HTMLElement>()
@@ -341,6 +342,7 @@ async function copyCode() {
 
 function toggleMaximize() {
   isMaximized.value = !isMaximized.value
+  emit('maximizeChange', isMaximized.value)
   nextTick(() => {
     editorView.value?.requestMeasure()
     editorView.value?.focus()
@@ -369,6 +371,7 @@ function teardownResizeObserver() {
 function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape' && isMaximized.value) {
     isMaximized.value = false
+    emit('maximizeChange', false)
     nextTick(() => editorView.value?.requestMeasure())
   }
 }
