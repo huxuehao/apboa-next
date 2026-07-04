@@ -1,5 +1,6 @@
 ﻿<script setup lang="ts">
 import PanelSection from '../shared/PanelSection.vue'
+import FormatterGuideModal from '../shared/FormatterGuideModal.vue'
 import NodeNameInput from '../shared/NodeNameInput.vue'
 import BlurInput from '../shared/BlurInput.vue'
 import InputBindingSection from '../shared/InputBindingSection.vue'
@@ -47,24 +48,11 @@ function updateConfig(key: string, value: unknown) {
           @update:model-value="(v: any) => updateConfig('cacheId', v)"
         />
       </AFormItem>
-      <AFormItem label="缓存键" required>
-        <BlurInput
-          :model-value="String(node.data.config?.key || '')"
-          placeholder="例如 user:${userId}"
-          @update:model-value="(v: any) => updateConfig('key', v)"
-        />
-        <template #extra><span class="field-help">支持 Velocity 变量语法。</span></template>
-      </AFormItem>
-      <AFormItem label="新的过期时间(秒)">
-        <AInputNumber
-          class="full-input"
-          :value="Number(node.data.config?.expire ?? 0)"
-          :min="0"
-          placeholder="0 表示不过期"
-          @update:value="(v: any) => updateConfig('expire', v ?? 0)"
-        />
-      </AFormItem>
-      <AFormItem label="模板格式">
+      <AFormItem>
+        <template #label>
+          <span>模板格式&nbsp;</span>
+          <FormatterGuideModal />
+        </template>
         <ASelect
           :value="node.data.config?.formatterType || 'VELOCITY'"
           :options="[
@@ -73,6 +61,22 @@ function updateConfig(key: string, value: unknown) {
             { label: 'Velocity 模板', value: 'VELOCITY' },
           ]"
           @update:value="(v: any) => updateConfig('formatterType', v)"
+        />
+      </AFormItem>
+      <AFormItem label="缓存键" required>
+        <BlurInput
+          :model-value="String(node.data.config?.key || '')"
+          placeholder="例如 user:${userId}"
+          @update:model-value="(v: any) => updateConfig('key', v)"
+        />
+      </AFormItem>
+      <AFormItem label="新的过期时间(秒)">
+        <AInputNumber
+          class="full-input"
+          :value="Number(node.data.config?.expire ?? 0)"
+          :min="0"
+          placeholder="0 表示不过期"
+          @update:value="(v: any) => updateConfig('expire', v ?? 0)"
         />
       </AFormItem>
     </PanelSection>

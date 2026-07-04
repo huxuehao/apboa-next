@@ -1,5 +1,6 @@
 ﻿<script setup lang="ts">
 import PanelSection from '../shared/PanelSection.vue'
+import FormatterGuideModal from '../shared/FormatterGuideModal.vue'
 import NodeNameInput from '../shared/NodeNameInput.vue'
 import BlurInput from '../shared/BlurInput.vue'
 import InputBindingSection from '../shared/InputBindingSection.vue'
@@ -47,23 +48,26 @@ function updateConfig(key: string, value: unknown) {
           @update:model-value="(v: any) => updateConfig('cacheId', v)"
         />
       </AFormItem>
+      <AFormItem>
+        <template #label>
+          <span>模板格式&nbsp;</span>
+          <FormatterGuideModal />
+        </template>
+        <ASelect
+          :value="node.data.config?.formatterType || 'VELOCITY'"
+          :options="[
+            { label: '纯文本替换', value: 'STRING' },
+            { label: 'JSON 保类型', value: 'JACKSON' },
+            { label: 'Velocity 模板', value: 'VELOCITY' },
+          ]"
+          @update:value="(v: any) => updateConfig('formatterType', v)"
+        />
+      </AFormItem>
       <AFormItem label="缓存键" required>
         <BlurInput
           :model-value="String(node.data.config?.key || '')"
           placeholder="例如 user:${userId}"
           @update:model-value="(v: any) => updateConfig('key', v)"
-        />
-        <template #extra><span class="field-help">支持 Velocity 变量语法。</span></template>
-      </AFormItem>
-      <AFormItem label="模板格式">
-        <ASelect
-          :value="node.data.config?.formatterType || 'VELOCITY'"
-          :options="[
-            { label: '普通字符串', value: 'STRING' },
-            { label: 'Jackson JSON', value: 'JACKSON' },
-            { label: 'Velocity 模板', value: 'VELOCITY' },
-          ]"
-          @update:value="(v: any) => updateConfig('formatterType', v)"
         />
       </AFormItem>
     </PanelSection>

@@ -1,12 +1,20 @@
 ﻿<script setup lang="ts">
+import { ref } from 'vue'
 import PanelSection from '../shared/PanelSection.vue'
+import FormatterGuideModal from '../shared/FormatterGuideModal.vue'
 import NodeNameInput from '../shared/NodeNameInput.vue'
 import BlurInput from '../shared/BlurInput.vue'
 import InputBindingSection from '../shared/InputBindingSection.vue'
 import OutputDisplay from '../shared/OutputDisplay.vue'
 import WorkflowResourceSelect from '@/components/workflow/fields/WorkflowResourceSelect.vue'
-import SmartCodeEditor from '@/components/editor/SmartCodeEditor.vue'
 import type { WorkflowFlowEdge, WorkflowFlowNode, WorkflowResourceMaps } from '@/types/workflow'
+
+const panelRoot = ref<HTMLElement>()
+const isEditorMaximized = ref(false)
+
+function onEditorMaximizeChange(val: boolean) {
+  isEditorMaximized.value = val
+}
 
 const props = defineProps<{
   node: WorkflowFlowNode
@@ -30,6 +38,7 @@ function stringify(v: unknown) {
 </script>
 
 <template>
+  <div ref="panelRoot" class="cache-delete-panel" :class="{ 'editor-maximized': isEditorMaximized }">
   <AForm layout="vertical">
     <PanelSection title="节点名称">
       <NodeNameInput
@@ -55,45 +64,11 @@ function stringify(v: unknown) {
           @update:model-value="(v: any) => updateConfig('cacheId', v)"
         />
       </AFormItem>
-      <AFormItem label="缓存键" required>
-        <BlurInput
-          :model-value="String(node.data.config?.key || '')"
-          placeholder="例如 user:${userId}"
-          @update:model-value="(v: any) => updateConfig('key', v)"
-        />
-        <template #extra><span class="field-help">支持 Velocity 变量语法。</span></template>
-      </AFormItem>
-      <AFormItem label="缓存值" required>
-        <SmartCodeEditor
-          :model-value="stringify(node.data.config?.value)"
-          language="json"
-          theme="light"
-          height="180px"
-          :show-change-language="false"
-          :show-theme-toggle="false"
-          :show-fullscreen="true"
-          placeholder="支持字符串、数字、对象或数组。"
-          @update:model-value="
-            (v: string) => {
-              try {
-                updateConfig('value', JSON.parse(v))
-              } catch {
-                updateConfig('value', v)
-              }
-            }
-          "
-        />
-      </AFormItem>
-      <AFormItem label="过期时间(秒)">
-        <AInputNumber
-          class="full-input"
-          :value="Number(node.data.config?.expire ?? 0)"
-          :min="0"
-          placeholder="0 表示不过期"
-          @update:value="(v: any) => updateConfig('expire', v ?? 0)"
-        />
-      </AFormItem>
-      <AFormItem label="模板格式">
+      <AFormItem>
+        <template #label>
+          <span>模板格式&nbsp;</span>
+          <FormatterGuideModal />
+        </template>
         <ASelect
           :value="node.data.config?.formatterType || 'VELOCITY'"
           :options="[
@@ -104,15 +79,63 @@ function stringify(v: unknown) {
           @update:value="(v: any) => updateConfig('formatterType', v)"
         />
       </AFormItem>
+      <AFormItem label="缓存键" required>
+        <BlurInput
+          :model-value="String(node.data.config?.key || '')"
+          placeholder="例如 user:${userId}"
+          @update:model-value="(v: any) => updateConfig('key', v)"
+        />
+      </AFormItem>
+      <div class="cache-editor-field">
+        <label class="form-label">缓存值 <span class="required-mark">*</span></label>
+        <ConfigCodeEditor
+          :model-value="stringify(node.data.config?.value)"
+          language="sql"
+          placeholder="支持字符串、数字、对象或数组。"
+          :maximize-target="panelRoot"
+          @update:model-value="
+            (v: string) => {
+              try {
+                updateConfig('value', JSON.parse(v))
+              } catch {
+                updateConfig('value', v)
+              }
+            }"
+          @maximize-change="onEditorMaximizeChange"
+        />
+      </div>
+      <AFormItem label="过期时间(秒)">
+        <AInputNumber
+          class="full-input"
+          :value="Number(node.data.config?.expire ?? 0)"
+          :min="0"
+          placeholder="0 表示不过期"
+          @update:value="(v: any) => updateConfig('expire', v ?? 0)"
+        />
+      </AFormItem>
     </PanelSection>
 
     <PanelSection title="输出说明">
       <OutputDisplay :outputs="node.data.outputConfigs || []" />
     </PanelSection>
   </AForm>
+  </div>
 </template>
 
 <style scoped lang="scss">
+.cache-delete-panel {
+  position: relative;
+  
+  &.editor-maximized {
+    height: 100%;
+    overflow: hidden;
+  }
+}
+
+.cache-editor-field {
+  margin-bottom: 24px;
+}
+
 .field-help {
   display: block;
   color: #8c8c8c;
