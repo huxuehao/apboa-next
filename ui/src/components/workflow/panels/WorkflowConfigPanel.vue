@@ -18,11 +18,11 @@ defineEmits<{
   close: []
 }>()
 
-const width = ref(440)
+const width = ref(442)
 const dragging = ref(false)
 
 const maxWidth = computed(() =>
-  Math.max(440, Math.floor((window.innerWidth - (props.rightOffset || 16) - 48) * 0.55)),
+  Math.max(442, Math.floor((window.innerWidth - (props.rightOffset || 16) - 48) * 0.55)),
 )
 
 const nodeIconMap: Record<string, IconName> = {
@@ -79,7 +79,7 @@ function beginResize(event: MouseEvent) {
   const startWidth = width.value
   const onMove = (moveEvent: MouseEvent) => {
     const next = startWidth + (startX - moveEvent.clientX)
-    width.value = Math.max(440, Math.min(maxWidth.value, next))
+    width.value = Math.max(442, Math.min(maxWidth.value, next))
   }
   const onUp = () => {
     dragging.value = false
@@ -134,7 +134,7 @@ function beginResize(event: MouseEvent) {
   top: 60px;
   bottom: 18px;
   z-index: 16;
-  min-width: 440px;
+  min-width: 442px;
   max-width: 50vw;
   box-shadow: 0px 3px 10px rgba(0, 0, 0, 0.08);
   border-radius: 8px;

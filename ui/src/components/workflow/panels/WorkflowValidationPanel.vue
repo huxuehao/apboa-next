@@ -11,7 +11,7 @@ const props = defineProps<{
   nodeNames: Record<string, string>
 }>()
 
-const width = defineModel<number>('width', { default: 440 })
+const width = defineModel<number>('width', { default: 442 })
 
 const emit = defineEmits<{
   close: []
@@ -44,7 +44,7 @@ function beginResize(event: MouseEvent) {
   const startWidth = width.value
   const onMove = (moveEvent: MouseEvent) => {
     const next = startWidth + (startX - moveEvent.clientX)
-    width.value = Math.max(440, Math.min(maxWidth.value, next))
+    width.value = Math.max(442, Math.min(maxWidth.value, next))
   }
   const onUp = () => {
     dragging.value = false
@@ -151,7 +151,7 @@ watch(
   top: 60px;
   bottom: 18px;
   z-index: 17;
-  min-width: 440px;
+  min-width: 442px;
   max-width: 55vw;
   box-shadow: 0px 3px 10px rgba(0, 0, 0, 0.08);
   border-radius: 8px;

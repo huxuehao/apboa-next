@@ -37,7 +37,7 @@ import {
 } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
 
-type SupportedLanguage = 'java' | 'python' | 'javascript' | 'sql'
+type SupportedLanguage = 'java' | 'python' | 'javascript' | 'sql' | 'txt'
 
 // ── CodeMirror 内部类型 ──
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

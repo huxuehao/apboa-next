@@ -48,28 +48,31 @@ function updateConfig(key: string, value: unknown) {
           @update:model-value="(v: any) => updateConfig('cacheId', v)"
         />
       </AFormItem>
-      <AFormItem>
-        <template #label>
-          <span>模板格式&nbsp;</span>
-          <FormatterGuideModal />
-        </template>
-        <ASelect
-          :value="node.data.config?.formatterType || 'VELOCITY'"
-          :options="[
-            { label: '普通字符串', value: 'STRING' },
-            { label: 'Jackson JSON', value: 'JACKSON' },
-            { label: 'Velocity 模板', value: 'VELOCITY' },
-          ]"
-          @update:value="(v: any) => updateConfig('formatterType', v)"
-        />
-      </AFormItem>
-      <AFormItem label="缓存键" required>
+      <div class="cache-key-field">
+        <div class="key-header">
+          <span class="key-label">缓存键 <span class="required-mark">*</span></span>
+          <div class="formatter-selector">
+            <FormatterGuideModal />
+            <ASelect
+              :value="node.data.config?.formatterType || 'VELOCITY'"
+              :options="[
+                { label: '纯文本替换', value: 'STRING' },
+                { label: 'JSON 保类型', value: 'JACKSON' },
+                { label: 'Velocity 模板', value: 'VELOCITY' },
+              ]"
+              size="small"
+              style="width: 130px"
+              @update:value="(v: any) => updateConfig('formatterType', v)"
+            />
+          </div>
+        </div>
         <BlurInput
           :model-value="String(node.data.config?.key || '')"
           placeholder="例如 user:${userId}"
           @update:model-value="(v: any) => updateConfig('key', v)"
         />
-      </AFormItem>
+        <span class="field-help">使用 ${变量名} 引用输入绑定，模板格式控制变量替换方式。</span>
+      </div>
     </PanelSection>
     <PanelSection title="输出说明">
       <OutputDisplay :outputs="node.data.outputConfigs || []" />
@@ -80,6 +83,41 @@ function updateConfig(key: string, value: unknown) {
 <style scoped lang="scss">
 .field-help {
   display: block;
+  color: #8c8c8c;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.cache-key-field {
+  margin-bottom: 24px;
+}
+
+.key-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.key-label {
+  font-size: 14px;
+  color: rgba(0, 0, 0, 0.88);
+  line-height: 1.5;
+}
+
+.required-mark {
+  color: #ff4d4f;
+  margin-left: 2px;
+}
+
+.formatter-selector {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.field-help {
+  display: block;
+  margin-top: 4px;
   color: #8c8c8c;
   font-size: 12px;
   line-height: 1.5;

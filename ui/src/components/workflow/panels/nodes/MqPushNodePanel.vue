@@ -1,12 +1,21 @@
 ﻿<script setup lang="ts">
+import { ref, computed, watch } from 'vue'
 import PanelSection from '../shared/PanelSection.vue'
+import FormatterGuideModal from '../shared/FormatterGuideModal.vue'
 import NodeNameInput from '../shared/NodeNameInput.vue'
 import BlurInput from '../shared/BlurInput.vue'
 import InputBindingSection from '../shared/InputBindingSection.vue'
 import OutputDisplay from '../shared/OutputDisplay.vue'
 import WorkflowResourceSelect from '@/components/workflow/fields/WorkflowResourceSelect.vue'
-import SmartCodeEditor from '@/components/editor/SmartCodeEditor.vue'
+import ConfigCodeEditor from '@/components/editor/ConfigCodeEditor.vue'
 import type { WorkflowFlowNode, WorkflowResourceMaps } from '@/types/workflow'
+
+const panelRoot = ref<HTMLElement>()
+const isEditorMaximized = ref(false)
+
+function onEditorMaximizeChange(val: boolean) {
+  isEditorMaximized.value = val
+}
 
 const props = defineProps<{
   node: WorkflowFlowNode
@@ -23,13 +32,65 @@ function updateConfig(key: string, value: unknown) {
 }
 
 const formatterOptions = [
-  { label: '普通字符串', value: 'STRING' },
-  { label: 'Jackson JSON', value: 'JACKSON' },
+  { label: '纯文本替换', value: 'STRING' },
+  { label: 'JSON 保类型', value: 'JACKSON' },
   { label: 'Velocity 模板', value: 'VELOCITY' },
 ]
+
+// 消息模式：静态内容(message) vs 模板渲染(messageTemplate)
+const messageMode = ref<'static' | 'template'>(
+  props.node.data.config?.messageTemplate ? 'template' : 'static',
+)
+
+// 外部 config 变更时同步 radio 状态
+watch(
+  () => props.node.data.config?.messageTemplate,
+  (val) => {
+    messageMode.value = val ? 'template' : 'static'
+  },
+)
+
+let switchingMode = false
+
+function onMessageModeChange(val: 'static' | 'template') {
+  if (switchingMode) return
+  switchingMode = true
+  const currentContent = String(
+    props.node.data.config?.messageTemplate || props.node.data.config?.message || '',
+  )
+  if (val === 'static') {
+    updateConfig('message', currentContent)
+    updateConfig('messageTemplate', null)
+  } else {
+    updateConfig('messageTemplate', currentContent)
+    updateConfig('message', null)
+  }
+  // 下一个 tick 重置标记，避免 watch 循环
+  setTimeout(() => { switchingMode = false }, 0)
+}
+
+// 消息内容：根据模式读写对应字段
+const messageContent = computed({
+  get: () =>
+    String(props.node.data.config?.messageTemplate || props.node.data.config?.message || ''),
+  set: (val: string) => {
+    if (messageMode.value === 'template') {
+      updateConfig('messageTemplate', val)
+    } else {
+      updateConfig('message', val)
+    }
+  },
+})
+
+const messagePlaceholder = computed(() =>
+  messageMode.value === 'template'
+    ? '使用 ${变量名} 引用输入绑定，如 {\"id\":\"${input.id}\"}'
+    : '直接输入消息内容，如 {\"key\":\"value\"}',
+)
 </script>
 
 <template>
+  <div ref="panelRoot" class="mq-push-panel" :class="{ 'editor-maximized': isEditorMaximized }">
   <AForm layout="vertical">
     <PanelSection title="节点名称">
       <NodeNameInput
@@ -37,14 +98,15 @@ const formatterOptions = [
         @update:model-value="(v: any) => updateNode({ label: v })"
       />
     </PanelSection>
+
     <InputBindingSection
       :model-value="node.data.inputConfigs"
       :nodes="nodes"
       :current-node-id="node.id"
       @update:model-value="(v: any) => updateNode({ inputConfigs: v })"
     />
+
     <PanelSection title="节点配置">
-      <div class="config-desc">向 Kafka、RabbitMQ 或 RocketMQ 推送消息。</div>
       <AFormItem label="MQ 实例" required>
         <WorkflowResourceSelect
           :model-value="String(node.data.config?.mqId || '')"
@@ -53,68 +115,139 @@ const formatterOptions = [
           @update:model-value="(v: any) => updateConfig('mqId', v)"
         />
       </AFormItem>
-      <AFormItem label="Topic / Queue" required>
-        <BlurInput
-          :model-value="String(node.data.config?.topicOrQueue || '')"
-          placeholder="Kafka/RocketMQ 为 topic，RabbitMQ 为 queue"
-          @update:model-value="(v: any) => updateConfig('topicOrQueue', v)"
-        />
-      </AFormItem>
-      <AFormItem label="消息 Key">
-        <BlurInput
-          :model-value="String(node.data.config?.key || '')"
-          placeholder="Kafka 分区键、RabbitMQ routing key、RocketMQ tag"
-          @update:model-value="(v: any) => updateConfig('key', v)"
-        />
-      </AFormItem>
-      <AFormItem label="消息内容">
-        <SmartCodeEditor
-          :model-value="String(node.data.config?.message || '')"
-          language="json"
-          theme="light"
-          height="160px"
-          :show-change-language="false"
-          :show-theme-toggle="false"
-          :show-fullscreen="true"
-          placeholder='如 {"key":"value"}'
-          @update:model-value="(v: any) => updateConfig('message', v)"
-        />
-      </AFormItem>
-      <AFormItem label="消息模板">
-        <SmartCodeEditor
-          :model-value="String(node.data.config?.messageTemplate || '')"
+
+      <div class="topic-field">
+        <AFormItem label="Topic / Queue" required>
+          <BlurInput
+            :model-value="String(node.data.config?.topicOrQueue || '')"
+            placeholder="Kafka/RocketMQ 为 topic，RabbitMQ 为 queue"
+            @update:model-value="(v: any) => updateConfig('topicOrQueue', v)"
+          />
+        </AFormItem>
+        <span class="field-help">支持 ${变量名} 引用输入绑定，渲染格式由下方「模板格式」控制。</span>
+      </div>
+
+      <div class="key-field">
+        <AFormItem label="消息 Key">
+          <BlurInput
+            :model-value="String(node.data.config?.key || '')"
+            placeholder="Kafka 分区键、RabbitMQ routing key、RocketMQ tag"
+            @update:model-value="(v: any) => updateConfig('key', v)"
+          />
+        </AFormItem>
+        <span class="field-help">可选。支持 ${变量名} 引用输入绑定，渲染格式由下方「模板格式」控制。</span>
+      </div>
+
+      <div class="message-field">
+        <div class="message-header">
+          <span class="form-label">消息内容 <span class="required-mark">*</span></span>
+          <div class="formatter-selector">
+            <FormatterGuideModal />
+            <ASelect
+              :value="node.data.config?.templateType || 'STRING'"
+              :options="formatterOptions"
+              size="small"
+              style="width: 130px"
+              @update:value="(v: any) => updateConfig('templateType', v)"
+            />
+          </div>
+        </div>
+
+        <ARadioGroup v-model:value="messageMode" @update:value="onMessageModeChange" class="message-mode-toggle">
+          <ARadio value="static">静态内容</ARadio>
+          <ARadio value="template">模板渲染</ARadio>
+        </ARadioGroup>
+
+        <ConfigCodeEditor
+          v-model="messageContent"
           language="txt"
-          theme="light"
-          height="120px"
-          :show-change-language="false"
-          :show-theme-toggle="false"
-          :show-fullscreen="true"
-          placeholder="优先级高于消息内容"
-          @update:model-value="(v: any) => updateConfig('messageTemplate', v)"
+          :placeholder="messagePlaceholder"
+          :maximize-target="panelRoot"
+          @maximize-change="onEditorMaximizeChange"
         />
-      </AFormItem>
-      <AFormItem label="模板格式">
-        <ASelect
-          :value="node.data.config?.templateType || 'STRING'"
-          :options="formatterOptions"
-          @update:value="(v: any) => updateConfig('templateType', v)"
-        />
-      </AFormItem>
+
+        <span class="field-help">
+          选择「模板渲染」后，内容经所选模板格式渲染再发送；Topic/Queue 和 Key 同样使用该格式渲染。
+        </span>
+      </div>
     </PanelSection>
+
     <PanelSection title="输出说明">
       <OutputDisplay :outputs="node.data.outputConfigs || []" />
     </PanelSection>
   </AForm>
+  </div>
 </template>
 
 <style scoped lang="scss">
-.config-desc {
-  margin-bottom: 12px;
-  padding: 8px 10px;
-  border-radius: 6px;
-  background: #f6f8fa;
+.mq-push-panel {
+  position: relative;
+
+  &.editor-maximized {
+    height: 100%;
+    overflow: hidden;
+  }
+}
+
+.topic-field,
+.key-field {
+  margin-bottom: 24px;
+
+  :deep(.ant-form-item) {
+    margin-bottom: 0;
+  }
+}
+
+.field-help {
+  display: block;
+  margin-top: 4px;
   color: #8c8c8c;
   font-size: 12px;
   line-height: 1.6;
+
+  code {
+    padding: 1px 4px;
+    background: #f5f5f5;
+    border-radius: 3px;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', 'Consolas', monospace;
+    color: #d4380d;
+  }
+}
+
+.message-field {
+  margin-bottom: 24px;
+}
+
+.message-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.form-label {
+  font-size: 14px;
+  color: rgba(0, 0, 0, 0.88);
+  line-height: 1.5;
+}
+
+.required-mark {
+  color: #ff4d4f;
+  margin-left: 2px;
+}
+
+.formatter-selector {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.message-mode-toggle {
+  margin-bottom: 8px;
+
+  :deep(.ant-radio-wrapper) {
+    font-size: 13px;
+  }
 }
 </style>

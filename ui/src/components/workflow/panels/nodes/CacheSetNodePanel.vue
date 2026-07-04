@@ -6,6 +6,7 @@ import NodeNameInput from '../shared/NodeNameInput.vue'
 import BlurInput from '../shared/BlurInput.vue'
 import InputBindingSection from '../shared/InputBindingSection.vue'
 import OutputDisplay from '../shared/OutputDisplay.vue'
+import ConfigCodeEditor from '@/components/editor/ConfigCodeEditor.vue'
 import WorkflowResourceSelect from '@/components/workflow/fields/WorkflowResourceSelect.vue'
 import type { WorkflowFlowEdge, WorkflowFlowNode, WorkflowResourceMaps } from '@/types/workflow'
 
@@ -38,7 +39,7 @@ function stringify(v: unknown) {
 </script>
 
 <template>
-  <div ref="panelRoot" class="cache-delete-panel" :class="{ 'editor-maximized': isEditorMaximized }">
+  <div ref="panelRoot" class="cache-set-panel" :class="{ 'editor-maximized': isEditorMaximized }">
   <AForm layout="vertical">
     <PanelSection title="节点名称">
       <NodeNameInput
@@ -64,33 +65,36 @@ function stringify(v: unknown) {
           @update:model-value="(v: any) => updateConfig('cacheId', v)"
         />
       </AFormItem>
-      <AFormItem>
-        <template #label>
-          <span>模板格式&nbsp;</span>
-          <FormatterGuideModal />
-        </template>
-        <ASelect
-          :value="node.data.config?.formatterType || 'VELOCITY'"
-          :options="[
-            { label: '普通字符串', value: 'STRING' },
-            { label: 'Jackson JSON', value: 'JACKSON' },
-            { label: 'Velocity 模板', value: 'VELOCITY' },
-          ]"
-          @update:value="(v: any) => updateConfig('formatterType', v)"
-        />
-      </AFormItem>
-      <AFormItem label="缓存键" required>
+      <div class="cache-key-field">
+        <div class="key-header">
+          <span class="key-label">缓存键 <span class="required-mark">*</span></span>
+          <div class="formatter-selector">
+            <FormatterGuideModal />
+            <ASelect
+              :value="node.data.config?.formatterType || 'VELOCITY'"
+              :options="[
+                { label: '纯文本替换', value: 'STRING' },
+                { label: 'JSON 保类型', value: 'JACKSON' },
+                { label: 'Velocity 模板', value: 'VELOCITY' },
+              ]"
+              size="small"
+              style="width: 130px"
+              @update:value="(v: any) => updateConfig('formatterType', v)"
+            />
+          </div>
+        </div>
         <BlurInput
           :model-value="String(node.data.config?.key || '')"
           placeholder="例如 user:${userId}"
           @update:model-value="(v: any) => updateConfig('key', v)"
         />
-      </AFormItem>
+        <span class="field-help">使用 ${变量名} 引用输入绑定，模板格式控制变量替换方式。</span>
+      </div>
       <div class="cache-editor-field">
         <label class="form-label">缓存值 <span class="required-mark">*</span></label>
         <ConfigCodeEditor
           :model-value="stringify(node.data.config?.value)"
-          language="sql"
+          language="txt"
           placeholder="支持字符串、数字、对象或数组。"
           :maximize-target="panelRoot"
           @update:model-value="
@@ -123,7 +127,7 @@ function stringify(v: unknown) {
 </template>
 
 <style scoped lang="scss">
-.cache-delete-panel {
+.cache-set-panel {
   position: relative;
   
   &.editor-maximized {
@@ -132,12 +136,50 @@ function stringify(v: unknown) {
   }
 }
 
+.cache-key-field {
+  margin-bottom: 24px;
+}
+
+.key-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.key-label {
+  font-size: 14px;
+  color: rgba(0, 0, 0, 0.88);
+  line-height: 1.5;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 8px;
+  color: rgba(0, 0, 0, 0.88);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.required-mark {
+  color: #ff4d4f;
+  margin-left: 2px;
+}
+
+.formatter-selector {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .cache-editor-field {
   margin-bottom: 24px;
 }
 
 .field-help {
   display: block;
+  margin-top: 4px;
   color: #8c8c8c;
   font-size: 12px;
   line-height: 1.5;
