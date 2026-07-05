@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { CloseOutlined, PlayCircleOutlined, BugOutlined, ReloadOutlined } from '@ant-design/icons-vue'
+import { CloseOutlined, PlayCircleOutlined, BugOutlined, ReloadOutlined, CopyOutlined, CheckCircleFilled, CloseCircleFilled, PlayCircleFilled, ExclamationCircleFilled } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
 import ConfigCodeEditor from '@/components/editor/ConfigCodeEditor.vue'
 import type { WorkflowFlowNode, WorkflowNodeExecution, WorkflowRunRequest, WorkflowRunResult } from '@/types/workflow'
@@ -44,6 +44,15 @@ watch(
 )
 
 watch([paramValues, variablesText], syncInputText, { deep: true })
+
+watch(
+  () => props.result?.run?.status,
+  () => {
+    activeKey.value = 'result'
+  }, {
+    deep: true
+  }
+)
 
 function resetFromStartParams() {
   const next: Record<string, unknown> = {}
@@ -161,11 +170,30 @@ function duration(start?: number, end?: number) {
   return `${Math.max(0, end - start)} ms`
 }
 
-function statusColor(status?: string) {
-  if (status === 'SUCCESS') return 'green'
-  if (status === 'FAIL') return 'red'
-  if (status === 'RUNNING') return 'blue'
-  return 'default'
+const copied = ref(false)
+
+function statusText(status?: string) {
+  if (status === 'SUCCESS') return '成功'
+  if (status === 'FAIL') return '失败'
+  if (status === 'RUNNING') return '运行中'
+  return '-'
+}
+
+async function copyOutput() {
+  let text = ''
+  if (props.result?.run?.error) {
+    text = props.result.run.error
+  } else {
+    text = formatJson(finalOutput.value ?? props.result?.run)
+  }
+
+  try {
+    await navigator.clipboard.writeText(text)
+    copied.value = true
+    setTimeout(() => { copied.value = false }, 2000)
+  } catch {
+    message.error('复制失败')
+  }
 }
 
 function executionTitle(item: WorkflowNodeExecution, index: number) {
@@ -274,51 +302,80 @@ function beginResize(event: MouseEvent) {
       </ATabPane>
 
       <ATabPane key="result" tab="运行结果">
-        <div class="result-summary">
-          <div class="result-card">
-            <span class="result-label">状态</span>
-            <ATag :color="statusColor(runStatus)" :bordered="false">{{ runStatus || '-' }}</ATag>
-          </div>
-          <div class="result-card">
-            <span class="result-label">耗时</span>
-            <span>{{ duration(result?.run?.startTime, result?.run?.endTime) }}</span>
-          </div>
+        <div class="result-scroll">
+          <template v-if="result">
+            <div class="result-summary">
+              <div class="result-card">
+                <span class="result-label">状态</span>
+                <ATooltip :title="statusText(runStatus)">
+                  <CheckCircleFilled v-if="runStatus === 'SUCCESS'" style="color: #52c41a; font-size: 16px;" />
+                  <CloseCircleFilled v-else-if="runStatus === 'FAIL'" style="color: #ff4d4f; font-size: 16px;" />
+                  <PlayCircleFilled v-else-if="runStatus === 'RUNNING'" style="color: #1677ff; font-size: 16px;" />
+                  <ExclamationCircleFilled v-else style="color: #8c8c8c; font-size: 16px;" />
+                </ATooltip>
+              </div>
+              <div class="result-card">
+                <span class="result-label">耗时</span>
+                <span>{{ duration(result?.run?.startTime, result?.run?.endTime) }}</span>
+              </div>
+              <div v-if="result?.nodeExecutions?.length" class="result-card">
+                <span class="result-label">节点</span>
+                <span>{{ result.nodeExecutions.length }}</span>
+              </div>
+            </div>
+
+            <div class="result-output-head">
+              <span class="result-output-title">输出结果</span>
+              <AButton type="text" size="small" @click="copyOutput">
+                <template #icon><CopyOutlined /></template>
+                {{ copied ? '已复制' : '复制' }}
+              </AButton>
+            </div>
+            <pre class="json-pre">{{ result?.run?.error || formatJson(finalOutput ?? result?.run) }}</pre>
+          </template>
+
+          <AEmpty v-else description="暂无运行结果，点击「运行」按钮开始调试" />
         </div>
-        <pre class="json-pre">{{ formatJson(finalOutput ?? result?.run) }}</pre>
-        <AAlert v-if="result?.run?.error" type="error" show-icon :message="result.run.error" />
       </ATabPane>
 
       <ATabPane key="nodes" tab="节点日志">
-        <div v-if="result?.nodeExecutions?.length" class="execution-list">
-          <div
-            v-for="(item, index) in result.nodeExecutions"
-            :key="item.id || `${item.nodeId}-${index}`"
-            class="execution-item"
-          >
-            <div class="execution-head" @click="emit('focusNode', item.nodeId)">
-              <div class="execution-copy">
-                <span class="execution-title">{{ executionTitle(item, index) }}</span>
-                <span class="execution-meta">{{ item.nodeType }} · {{ duration(item.startTime, item.endTime) }}</span>
+        <div class="execution-scroll">
+          <div v-if="result?.nodeExecutions?.length" class="execution-list">
+            <div
+              v-for="(item, index) in result.nodeExecutions"
+              :key="item.id || `${item.nodeId}-${index}`"
+              class="execution-item"
+            >
+              <div class="execution-head" @click="emit('focusNode', item.nodeId)">
+                <div class="execution-copy">
+                  <span class="execution-title">{{ executionTitle(item, index) }}</span>
+                  <span class="execution-meta">{{ item.nodeType }} · {{ duration(item.startTime, item.endTime) }}</span>
+                </div>
+                <ATooltip :title="statusText(item.status)">
+                  <CheckCircleFilled v-if="item.status === 'SUCCESS'" style="color: #52c41a; font-size: 16px;" />
+                  <CloseCircleFilled v-else-if="item.status === 'FAIL'" style="color: #ff4d4f; font-size: 16px;" />
+                  <PlayCircleFilled v-else-if="item.status === 'RUNNING'" style="color: #1677ff; font-size: 16px;" />
+                  <ExclamationCircleFilled v-else style="color: #8c8c8c; font-size: 16px;" />
+                </ATooltip>
               </div>
-              <ATag :color="statusColor(item.status)">
-                {{ item.status }}
-              </ATag>
+              <ACollapse ghost size="small">
+                <ACollapsePanel v-if="item.error  && item.error !== '{}'" key="error" header="错误">
+                  <pre class="json-pre compact">{{ formatJson(item.error) }}</pre>
+                </ACollapsePanel>
+                <ACollapsePanel key="inputs" header="输入">
+                  <pre class="json-pre compact">{{ formatJson(item.inputs) }}</pre>
+                </ACollapsePanel>
+                <ACollapsePanel key="process" header="处理">
+                  <pre class="json-pre compact">{{ formatJson(item.processData) }}</pre>
+                </ACollapsePanel>
+                <ACollapsePanel key="outputs" header="输出">
+                  <pre class="json-pre compact">{{ formatJson(item.outputs) }}</pre>
+                </ACollapsePanel>
+              </ACollapse>
             </div>
-            <AAlert v-if="item.error" class="execution-error" type="error" show-icon :message="item.error" />
-            <ACollapse ghost size="small">
-              <ACollapsePanel key="inputs" header="输入">
-                <pre class="json-pre compact">{{ formatJson(item.inputs) }}</pre>
-              </ACollapsePanel>
-              <ACollapsePanel key="outputs" header="输出">
-                <pre class="json-pre compact">{{ formatJson(item.outputs) }}</pre>
-              </ACollapsePanel>
-              <ACollapsePanel key="process" header="处理数据">
-                <pre class="json-pre compact">{{ formatJson(item.processData) }}</pre>
-              </ACollapsePanel>
-            </ACollapse>
           </div>
+          <AEmpty v-else description="暂无节点日志" />
         </div>
-        <AEmpty v-else description="暂无节点日志" />
       </ATabPane>
     </ATabs>
   </section>
@@ -461,6 +518,12 @@ function beginResize(event: MouseEvent) {
   overflow: auto;
 }
 
+.result-scroll,
+.execution-scroll {
+  height: 100%;
+  overflow: auto;
+}
+
 .debug-footer {
   flex-shrink: 0;
   padding-bottom: 16px;
@@ -515,9 +578,8 @@ function beginResize(event: MouseEvent) {
   justify-content: space-between;
   gap: 8px;
   padding: 10px;
-  border: 1px solid #f0f0f0;
   border-radius: 8px;
-  background: #fff;
+  background: #F2F4F7;
 }
 
 .result-label {
@@ -525,14 +587,31 @@ function beginResize(event: MouseEvent) {
   font-size: 12px;
 }
 
+.result-error {
+  margin-bottom: 10px;
+}
+
+.result-output-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.result-output-title {
+  color: #262626;
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .json-pre {
   min-height: 160px;
   margin: 0 0 10px;
-  padding: 12px;
+  padding: 8px 12px;
   overflow: auto;
   border: 1px solid #f0f0f0;
-  border-radius: 8px;
-  background: #fafafa;
+  border-radius: 6px;
+  background: #F2F4F7;
   color: #262626;
   font-size: 12px;
   line-height: 1.6;
@@ -542,12 +621,13 @@ function beginResize(event: MouseEvent) {
   min-height: auto;
   max-height: 220px;
   margin-bottom: 0;
+  background: #fcfcfc;
 }
 
 .execution-item {
-  border: 1px solid #f0f0f0;
   border-radius: 8px;
-  background: #fff;
+  background: #F2F4F7;
+  padding-bottom: 10px;
   overflow: hidden;
 }
 
@@ -581,5 +661,12 @@ function beginResize(event: MouseEvent) {
     max-width: none;
     width: auto !important;
   }
+}
+
+:deep(.ant-collapse-header) {
+  padding: 4px 10px !important;
+}
+:deep(.ant-collapse-content-box) {
+  padding: 4px 10px 4px 32px !important;
 }
 </style>

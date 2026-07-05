@@ -3,6 +3,7 @@ package com.hxh.apboa.node.condition;
 import com.hxh.apboa.common.consts.NodeConst;
 import com.hxh.apboa.common.util.FuncUtils;
 import com.hxh.apboa.node.base.NodeOutput;
+import com.hxh.apboa.node.base.WorkflowUtils;
 import com.hxh.apboa.node.base.context.NodeContext;
 import com.hxh.apboa.node.base.inputout.InputConfig;
 import com.hxh.apboa.node.base.inputout.OutputConfig;
@@ -26,11 +27,7 @@ public class Evaluator {
             return config.getInputIsNullUse();
         }
 
-        OutputConfig.VariableType type = inputConfig.getType();
-        Config.Scope scope = config.getScope();
-        Config.Symbol symbol = config.getSymbol();
-        // 验证类型是否支持运算符
-        VariableTypeSupportSymbol.verifySupportSymbol(type, scope, symbol);
+
 
         // 比较值
         Object compareValue;
@@ -49,6 +46,13 @@ public class Evaluator {
         } else {
             throw new RuntimeException("未知的比较类型");
         }
+
+        // 基于数值推断类型
+        OutputConfig.VariableType type = WorkflowUtils.inferType(compareValue);
+        Config.Scope scope = config.getScope();
+        Config.Symbol symbol = config.getSymbol();
+        // 验证类型是否支持运算符
+        VariableTypeSupportSymbol.verifySupportSymbol(type, scope, symbol);
 
         switch (symbol) {
             case EQ:

@@ -5,8 +5,8 @@ import com.hxh.apboa.common.util.FuncUtils;
 import com.hxh.apboa.node.base.EnhancedNode;
 import com.hxh.apboa.node.base.NodeOutput;
 import com.hxh.apboa.node.base.NodeType;
+import com.hxh.apboa.node.base.WorkflowUtils;
 import com.hxh.apboa.node.base.context.NodeContext;
-import com.hxh.apboa.node.base.inputout.InputConfig;
 import com.hxh.apboa.node.base.inputout.OutputConfig;
 import com.hxh.apboa.node.base.verify.VerifyFail;
 import com.hxh.apboa.node.base.verify.VerifyResult;
@@ -71,7 +71,7 @@ public class MatchResultNode extends EnhancedNode {
         if (o == null) {
             return config.getDefaultNextNodeId();
         }
-        OutputConfig.VariableType inputType = getInputTypeByName(NodeConst.DEFAULT_INPUT_NAME);
+        OutputConfig.VariableType inputType = WorkflowUtils.inferType(o);
         return switch (inputType) {
             case String, Long, Integer, Float, Double, Boolean -> {
                 if (config.isCaseSensitive()) {
@@ -99,7 +99,7 @@ public class MatchResultNode extends EnhancedNode {
         if (input == null) {
             return config.getDefaultNextNodeId();
         }
-        OutputConfig.VariableType inputType = getInputTypeByName(NodeConst.DEFAULT_INPUT_NAME);
+        OutputConfig.VariableType inputType = WorkflowUtils.inferType(input);
         return switch (inputType) {
             case String -> {
                 // 区分大小写
@@ -147,16 +147,6 @@ public class MatchResultNode extends EnhancedNode {
             default -> throw new RuntimeException(config.getMatchType() + "规则不支持的输入类型" + inputType);
         };
     }
-
-    private OutputConfig.VariableType getInputTypeByName(String name) {
-        for (InputConfig inputConfig : inputConfigs) {
-            if (inputConfig.getName().equals(name)) {
-                return inputConfig.getType();
-            }
-        }
-        throw new RuntimeException("未找到名称为"+name+"的输入配置");
-    }
-
 
     /**
      * 异常节点输出

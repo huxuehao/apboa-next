@@ -37,11 +37,11 @@ public class WorkflowValidatorImpl implements WorkflowValidator {
         JsonNode edges = root.path("edges");
 
         if (!nodes.isArray() || nodes.isEmpty()) {
-            result.addError(null, "nodes", "workflow.nodes must contain at least START and END nodes");
+            result.addError(null, "nodes", "工作流节点列表必须至少包含一个开始节点和一个结束节点");
             return result;
         }
         if (!edges.isMissingNode() && !edges.isArray()) {
-            result.addError(null, "edges", "workflow.edges must be an array");
+            result.addError(null, "edges", "工作流连线必须为数组格式");
         }
 
         Set<String> nodeIds = new HashSet<>();
@@ -54,17 +54,17 @@ public class WorkflowValidatorImpl implements WorkflowValidator {
             String id = text(node, "id");
             String typeText = text(node, "type");
             if (id == null || id.isBlank()) {
-                result.addError(null, "id", "node id is required");
+                result.addError(null, "id", "节点ID不能为空");
                 continue;
             }
             if (!nodeIds.add(id)) {
-                result.addError(id, "id", "node id is duplicated");
+                result.addError(id, "id", "节点ID重复");
             }
             nodeById.put(id, node);
             try {
                 NodeType type = NodeType.valueOf(typeText);
                 if (!WorkflowDefinitionCompiler.supportedTypes().contains(type)) {
-                    result.addError(id, "type", "node type is not supported: " + typeText);
+                    result.addError(id, "type", "不支持的节点类型：" + typeText);
                 }
                 if (type == NodeType.START) {
                     startCount++;
@@ -75,14 +75,14 @@ public class WorkflowValidatorImpl implements WorkflowValidator {
                     endNodeIds.add(id);
                 }
             } catch (Exception e) {
-                result.addError(id, "type", "node type is invalid: " + typeText);
+                result.addError(id, "type", "无效的节点类型：" + typeText);
             }
         }
         if (startCount != 1) {
-            result.addError(null, "nodes", "workflow must contain exactly one START node");
+            result.addError(null, "nodes", "工作流必须包含且仅包含一个开始节点");
         }
         if (endCount < 1) {
-            result.addError(null, "nodes", "workflow must contain at least one END node");
+            result.addError(null, "nodes", "工作流必须至少包含一个结束节点");
         }
         Map<String, List<String>> adjacency = new HashMap<>();
         Map<String, Integer> indegree = new HashMap<>();
@@ -97,15 +97,15 @@ public class WorkflowValidatorImpl implements WorkflowValidator {
                 String source = text(edge, "source");
                 String target = text(edge, "target");
                 if (id == null || id.isBlank()) {
-                    result.addError(null, "edges", "edge id is required");
+                    result.addError(null, "edges", "连线ID不能为空");
                 } else if (!edgeIds.add(id)) {
-                    result.addError(id, "id", "edge id is duplicated");
+                    result.addError(id, "id", "连线ID重复");
                 }
                 if (source == null || !nodeIds.contains(source)) {
-                    result.addError(id, "source", "edge source node does not exist");
+                    result.addError(id, "source", "连线的源节点不存在");
                 }
                 if (target == null || !nodeIds.contains(target)) {
-                    result.addError(id, "target", "edge target node does not exist");
+                    result.addError(id, "target", "连线的目标节点不存在");
                 }
                 if (source != null && target != null && nodeIds.contains(source) && nodeIds.contains(target)) {
                     adjacency.get(source).add(target);
@@ -144,32 +144,32 @@ public class WorkflowValidatorImpl implements WorkflowValidator {
                                Map<String, Integer> indegree) {
         for (String startId : startNodeIds) {
             if (indegree.getOrDefault(startId, 0) > 0) {
-                result.addError(startId, "edges", "START node cannot have incoming edges");
+                result.addError(startId, "edges", "开始节点不能有入边");
             }
             if (adjacency.getOrDefault(startId, List.of()).isEmpty()) {
-                result.addError(startId, "edges", "START node must connect to at least one node");
+                result.addError(startId, "edges", "开始节点必须连接到至少一个下游节点");
             }
         }
         for (String endId : endNodeIds) {
             if (!adjacency.getOrDefault(endId, List.of()).isEmpty()) {
-                result.addError(endId, "edges", "END node cannot have outgoing edges");
+                result.addError(endId, "edges", "结束节点不能有出边");
             }
             if (indegree.getOrDefault(endId, 0) == 0) {
-                result.addError(endId, "edges", "END node must have at least one incoming edge");
+                result.addError(endId, "edges", "结束节点必须至少有一条入边");
             }
         }
 
         Set<String> reachable = reachableFrom(startNodeIds, adjacency);
         for (String nodeId : nodeIds) {
             if (!reachable.contains(nodeId)) {
-                result.addError(nodeId, "edges", "node is not reachable from START");
+                result.addError(nodeId, "edges", "该节点从开始节点不可达");
             }
         }
 
         Set<String> canReachEnd = reverseReachableFrom(endNodeIds, adjacency);
         for (String nodeId : nodeIds) {
             if (!canReachEnd.contains(nodeId)) {
-                result.addError(nodeId, "edges", "node cannot reach any END node");
+                result.addError(nodeId, "edges", "该节点无法到达任何结束节点");
             }
         }
 
@@ -177,7 +177,7 @@ public class WorkflowValidatorImpl implements WorkflowValidator {
         Set<String> visiting = new HashSet<>();
         for (String nodeId : nodeIds) {
             if (hasCycle(nodeId, adjacency, visiting, visited)) {
-                result.addWarning(nodeId, "edges", "workflow contains a cycle; confirm that loop conditions can exit");
+                result.addWarning(nodeId, "edges", "工作流存在环路，请确认循环条件能够正常退出");
                 break;
             }
         }
@@ -193,26 +193,26 @@ public class WorkflowValidatorImpl implements WorkflowValidator {
             for (JsonNode input : inputs) {
                 String name = text(input, "name");
                 if (name == null || name.isBlank()) {
-                    result.addError(entry.getKey(), "inputConfigs", "input name is required");
+                    result.addError(entry.getKey(), "inputConfigs", "输入参数名称不能为空");
                 } else if (!inputNames.add(name)) {
-                    result.addError(entry.getKey(), "inputConfigs." + name, "input name is duplicated");
+                    result.addError(entry.getKey(), "inputConfigs." + name, "输入参数名称重复");
                 }
                 String classify = firstText(input, "classify", "sourceType");
                 if (classify == null || classify.isBlank() || "NODE_OUTPUT".equals(classify)) {
                     String sourceNodeId = firstText(input, "sourceNodeId", "nodeId");
                     if (sourceNodeId == null || sourceNodeId.isBlank()) {
-                        result.addError(entry.getKey(), "inputConfigs." + name, "source node is required");
+                        result.addError(entry.getKey(), "inputConfigs." + name, "来源节点不能为空");
                     } else if (!nodeIds.contains(sourceNodeId)) {
-                        result.addError(entry.getKey(), "inputConfigs." + name, "source node does not exist: " + sourceNodeId);
+                        result.addError(entry.getKey(), "inputConfigs." + name, "来源节点不存在：" + sourceNodeId);
                     }
                     String outputName = firstText(input, "sourceOutputName", "outputName");
                     if (outputName == null || outputName.isBlank()) {
-                        result.addError(entry.getKey(), "inputConfigs." + name, "source output name is required");
+                        result.addError(entry.getKey(), "inputConfigs." + name, "来源节点输出名称不能为空");
                     }
                 } else if ("VARIABLE".equals(classify) && isBlank(text(input, "variableName"))) {
-                    result.addError(entry.getKey(), "inputConfigs." + name, "variable name is required");
+                    result.addError(entry.getKey(), "inputConfigs." + name, "变量名称不能为空");
                 } else if ("EXPRESSION".equals(classify) && isBlank(text(input, "expression"))) {
-                    result.addError(entry.getKey(), "inputConfigs." + name, "expression is required");
+                    result.addError(entry.getKey(), "inputConfigs." + name, "表达式不能为空");
                 }
             }
         }

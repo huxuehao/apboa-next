@@ -17,7 +17,9 @@ public class InputConfig {
     private String name;
     /**
      * 输入分类
+     * 类型需要基于值本身，自行推测，该字段已弃用，保留是为了兼容性考虑
      */
+    @Deprecated
     private OutputConfig.VariableType type;
     /**
      * 输入分类
