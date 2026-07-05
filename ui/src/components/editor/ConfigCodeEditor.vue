@@ -9,13 +9,13 @@
     <div class="editor-header">
       <span class="lang-badge">{{ languageLabel }}</span>
       <div class="header-actions">
-        <button class="action-btn" title="格式化" @click="formatCode">
+        <button v-if="language !== 'txt'" class="action-btn" title="格式化" @click="formatCode">
           <FormatPainterOutlined />
         </button>
         <button class="action-btn" title="复制" @click="copyCode">
           <CopyOutlined />
         </button>
-        <button class="action-btn" title="最大化" @click="toggleMaximize">
+        <button v-if="maximize" class="action-btn" title="最大化" @click="toggleMaximize">
           <FullscreenExitOutlined v-if="isMaximized" />
           <FullscreenOutlined v-else />
         </button>
@@ -37,7 +37,7 @@ import {
 } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
 
-type SupportedLanguage = 'java' | 'python' | 'javascript' | 'sql' | 'txt'
+type SupportedLanguage = 'java' | 'python' | 'javascript' | 'sql' | 'txt' | 'json'
 
 // ── CodeMirror 内部类型 ──
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -55,6 +55,7 @@ const props = withDefaults(
     readonly?: boolean
     height?: string
     maximizeTarget?: HTMLElement | null
+    maximize?: boolean
   }>(),
   {
     language: 'java',
@@ -62,6 +63,7 @@ const props = withDefaults(
     readonly: false,
     height: '280px',
     maximizeTarget: null,
+    maximize: true,
   },
 )
 
@@ -86,6 +88,7 @@ const languageLabel = computed(() => {
     python: 'Python',
     javascript: 'JavaScript',
     sql: 'SQL',
+    json: 'JSON',
   }
   return map[props.language] || props.language
 })
@@ -166,6 +169,11 @@ async function getLanguageExtension(lang: string): Promise<CMExtension> {
     case 'sql': {
       const { sql, PostgreSQL } = await import('@codemirror/lang-sql')
       ext = sql({ dialect: PostgreSQL })
+      break
+    }
+    case 'json': {
+      const { json } = await import('@codemirror/lang-json')
+      ext = json()
       break
     }
     default:
@@ -316,6 +324,28 @@ watch(
 function formatCode() {
   const view = editorView.value
   if (!view) return
+
+  if (props.language === 'txt') return
+
+  const text = view.state.doc.toString()
+
+  if (props.language === 'json') {
+    try {
+      const parsed = JSON.parse(text)
+      const formatted = JSON.stringify(parsed, null, 2)
+      view.dispatch({
+        changes: { from: 0, to: text.length, insert: formatted },
+      })
+      message.success('已格式化')
+      view.focus()
+      return
+    } catch {
+      message.warning('不是合法 JSON，无法格式化')
+      return
+    }
+  }
+
+  // 其他语言：整篇缩进调整
   const m = modules.value
   const { state } = view
   view.dispatch({

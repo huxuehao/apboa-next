@@ -229,7 +229,7 @@ watch(
   display: flex;
   gap: 10px;
   padding: 14px;
-  border: 1px solid #d9f7be;
+  border: 1px solid #ecfddd;
   border-radius: 8px;
   background: #f6ffed;
   color: #389e0d;

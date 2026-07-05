@@ -71,7 +71,7 @@ const formatterOptions = [
             @update:model-value="(v: any) => updateConfig('datasourceId', v)"
         /></AFormItem>
         <div class="sql-editor-field">
-          <label class="form-label"><span class="required-mark">*</span> SQL 语句</label>
+          <label class="form-label required-field">SQL 语句</label>
           <ConfigCodeEditor
             :model-value="String(node.data.config?.sql || '')"
             language="sql"
@@ -135,11 +135,6 @@ const formatterOptions = [
   font-size: 14px;
   font-weight: 400;
   line-height: 1.5;
-}
-
-.required-mark {
-  color: #ff4d4f;
-  margin-left: 2px;
 }
 
 .field-help {

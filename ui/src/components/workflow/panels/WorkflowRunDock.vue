@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { CloseOutlined, PlayCircleOutlined, BugOutlined, ReloadOutlined } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
-import SmartCodeEditor from '@/components/editor/SmartCodeEditor.vue'
+import ConfigCodeEditor from '@/components/editor/ConfigCodeEditor.vue'
 import type { WorkflowFlowNode, WorkflowNodeExecution, WorkflowRunRequest, WorkflowRunResult } from '@/types/workflow'
 
 const props = defineProps<{
@@ -50,7 +50,7 @@ function resetFromStartParams() {
   startParams.value.forEach((param) => {
     const name = String(param.name || '')
     if (!name) return
-    next[name] = paramValues.value[name] ?? param.value ?? defaultValueByType(String(param.type || 'String'))
+    next[name] = param.value ?? defaultValueByType(String(param.type || 'String'))
   })
   paramValues.value = next
   syncInputText()
@@ -115,7 +115,7 @@ function collectInputIssues() {
   try {
     JSON.parse(variablesText.value || '{}')
   } catch {
-    issues.push('变量不是合法 JSON')
+    issues.push('全局变量不是合法 JSON')
   }
   try {
     JSON.parse(inputText.value || '{}')
@@ -200,10 +200,6 @@ function beginResize(event: MouseEvent) {
         <div class="dock-subtitle">使用当前草稿配置运行，不影响已发布版本</div>
       </div>
       <div class="dock-actions">
-        <AButton type="primary" :loading="loading" @click="runWithValidation">
-          <template #icon><PlayCircleOutlined /></template>
-          运行草稿
-        </AButton>
         <AButton type="text" @click="emit('close')">
           <template #icon><CloseOutlined /></template>
         </AButton>
@@ -213,76 +209,67 @@ function beginResize(event: MouseEvent) {
     <ATabs v-model:active-key="activeKey" size="small" class="dock-tabs">
       <ATabPane key="input" tab="调试输入">
         <div class="debug-input">
-          <div class="debug-section-head">
-            <div>
-              <div class="debug-section-title">开始节点参数</div>
-              <div class="debug-section-desc">根据开始节点的输入配置自动生成。</div>
+          <div class="debug-scroll">
+            <AAlert
+              v-if="inputIssues.length"
+              type="warning"
+              style="margin-bottom: 8px;"
+              show-icon banner closable
+              :message="inputIssues[0]"
+            />
+            <div class="debug-section-head">
+              <div>
+                <div class="debug-section-title">开始节点参数</div>
+                <div class="debug-section-desc">根据开始节点的输入配置自动生成，修改后立即生效。</div>
+              </div>
+              <AButton type="text" size="small" @click="resetFromStartParams">
+                <template #icon><ReloadOutlined /></template>
+                重置
+              </AButton>
             </div>
-            <AButton size="small" @click="resetFromStartParams">
-              <template #icon><ReloadOutlined /></template>
-              重置
+            <div v-if="hasStartParams" class="param-list">
+              <div v-for="param in startParams" :key="String(param.name)" class="param-card">
+                <div class="param-header">
+                  <span class="param-name" :class="{ 'required-field_end': param.required }">{{ param.name }}</span>
+                  <span>{{ param.type || 'String' }}</span>
+                </div>
+                <ASwitch
+                  v-if="param.type === 'Boolean'"
+                  v-model:checked="paramValues[String(param.name)]"
+                  size="small"
+                />
+                <AInput
+                  v-else-if="param.type !== 'Object' && param.type !== 'Array'"
+                  v-model:value="paramValues[String(param.name)]"
+                  :placeholder="String(param.remark || '请输入调试值')"
+                />
+                <ATextarea
+                  v-else
+                  v-model:value="paramValues[String(param.name)]"
+                  :auto-size="{ minRows: 2, maxRows: 5 }"
+                  placeholder="请输入 JSON"
+                />
+                <div v-if="param.remark" class="param-remark">{{ param.remark }}</div>
+              </div>
+            </div>
+            <AEmpty v-else description="开始节点未定义输入参数" />
+
+            <div class="debug-section-title mt">全局变量</div>
+            <div class="debug-section-desc" style="margin-top: 2px;">定义可在工作流中引用的变量，格式为 JSON 对象。</div>
+            <ConfigCodeEditor
+              :model-value="variablesText"
+              language="json"
+              height="90px"
+              :maximize="false"
+              @update:model-value="(v: string) => variablesText = v"
+            />
+          </div>
+          <div class="debug-footer">
+            <AButton type="primary" :loading="loading" block @click="runWithValidation">
+              <template #icon><PlayCircleOutlined /></template>
+              运行
             </AButton>
           </div>
-
-          <AAlert
-            v-if="inputIssues.length"
-            type="warning"
-            show-icon
-            :message="inputIssues[0]"
-          />
-
-          <div v-if="hasStartParams" class="param-list">
-            <div v-for="param in startParams" :key="String(param.name)" class="param-row">
-              <div class="param-label">
-                <span class="param-name">{{ param.name }}</span>
-                <ATag v-if="param.required" color="red" :bordered="false">必填</ATag>
-                <ATag color="blue" :bordered="false">{{ param.type || 'String' }}</ATag>
-              </div>
-              <ASwitch
-                v-if="param.type === 'Boolean'"
-                v-model:checked="paramValues[String(param.name)]"
-                size="small"
-              />
-              <ATextarea
-                v-else-if="param.type === 'Object' || param.type === 'Array'"
-                v-model:value="paramValues[String(param.name)]"
-                :auto-size="{ minRows: 2, maxRows: 5 }"
-                placeholder="请输入 JSON"
-              />
-              <AInput
-                v-else
-                v-model:value="paramValues[String(param.name)]"
-                :placeholder="String(param.remark || '请输入调试值')"
-              />
-              <div v-if="param.remark" class="param-remark">{{ param.remark }}</div>
-            </div>
-          </div>
-          <AEmpty v-else description="开始节点未定义输入参数" />
-
-          <div class="debug-section-title mt">变量</div>
-          <SmartCodeEditor
-            v-model="variablesText"
-            language="json"
-            theme="light"
-            height="120px"
-            :show-change-language="false"
-            :show-theme-toggle="false"
-            :show-fullscreen="false"
-          />
-
-          <ACollapse ghost>
-            <ACollapsePanel key="json" header="高级 JSON">
-              <SmartCodeEditor
-                v-model="inputText"
-                language="json"
-                theme="light"
-                height="180px"
-                :show-change-language="false"
-                :show-theme-toggle="false"
-                :show-fullscreen="false"
-              />
-            </ACollapsePanel>
-          </ACollapse>
         </div>
       </ATabPane>
 
@@ -414,7 +401,7 @@ function beginResize(event: MouseEvent) {
 .debug-section-head,
 .result-summary,
 .execution-head,
-.param-label {
+.param-header {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -428,8 +415,31 @@ function beginResize(event: MouseEvent) {
 
 .dock-tabs {
   min-height: 0;
-  padding: 0 14px 14px;
-  overflow: auto;
+  padding: 0 14px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+
+  :deep(.ant-tabs-nav) {
+    margin-bottom: 8px;
+    flex-shrink: 0;
+  }
+
+  :deep(.ant-tabs-content-holder) {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  :deep(.ant-tabs-content) {
+    height: 100%;
+    overflow: hidden;
+    padding: 0;
+  }
+
+  :deep(.ant-tabs-tabpane) {
+    height: 100%;
+  }
 }
 
 .debug-input,
@@ -437,6 +447,23 @@ function beginResize(event: MouseEvent) {
 .execution-list {
   display: grid;
   gap: 10px;
+}
+
+.debug-input {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.debug-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.debug-footer {
+  flex-shrink: 0;
+  padding-bottom: 16px;
 }
 
 .debug-section-title {
@@ -449,18 +476,31 @@ function beginResize(event: MouseEvent) {
   margin-top: 4px;
 }
 
-.param-row {
+.param-card {
   display: grid;
-  gap: 6px;
-  padding: 10px;
+  gap: 8px;
+  padding: 6px 12px 12px 12px;
   border: 1px solid #f0f0f0;
   border-radius: 8px;
   background: #fff;
 }
 
+.param-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
 .param-name {
+  flex: 1;
+  min-width: 0;
   color: #262626;
   font-weight: 600;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .result-summary {

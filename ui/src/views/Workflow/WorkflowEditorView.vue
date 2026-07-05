@@ -697,7 +697,7 @@ async function debugRun() {
     }))
     message.success(result.run.status === 'SUCCESS' ? '调试运行成功' : '调试运行结束，请查看结果')
   } catch (error) {
-    message.error(error instanceof Error ? error.message : '调试运行失败')
+    console.error('调试运行失败', error)
   } finally {
     running.value = false
   }
