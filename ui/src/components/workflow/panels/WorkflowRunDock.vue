@@ -520,7 +520,7 @@ function beginResize(event: MouseEvent) {
 
 .result-scroll,
 .execution-scroll {
-  height: 100%;
+  height: calc(100% - 16px);
   overflow: auto;
 }
 

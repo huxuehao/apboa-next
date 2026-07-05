@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, inject, ref, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import type { ComputedRef } from 'vue'
-import { HolderOutlined } from '@ant-design/icons-vue'
+import { HolderOutlined, SearchOutlined } from '@ant-design/icons-vue'
 import Sortable from 'sortablejs'
 import IconFont from '@/components/common/IconFont.vue'
 import type { WorkflowFlowEdge, WorkflowFlowNode, WorkflowInputConfig, WorkflowOutputConfig } from '@/types/workflow'
@@ -20,9 +20,9 @@ function getNodeOutputs(node: WorkflowFlowNode): WorkflowOutputConfig[] {
   return node.data.outputConfigs || []
 }
 
-function formatNodeOutputLabel(node: WorkflowFlowNode): string {
+function formatNodeOutputLabel(node: WorkflowFlowNode, outputName?: string): string {
   const outputs = getNodeOutputs(node)
-  const output = outputs[0]
+  const output = outputName ? outputs.find((o) => o.name === outputName) : outputs[0]
   if (!output) return node.data.label || node.id
   return `${node.data.label || node.id}  ›  ${output.name}`
 }
@@ -74,6 +74,8 @@ interface DisplayItem {
   label: string
   type: string
   color: string
+  outputs: WorkflowOutputConfig[]
+  selectedOutputName: string
 }
 
 const displayItems = computed<DisplayItem[]>(() => {
@@ -85,27 +87,74 @@ const displayItems = computed<DisplayItem[]>(() => {
     const node = upstreamNodes.value.find((n) => n.id === binding.nodeId)
     if (node) {
       seen.add(binding.nodeId)
+      const outputs = getNodeOutputs(node)
+      const outputName = binding.outputName || outputs[0]?.name || ''
       ordered.push({
         nodeId: node.id,
-        label: formatNodeOutputLabel(node),
+        label: formatNodeOutputLabel(node, outputName),
         type: node.data.type,
         color: node.data.schema?.color || '#1677ff',
+        outputs,
+        selectedOutputName: outputName,
       })
     }
   }
 
   for (const node of upstreamNodes.value) {
     if (!seen.has(node.id)) {
+      const outputs = getNodeOutputs(node)
+      const outputName = outputs[0]?.name || ''
       ordered.push({
         nodeId: node.id,
-        label: formatNodeOutputLabel(node),
+        label: formatNodeOutputLabel(node, outputName),
         type: node.data.type,
         color: node.data.schema?.color || '#1677ff',
+        outputs,
+        selectedOutputName: outputName,
       })
     }
   }
 
   return ordered
+})
+
+// 输出选择弹窗状态
+const openOutputPopoverId = ref<string | null>(null)
+const outputSearchText = ref('')
+
+const activeOutputFiltered = computed(() => {
+  if (!openOutputPopoverId.value) return []
+  const node = upstreamNodes.value.find((n) => n.id === openOutputPopoverId.value)
+  if (!node) return []
+  const outputs = getNodeOutputs(node)
+  const query = outputSearchText.value.trim().toLowerCase()
+  if (!query) return outputs
+  return outputs.filter((o) => o.name.toLowerCase().includes(query))
+})
+
+function handlePopoverToggle(nodeId: string, open: boolean) {
+  openOutputPopoverId.value = open ? nodeId : null
+  if (!open) outputSearchText.value = ''
+}
+
+function updateOutputName(nodeId: string, outputName: string) {
+  const current = props.modelValue || []
+  const next = current.map((cfg) =>
+    cfg.nodeId === nodeId ? { ...cfg, outputName } : cfg,
+  )
+  syncing = true
+  emit('update:modelValue', next)
+  nextTick(() => { syncing = false })
+}
+
+function selectOutput(nodeId: string, outputName: string) {
+  updateOutputName(nodeId, outputName)
+  openOutputPopoverId.value = null
+  outputSearchText.value = ''
+}
+
+watch(openOutputPopoverId, (val) => {
+  if (!val) outputSearchText.value = ''
 })
 
 // 自动同步：当上游节点变化时，自动更新 modelValue
@@ -127,7 +176,9 @@ watch(
     const existingIds = new Set(filtered.map((cfg) => cfg.nodeId))
     for (const nodeId of currentIds) {
       if (!existingIds.has(nodeId)) {
-        filtered.push({ name: 'input', sourceType: 'NODE_OUTPUT', nodeId })
+        const nodeForOutput = props.nodes.find((n) => n.id === nodeId)
+        const firstOutputName = nodeForOutput ? getNodeOutputs(nodeForOutput)[0]?.name : undefined
+        filtered.push({ name: 'input', sourceType: 'NODE_OUTPUT', nodeId, outputName: firstOutputName })
       }
     }
 
@@ -178,6 +229,7 @@ function setupSortable() {
         name: 'input',
         sourceType: 'NODE_OUTPUT',
         nodeId: item.nodeId,
+        outputName: item.selectedOutputName,
       }))
 
       syncing = true
@@ -222,7 +274,59 @@ onUnmounted(() => {
         <span v-if="draggable" class="auto-binding-drag-handle">
           <HolderOutlined />
         </span>
-        <div class="auto-binding-display selector-trigger">
+
+        <!-- 多输出节点：可点击切换输出 -->
+        <APopover
+          v-if="item.outputs.length > 1"
+          :open="openOutputPopoverId === item.nodeId"
+          trigger="click"
+          placement="bottomLeft"
+          :overlay-inner-style="{ padding: 0 }"
+          @update:open="handlePopoverToggle(item.nodeId, $event)"
+        >
+          <div class="auto-binding-display selector-trigger">
+            <span class="trigger-icon">
+              <IconFont
+                :name="getNodeIconName(item.type)"
+                :size="14"
+                :color="item.color"
+              />
+              <span class="trigger-label">{{ item.label }}</span>
+            </span>
+          </div>
+          <template #content>
+            <div class="output-selector-dropdown">
+              <div class="dropdown-search">
+                <span class="search-icon"><SearchOutlined /></span>
+                <input
+                  v-model="outputSearchText"
+                  type="text"
+                  class="search-input"
+                  placeholder="搜索输出名..."
+                  @click.stop
+                />
+              </div>
+              <div class="dropdown-list" :class="{ empty: !activeOutputFiltered.length }">
+                <div
+                  v-for="output in activeOutputFiltered"
+                  :key="output.name"
+                  class="output-row"
+                  :class="{ selected: item.selectedOutputName === output.name }"
+                  @click="selectOutput(item.nodeId, output.name)"
+                >
+                  <span class="output-row-text">{{ output.name }}&ensp;·&ensp;{{ output.type || 'Object' }}</span>
+                  <span class="output-row-desc">{{ output.description || '无描述' }}</span>
+                </div>
+                <div v-if="!activeOutputFiltered.length" class="dropdown-empty">
+                  无匹配的输出
+                </div>
+              </div>
+            </div>
+          </template>
+        </APopover>
+
+        <!-- 单输出节点：静态展示 -->
+        <div v-else class="auto-binding-display selector-trigger">
           <span class="trigger-icon">
             <IconFont
               :name="getNodeIconName(item.type)"
@@ -344,6 +448,96 @@ onUnmounted(() => {
 
 .auto-binding-empty {
   padding: 20px 0;
+  text-align: center;
+  color: #bfbfbf;
+  font-size: 13px;
+}
+
+// 输出选择器弹窗样式
+.output-selector-dropdown {
+  width: 320px;
+  padding: 8px;
+}
+
+.dropdown-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #f0f0f0;
+  position: sticky;
+  top: 0;
+  background: #fff;
+  z-index: 1;
+  border-radius: 8px 8px 0 0;
+}
+
+.search-icon {
+  color: #bfbfbf;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.search-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-size: 13px;
+  color: #262626;
+  background: transparent;
+
+  &::placeholder {
+    color: #bfbfbf;
+  }
+}
+
+.dropdown-list {
+  max-height: 280px;
+  overflow-y: auto;
+  margin-top: 5px;
+
+  &.empty {
+    max-height: auto;
+  }
+}
+
+.output-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s;
+
+  &:hover {
+    background: #f5f5f5;
+  }
+
+  &.selected {
+    background: #f5f5f5;
+  }
+}
+
+.output-row-text {
+  font-size: 13px;
+  color: #595959;
+  flex-shrink: 0;
+}
+
+.output-row-desc {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: #a8a8a8;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dropdown-empty {
+  padding: 24px 16px;
   text-align: center;
   color: #bfbfbf;
   font-size: 13px;
