@@ -381,9 +381,8 @@ onMounted(async () => {
           </div>
 
           <div class="editor-field">
-            <div class="editor-label">
+            <div class="editor-label required-field">
               系统提示词
-              <span class="editor-required">*</span>
             </div>
             <ConfigCodeEditor
               :model-value="String(config.systemPrompt || '')"
@@ -396,9 +395,8 @@ onMounted(async () => {
           </div>
 
           <div class="editor-field">
-            <div class="editor-label">
+            <div class="editor-label required-field">
               用户提示词
-              <span class="editor-required">*</span>
             </div>
             <ConfigCodeEditor
               :model-value="String(config.userPrompt || '')"
@@ -595,12 +593,6 @@ onMounted(async () => {
   margin-bottom: 4px;
   font-size: 14px;
   color: rgba(0, 0, 0, 0.88);
-}
-
-.editor-required {
-  margin-left: 4px;
-  color: #ff4d4f;
-  font-size: 14px;
 }
 
 .config-row-label,
