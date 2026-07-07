@@ -100,15 +100,15 @@ public class WorkflowController {
         return R.data(workflowService.deleteVersion(id, version));
     }
 
-    @PostMapping("/{id}/debug-run")
-    public R<WorkflowRunResult> debugRun(@PathVariable("id") Long id, @RequestBody(required = false) WorkflowRunRequest request) {
-        return R.data(workflowRunService.debugRun(id, request));
-    }
-
-    @PostMapping("/{id}/run")
-    public R<WorkflowRunResult> run(@PathVariable("id") Long id, @RequestBody(required = false) WorkflowRunRequest request) {
-        return R.data(workflowRunService.run(id, request));
-    }
+//    @PostMapping("/{id}/debug-run")
+//    public R<WorkflowRunResult> debugRun(@PathVariable("id") Long id, @RequestBody(required = false) WorkflowRunRequest request) {
+//        return R.data(workflowRunService.debugRun(id, request));
+//    }
+//
+//    @PostMapping("/{id}/run")
+//    public R<WorkflowRunResult> run(@PathVariable("id") Long id, @RequestBody(required = false) WorkflowRunRequest request) {
+//        return R.data(workflowRunService.run(id, request));
+//    }
 
     @GetMapping("/runs/page")
     public R<IPage<WorkflowRun>> runPage(WorkflowRunQueryDTO query) {

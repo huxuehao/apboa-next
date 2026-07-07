@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { SearchOutlined, CloseCircleFilled } from '@ant-design/icons-vue'
+import { SearchOutlined, CloseCircleFilled, SlackOutlined } from '@ant-design/icons-vue'
 import type { ModelConfigVO, ModelProviderVO } from '@/types'
 
 const props = defineProps<{
@@ -84,7 +84,10 @@ watch(popoverOpen, (open) => {
     :overlay-inner-style="{ padding: 0 }"
   >
     <div class="model-selector-trigger" :class="{ placeholder: !selectedLabel }">
-      <span v-if="selectedLabel" class="trigger-selected-label">{{ selectedLabel }}</span>
+      <span v-if="selectedLabel" class="trigger-selected-label">
+        <SlackOutlined style="color: #52C41A;"/>
+        {{ selectedLabel }}
+      </span>
       <span v-else class="trigger-placeholder-text">选择模型...</span>
       <CloseCircleFilled
         v-if="selectedLabel"

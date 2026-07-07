@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { SearchOutlined, CloseCircleFilled } from '@ant-design/icons-vue'
+import {SearchOutlined, CloseCircleFilled, AppstoreOutlined} from '@ant-design/icons-vue'
 import type { SkillPackageVO } from '@/types'
 
 const props = defineProps<{
@@ -84,7 +84,10 @@ watch(popoverOpen, (open) => {
     <div class="multi-select-trigger" :class="{ placeholder: selectedCount === 0 }">
       <span v-if="selectedCount === 0" class="trigger-placeholder">选择技能包...</span>
       <span v-else class="trigger-content">
-        <span class="trigger-name">{{ selectedLabel }}</span>
+        <span class="trigger-name">
+          <AppstoreOutlined style="color: #AB47BC;" />
+          {{ selectedLabel }}
+        </span>
         <span v-if="selectedCount > 1" class="trigger-count">+{{ selectedCount - 1 }}</span>
       </span>
       <CloseCircleFilled

@@ -1,6 +1,9 @@
 package com.hxh.apboa.engine.agent;
 
 import com.hxh.apboa.common.entity.AgentDefinition;
+import com.hxh.apboa.common.enums.ToolChoiceStrategy;
+import com.hxh.apboa.common.util.JsonUtils;
+import com.hxh.apboa.common.util.TenantUtils;
 import com.hxh.apboa.engine.agui.AgentContext;
 import com.hxh.apboa.engine.mcp.McpClientFactory;
 import com.hxh.apboa.engine.model.ChatModelFactory;
@@ -10,8 +13,10 @@ import com.hxh.apboa.node.agent.AgentNodeExecutor;
 import com.hxh.apboa.node.agent.AgentNodeRequest;
 import com.hxh.apboa.node.agent.AgentNodeResult;
 import io.agentscope.core.ReActAgent;
+import io.agentscope.core.message.ContentBlock;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
+import io.agentscope.core.message.TextBlock;
 import io.agentscope.core.model.Model;
 import io.agentscope.core.model.StructuredOutputReminder;
 import io.agentscope.core.skill.SkillBox;
@@ -22,6 +27,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 工作流智能体节点执行器。
@@ -39,6 +45,7 @@ public class WorkflowAgentNodeExecutor implements AgentNodeExecutor {
     @Override
     public AgentNodeResult execute(AgentNodeRequest request) {
         AgentDefinition definition = buildAgentDefinition(request);
+        definition.setToolChoiceStrategy(ToolChoiceStrategy.AUTO);
         Model model = chatModelFactory.getModel(definition);
         Toolkit toolkit = toolkitFactory.getToolkit(request.getToolIds());
         registerMcpTools(toolkit, request);
@@ -106,6 +113,8 @@ public class WorkflowAgentNodeExecutor implements AgentNodeExecutor {
         agentContext.setPlanActive(false);
         agentContext.setParams(request.getInputs());
         agentContext.setAgentDefinition(definition);
+        agentContext.setTenantId(TenantUtils.getCurrentTenantId());
+        agentContext.setTenantCode(TenantUtils.getCurrentTenantCode());
         return agentContext;
     }
 
@@ -139,6 +148,7 @@ public class WorkflowAgentNodeExecutor implements AgentNodeExecutor {
     /**
      * 构建节点执行结果。
      */
+    @SuppressWarnings("unchecked")
     private AgentNodeResult buildResult(Model model, Msg response) {
         AgentNodeResult result = new AgentNodeResult();
         result.setModelName(model.getModelName());
@@ -147,7 +157,21 @@ public class WorkflowAgentNodeExecutor implements AgentNodeExecutor {
         }
         result.setText(response.getTextContent());
         if (response.hasStructuredData()) {
-            result.setStructured(response.getStructuredData(true));
+            Object structuredOutputObj = response.getMetadata().get("_structured_output");
+            if (structuredOutputObj instanceof String structuredOutputString) {
+                result.setStructured(JsonUtils.parse(structuredOutputString, Map.class));
+            } else  {
+                ContentBlock first = response.getContent().getFirst();
+                if (first instanceof TextBlock textBlock) {
+                    String jsonStr = textBlock.getText();
+                    if (jsonStr.startsWith("\"") && jsonStr.endsWith("\"")) {
+                        jsonStr = jsonStr.substring(1, jsonStr.length() - 1)
+                                .replace("\\\"", "\"")
+                                .replace("\\\\", "\\");
+                    }
+                    result.setStructured(JsonUtils.parse(jsonStr, Map.class));
+                }
+            }
         }
         result.setUsage(response.getChatUsage());
         result.setGenerateReason(response.getGenerateReason());

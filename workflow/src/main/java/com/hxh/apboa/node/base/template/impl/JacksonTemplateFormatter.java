@@ -1,5 +1,6 @@
 package com.hxh.apboa.node.base.template.impl;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -84,7 +85,12 @@ public class JacksonTemplateFormatter implements TemplateFormatter {
 
             // 返回结果
             if (tryToObj) {
-                return objectMapper.treeToValue(resultNode, Object.class);
+                try {
+                    return objectMapper.treeToValue(resultNode, Object.class);
+                } catch (Exception e) {
+                    // 如果不是JSON，返回字符串
+                    return resultNode.toString();
+                }
             } else {
                 return resultNode.toString();
             }

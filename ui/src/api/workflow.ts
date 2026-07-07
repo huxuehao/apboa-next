@@ -66,11 +66,11 @@ export function workflowDeleteVersion(id: string, version: string) {
 }
 
 export function workflowDebugRun(id: string, payload: WorkflowRunRequest) {
-  return request.post<ApiResponse<WorkflowRunResult>>(`/api/workflow/${id}/debug-run`, payload)
+  return request.post<ApiResponse<WorkflowRunResult>>(`/api/runtime/workflow/${id}/debug-run`, payload)
 }
 
 export function workflowRun(id: string, payload: WorkflowRunRequest) {
-  return request.post<ApiResponse<WorkflowRunResult>>(`/api/workflow/${id}/run`, payload)
+  return request.post<ApiResponse<WorkflowRunResult>>(`/api/runtime/workflow/${id}/run`, payload)
 }
 
 export function workflowRunPage(query: WorkflowRunQuery) {

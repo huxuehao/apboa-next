@@ -28,8 +28,9 @@ public class StringTemplateFormatter implements TemplateFormatter {
 
     @Override
     public Object format(String template, Map<String, Object> variables, boolean tryToObj) {
+        String result = "";
         try {
-            String result = replaceVariables(template, variables);
+            result = replaceVariables(template, variables);
 
             if (tryToObj) {
                 ObjectMapper mapper = new ObjectMapper();
@@ -40,7 +41,7 @@ public class StringTemplateFormatter implements TemplateFormatter {
 
         } catch (Exception e) {
             // 如果不是JSON，返回字符串
-            return replaceVariables(template, variables);
+            return result;
         }
     }
 

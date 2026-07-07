@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { SearchOutlined, CloseCircleFilled } from '@ant-design/icons-vue'
+import {SearchOutlined, CloseCircleFilled, CloudServerOutlined} from '@ant-design/icons-vue'
 import type { McpServerVO } from '@/types'
 import { McpActivationStatus } from '@/types'
 
@@ -100,7 +100,10 @@ watch(popoverOpen, (open) => {
     <div class="multi-select-trigger" :class="{ placeholder: selectedCount === 0 }">
       <span v-if="selectedCount === 0" class="trigger-placeholder">选择 MCP 服务...</span>
       <span v-else class="trigger-content">
-        <span class="trigger-name">{{ selectedLabel }}</span>
+        <span class="trigger-name">
+          <CloudServerOutlined style="color: #52C41A;"/>
+          {{ selectedLabel }}
+        </span>
         <span v-if="selectedCount > 1" class="trigger-count">+{{ selectedCount - 1 }}</span>
       </span>
       <CloseCircleFilled

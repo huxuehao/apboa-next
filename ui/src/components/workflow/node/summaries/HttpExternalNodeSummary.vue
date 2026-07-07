@@ -15,7 +15,7 @@ const method = computed(() => String(request.value.method || 'GET'))
 
 <template>
   <div class="node-summary">
-    <SummaryRow :icon="'nodehttp_external'" :icon-color="schema.color">请求方法: {{ method }}</SummaryRow>
+    <SummaryRow :icon="'nodehttp_inline'" :icon-color="schema.color">请求方法: {{ method }}</SummaryRow>
     <SummaryRow><code>{{ request.url || '未设置请求URL' }}</code></SummaryRow>
   </div>
 </template>

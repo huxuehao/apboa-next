@@ -13,7 +13,7 @@ withDefaults(defineProps<{
 
 <template>
   <div class="summary-row">
-    <IconFont v-if="icon" :name="icon" :size="iconSize" :color="iconColor" />
+<!--    <IconFont v-if="icon" :name="icon" :size="iconSize" :color="iconColor" />-->
     <span class="summary-content"><slot /></span>
   </div>
 </template>

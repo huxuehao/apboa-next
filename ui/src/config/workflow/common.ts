@@ -16,7 +16,7 @@ export const nodeIconMap: Record<string, IconName> = {
   DB_UPDATE: 'nodedb_update',
   DB_DELETE: 'nodedb_delete',
   MQ_PUSH: 'nodemq_push',
-  HTTP_EXTERNAL: 'nodehttp_external',
+  HTTP_EXTERNAL: 'nodehttp_inline',
   CODE: 'nodecode',
   ITERATE: 'nodeiterate',
   LOOP: 'nodeloop',

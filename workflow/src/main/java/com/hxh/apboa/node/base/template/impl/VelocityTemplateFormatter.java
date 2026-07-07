@@ -83,7 +83,12 @@ public class VelocityTemplateFormatter implements TemplateFormatter {
 
             if (tryToObj) {
                 ObjectMapper mapper = new ObjectMapper();
-                return mapper.readValue(writer.toString(), Object.class);
+                try {
+                    return mapper.readValue(writer.toString(), Object.class);
+                } catch (Exception e) {
+                    // 如果不是JSON，返回字符串
+                    return writer.toString();
+                }
             } else {
                 return writer.toString();
             }
