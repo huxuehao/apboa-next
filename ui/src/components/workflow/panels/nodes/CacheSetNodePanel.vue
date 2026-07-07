@@ -88,7 +88,7 @@ function stringify(v: unknown) {
           placeholder="例如 user:${userId}"
           @update:model-value="(v: any) => updateConfig('key', v)"
         />
-        <span class="field-help">使用 ${变量名} 引用输入绑定，模板格式控制变量替换方式。</span>
+        <span class="field-help">使用 ${输入绑定名} 引用输入绑定，模板格式控制变量替换方式。</span>
       </div>
       <div class="cache-editor-field">
         <label class="form-label required-field">缓存值</label>
@@ -129,7 +129,7 @@ function stringify(v: unknown) {
 <style scoped lang="scss">
 .cache-set-panel {
   position: relative;
-  
+
   &.editor-maximized {
     height: 100%;
     overflow: hidden;

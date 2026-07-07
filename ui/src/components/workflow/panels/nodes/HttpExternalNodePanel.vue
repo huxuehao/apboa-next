@@ -74,7 +74,7 @@ const isFormBody = computed(() => {
 const bodyPlaceholder = computed(() =>
   isFormBody.value
     ? 'key1=value1&key2=value2'
-    : '支持 ${变量名} 模板语法，如 {\"id\":\"${input.id}\"}',
+    : '支持 ${输入绑定名} 模板语法，如 {\"id\":\"${input.id}\"}',
 )
 
 const showBody = computed(() => {
@@ -118,7 +118,7 @@ const queryCount = computed(() => {
     <PanelSection title="节点配置">
        <!-- 模板提示 -->
       <div class="template-hint">
-        💡 URL、Params、Headers、Body 均支持 ${变量名} 引用输入绑定，由「高级设置」→「模板格式」统一渲染。
+        💡 URL、Params、Headers、Body 均支持 ${输入绑定名} 引用输入绑定，由「高级设置」→「模板格式」统一渲染。
       </div>
 
       <!-- Hero: URL 是绝对主角 -->

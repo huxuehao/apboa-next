@@ -85,7 +85,7 @@ const messageContent = computed({
 
 const messagePlaceholder = computed(() =>
   messageMode.value === 'template'
-    ? '使用 ${变量名} 引用输入绑定，如 {\"id\":\"${input.id}\"}'
+    ? '使用 ${输入绑定名} 引用输入绑定，如 {\"id\":\"${input.id}\"}'
     : '直接输入消息内容，如 {\"key\":\"value\"}',
 )
 </script>
@@ -127,7 +127,7 @@ const messagePlaceholder = computed(() =>
         <AFormItem required>
           <template #label>
             Topic / Queue
-            <ATooltip title="Kafka / RocketMQ 为 Topic 名称，RabbitMQ 为 Queue 名称。支持 ${变量名} 模板语法">
+            <ATooltip title="Kafka / RocketMQ 为 Topic 名称，RabbitMQ 为 Queue 名称。支持 ${输入绑定名} 模板语法">
               <QuestionCircleOutlined class="help-icon" />
             </ATooltip>
           </template>
@@ -137,14 +137,14 @@ const messagePlaceholder = computed(() =>
             @update:model-value="(v: any) => updateConfig('topicOrQueue', v)"
           />
         </AFormItem>
-        <span class="field-help">支持 ${变量名} 引用输入绑定，渲染格式由下方「模板格式」控制。</span>
+        <span class="field-help">支持 ${输入绑定名} 引用输入绑定，渲染格式由下方「模板格式」控制。</span>
       </div>
 
       <div class="key-field">
         <AFormItem>
           <template #label>
             消息 Key
-            <ATooltip title="Kafka 的分区键、RabbitMQ 的 Routing Key、RocketMQ 的 Tag。可选，支持 ${变量名} 模板语法">
+            <ATooltip title="Kafka 的分区键、RabbitMQ 的 Routing Key、RocketMQ 的 Tag。可选，支持 ${输入绑定名} 模板语法">
               <QuestionCircleOutlined class="help-icon" />
             </ATooltip>
           </template>
@@ -154,7 +154,7 @@ const messagePlaceholder = computed(() =>
             @update:model-value="(v: any) => updateConfig('key', v)"
           />
         </AFormItem>
-        <span class="field-help">可选。支持 ${变量名} 引用输入绑定，渲染格式由下方「模板格式」控制。</span>
+        <span class="field-help">可选。支持 ${输入绑定名} 引用输入绑定，渲染格式由下方「模板格式」控制。</span>
       </div>
 
       <div class="message-field">

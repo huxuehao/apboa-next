@@ -71,7 +71,7 @@ function updateConfig(key: string, value: unknown) {
           placeholder="例如 user:${userId}"
           @update:model-value="(v: any) => updateConfig('key', v)"
         />
-        <span class="field-help">使用 ${变量名} 引用输入绑定，模板格式控制变量替换方式。</span>
+        <span class="field-help">使用 ${输入绑定名} 引用输入绑定，模板格式控制变量替换方式。</span>
       </div>
     </PanelSection>
     <PanelSection title="输出说明">

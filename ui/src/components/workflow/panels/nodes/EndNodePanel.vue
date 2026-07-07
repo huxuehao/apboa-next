@@ -70,7 +70,7 @@ const formatterOptions = [
         @update:model-value="(value: string) => updateConfig('responseTemplate', value)"
         @maximize-change="onEditorMaximizeChange"
       />
-      <span class="field-help">使用 ${变量名} 引用输入绑定。</span>
+      <span class="field-help">使用 ${输入绑定名} 引用输入绑定。</span>
 
       <div class="config-row">
         <span class="config-row-label">响应模板格式 <FormatterGuideModal /></span>
