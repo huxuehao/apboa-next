@@ -12,6 +12,7 @@ import com.hxh.apboa.common.consts.RedisChannelTopic;
 import com.hxh.apboa.common.entity.*;
 import com.hxh.apboa.common.enums.AgentType;
 import com.hxh.apboa.common.enums.ModelType;
+import com.hxh.apboa.common.enums.workflow.WorkflowStatus;
 import com.hxh.apboa.common.util.BeanUtils;
 import com.hxh.apboa.common.util.JsonUtils;
 import com.hxh.apboa.common.vo.AgentDefinitionVO;
@@ -26,6 +27,8 @@ import com.hxh.apboa.studio.service.AgentStudioService;
 import com.hxh.apboa.longterm.service.AgentLongTermMemoryService;
 import com.hxh.apboa.tool.service.AgentToolService;
 import com.hxh.apboa.agent.service.AgentCodeExecutionService;
+import com.hxh.apboa.workflowbiz.service.AgentWorkflowService;
+import com.hxh.apboa.workflowbiz.service.WorkflowService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.hxh.apboa.tool.service.ToolService;
 import lombok.RequiredArgsConstructor;
@@ -60,6 +63,8 @@ public class AgentDefinitionServiceImpl extends ServiceImpl<AgentDefinitionMappe
     private final AgentLongTermMemoryService agentLongTermMemoryService;
     private final IJobInfoMapper iJobInfoMapper;
     private final AgentCodeExecutionService agentCodeExecutionService;
+    private final AgentWorkflowService agentWorkflowService;
+    private final WorkflowService workflowService;
     private final MessagePublisher messagePublisher;
 
     @Override
@@ -92,6 +97,7 @@ public class AgentDefinitionServiceImpl extends ServiceImpl<AgentDefinitionMappe
             vo.setSkill(agentSkillPackageService.getSkillPackageIds(id));
             vo.setSubAgent(agentSubAgentService.getSubAgentIds(id));
             vo.setKnowledgeBase(agentKnowledgeBaseService.getKnowledgeIds(id));
+            vo.setWorkflow(agentWorkflowService.getWorkflowIds(id));
         } else {
             vo.setAgentA2A(agentA2aService.getA2aConfigByAgentId(id));
         }
@@ -155,6 +161,7 @@ public class AgentDefinitionServiceImpl extends ServiceImpl<AgentDefinitionMappe
             agentMcpServerService.saveAgentMcpServer(vo.getId(), vo.getMcp(), vo.getMcpBindings());
             agentSkillPackageService.saveAgentSkillPackage(vo.getId(), vo.getSkill());
             agentKnowledgeBaseService.saveAgentKnowledge(vo.getId(), vo.getKnowledgeBase());
+            agentWorkflowService.saveAgentWorkflow(vo.getId(), vo.getWorkflow());
             if (vo.getStudioConfigId() != null) {
                 agentStudioService.saveAgentStudio(vo.getId(), List.of(vo.getStudioConfigId()));
             } else {
@@ -198,6 +205,7 @@ public class AgentDefinitionServiceImpl extends ServiceImpl<AgentDefinitionMappe
         agentMcpServerService.deleteAgentMcpServer(ids);
         agentSkillPackageService.deleteAgentSkillPackage(ids);
         agentKnowledgeBaseService.deleteAgentKnowledge(ids);
+        agentWorkflowService.deleteAgentWorkflow(ids);
         agentStudioService.deleteAgentStudio(ids);
         agentCodeExecutionService.deleteAgentCodeExecution(ids);
         agentLongTermMemoryService.deleteAgentLongTermMemory(ids);
@@ -301,6 +309,20 @@ public class AgentDefinitionServiceImpl extends ServiceImpl<AgentDefinitionMappe
                             .select(SkillPackage::getId, SkillPackage::getName, SkillPackage::getDescription)
                             .eq(SkillPackage::getEnabled, true)
                             .in(SkillPackage::getId, skillPackageIds));
+        }
+        return Collections.emptyList();
+    }
+
+    @Override
+    public List<Workflow> getEnabledWorkflowsOfAgent(Long agentId) {
+        List<Long> workflowIds = agentWorkflowService.getWorkflowIds(agentId);
+        if (!workflowIds.isEmpty()) {
+            return workflowService.list(
+                    new LambdaQueryWrapper<Workflow>()
+                            .select(Workflow::getId, Workflow::getName, Workflow::getRemark)
+                            .eq(Workflow::getEnabled, true)
+                            .eq(Workflow::getStatus, WorkflowStatus.PUBLISHED)
+                            .in(Workflow::getId, workflowIds));
         }
         return Collections.emptyList();
     }

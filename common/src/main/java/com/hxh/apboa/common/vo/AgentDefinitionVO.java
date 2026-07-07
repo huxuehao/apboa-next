@@ -29,6 +29,7 @@ public class AgentDefinitionVO implements SerializableEnable {
     private Long modelConfigId;
     private JsonNode modelParamsOverride;
     private List<Long> skill;
+    private List<Long> workflow;
     private List<Long> tool;
     private List<Long> mcp;
     private List<AgentMcpBindingVO> mcpBindings;

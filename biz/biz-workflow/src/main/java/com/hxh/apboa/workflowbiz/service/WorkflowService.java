@@ -17,6 +17,8 @@ public interface WorkflowService extends IService<Workflow> {
 
     boolean deleteWorkflow(Integer force, List<Long> ids);
 
+    List<Object> usedWithAgent(List<Long> ids);
+
     Workflow copyWorkflow(Long id);
 
     boolean lockWorkflow(Long id, Integer locked);
@@ -26,6 +28,8 @@ public interface WorkflowService extends IService<Workflow> {
     WorkflowVersion publish(Long id, String remark);
 
     List<WorkflowVersion> versions(Long id);
+
+    WorkflowVersion latestPublishedVersion(Long workflowId);
 
     Workflow rollback(Long id, String version);
 

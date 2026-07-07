@@ -94,3 +94,10 @@ export function enabledToolsOfAgent(agentId: string) {
 export function enabledSkillsOfAgent(agentId: string) {
   return request.get<ApiResponse<SkillPackage[]>>(`/api/agent/definition/${agentId}/enabled/skills`)
 }
+
+/**
+ * 获取Agent启用的工作流
+ */
+export function enabledWorkflowsOfAgent(agentId: string) {
+  return request.get<ApiResponse<unknown[]>>(`/api/agent/definition/${agentId}/enabled/workflows`)
+}

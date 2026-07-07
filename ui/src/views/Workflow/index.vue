@@ -156,6 +156,25 @@ async function copyWorkflow(record: Workflow) {
 
 async function removeWorkflow(record: Workflow) {
   if (!record.id) return
+
+  const usedResp = await workflowApi.usedWithAgent([record.id])
+  const used = (usedResp.data.data as string[]) || []
+  if (used.length > 0) {
+    Modal.confirm({
+      title: '二次确认',
+      content: `该工作流正在被 [ ${used.join('、')} ] 智能体引用，删除后可能会影响上述智能体的正常使用！`,
+      okText: '确认并继续删除',
+      onOk: async () => {
+        await workflowApi.workflowRemove([record.id!], 1)
+        message.success('删除成功')
+        store.markListDirty()
+        await refreshListFromServer()
+        store.listDirty = false
+      }
+    })
+    return
+  }
+
   Modal.confirm({
     title: '删除工作流',
     content: '删除后无法恢复；如果存在运行记录或资源绑定，后端会阻止普通删除。',

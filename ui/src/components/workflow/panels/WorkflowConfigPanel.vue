@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { computed, ref, provide, defineAsyncComponent } from 'vue'
+import { computed, ref, provide, defineAsyncComponent, watch } from 'vue'
 import { CloseOutlined } from '@ant-design/icons-vue'
 import IconFont from '@/components/common/IconFont.vue'
+import QuickInputPopup from './shared/QuickInputPopup.vue'
+import { useQuickInput } from './shared/useQuickInput'
 import type { WorkflowFlowEdge, WorkflowFlowNode, WorkflowResourceMaps } from '@/types/workflow'
 import { getNodeIconName } from '@/config/workflow/common'
 
@@ -28,6 +30,29 @@ const maxWidth = computed(() =>
 const nodeColor = computed(() => props.node?.data.schema?.color || '#1677ff')
 
 provide('workflowEdges', computed(() => props.edges))
+
+// 快捷输入（双击 Ctrl 插入输入绑定名）
+const {
+  isPopupVisible,
+  popupItems,
+  anchorElement,
+  setInputNames,
+  handleSelect,
+  closePopup,
+} = useQuickInput()
+
+// 监听节点切换，更新输入绑定名称列表
+watch(
+  () => props.node?.data.inputConfigs,
+  (configs) => {
+    if (configs && configs.length > 0) {
+      setInputNames(configs.map((c) => c.name).filter(Boolean))
+    } else {
+      setInputNames([])
+    }
+  },
+  { immediate: true },
+)
 
 // 缓存 defineAsyncComponent 结果，相同组件名始终返回同一引用，防止 Vue 因引用变化而销毁重建组件
 const asyncPanelCache = new Map<string, ReturnType<typeof defineAsyncComponent>>()
@@ -93,6 +118,14 @@ function beginResize(event: MouseEvent) {
         />
       </Suspense>
     </div>
+
+    <QuickInputPopup
+      :visible="isPopupVisible"
+      :items="popupItems"
+      :anchor-el="anchorElement"
+      @select="handleSelect"
+      @close="closePopup"
+    />
   </aside>
 </template>
 

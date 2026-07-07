@@ -7,6 +7,7 @@ type ValidationItem = { nodeId?: string; field?: string; message?: string } | st
 
 const props = defineProps<{
   open: boolean
+  loading: boolean
   result: WorkflowValidationResult | null
   nodeNames: Record<string, string>
 }>()
@@ -82,64 +83,70 @@ watch(
       </AButton>
     </header>
 
-    <div class="validation-body">
-      <div v-if="hasResult && !errors.length && !warnings.length" class="validation-success">
-        <CheckCircleOutlined />
-        <div>
-          <div class="success-title">校验通过</div>
-          <div class="success-desc">当前流程结构、节点配置和输入引用均可用于发布或调试。</div>
-        </div>
+    <div class="validation-body" :class="{ 'is-loading': loading }">
+      <div v-if="loading" class="scan-container">
+        <p class="scan-hint">正在校验中...</p>
       </div>
 
-      <template v-else-if="hasResult">
-        <section v-if="errors.length" class="validation-section">
-          <div class="section-title error">
-            <ExclamationCircleOutlined />
-            必须修复
+      <template v-else>
+        <div v-if="hasResult && !errors.length && !warnings.length" class="validation-success">
+          <CheckCircleOutlined />
+          <div>
+            <div class="success-title">校验通过</div>
+            <div class="success-desc">当前流程结构、节点配置和输入引用均可用于发布或调试。</div>
           </div>
-          <div class="validation-list">
-            <button
-              v-for="(item, index) in errors"
-              :key="`error-${index}`"
-              class="validation-item"
-              :class="{ clickable: item.nodeId }"
-              type="button"
-              @click="item.nodeId && emit('focusNode', item.nodeId)"
-            >
-              <span class="item-dot error"></span>
-              <span class="item-copy">
-                <span class="item-title">{{ nodeLabel(item.nodeId) }}</span>
-                <span class="item-desc">{{ item.field ? `${item.field}：` : '' }}{{ item.message || '配置错误' }}</span>
-              </span>
-            </button>
-          </div>
-        </section>
+        </div>
 
-        <section v-if="warnings.length" class="validation-section">
-          <div class="section-title warning">
-            <WarningOutlined />
-            建议关注
-          </div>
-          <div class="validation-list">
-            <button
-              v-for="(item, index) in warnings"
-              :key="`warning-${index}`"
-              class="validation-item"
-              :class="{ clickable: item.nodeId }"
-              type="button"
-              @click="item.nodeId && emit('focusNode', item.nodeId)"
-            >
-              <span class="item-dot warning"></span>
-              <span class="item-copy">
-                <span class="item-title">{{ nodeLabel(item.nodeId) }}</span>
-                <span class="item-desc">{{ item.field ? `${item.field}：` : '' }}{{ item.message || '建议检查' }}</span>
-              </span>
-            </button>
-          </div>
-        </section>
+        <template v-else-if="hasResult">
+          <section v-if="errors.length" class="validation-section">
+            <div class="section-title error">
+              <ExclamationCircleOutlined />
+              必须修复
+            </div>
+            <div class="validation-list">
+              <button
+                v-for="(item, index) in errors"
+                :key="`error-${index}`"
+                class="validation-item"
+                :class="{ clickable: item.nodeId }"
+                type="button"
+                @click="item.nodeId && emit('focusNode', item.nodeId)"
+              >
+                <span class="item-dot error"></span>
+                <span class="item-copy">
+                  <span class="item-title">{{ nodeLabel(item.nodeId) }}</span>
+                  <span class="item-desc">{{ item.field ? `${item.field}：` : '' }}{{ item.message || '配置错误' }}</span>
+                </span>
+              </button>
+            </div>
+          </section>
+
+          <section v-if="warnings.length" class="validation-section">
+            <div class="section-title warning">
+              <WarningOutlined />
+              建议关注
+            </div>
+            <div class="validation-list">
+              <button
+                v-for="(item, index) in warnings"
+                :key="`warning-${index}`"
+                class="validation-item"
+                :class="{ clickable: item.nodeId }"
+                type="button"
+                @click="item.nodeId && emit('focusNode', item.nodeId)"
+              >
+                <span class="item-dot warning"></span>
+                <span class="item-copy">
+                  <span class="item-title">{{ nodeLabel(item.nodeId) }}</span>
+                  <span class="item-desc">{{ item.field ? `${item.field}：` : '' }}{{ item.message || '建议检查' }}</span>
+                </span>
+              </button>
+            </div>
+          </section>
+        </template>
+
+        <AEmpty v-else description="点击顶部校验后查看结果" />
       </template>
-
-      <AEmpty v-else description="点击顶部校验后查看结果" />
     </div>
   </aside>
 </template>
@@ -224,6 +231,23 @@ watch(
   overflow: auto;
   padding: 14px;
 }
+
+.validation-body.is-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.scan-container {
+  text-align: center;
+}
+
+.scan-hint {
+  font-size: 14px;
+  color: #8c8c8c;
+}
+
+/* ===== 结果区域 ===== */
 
 .validation-success {
   display: flex;

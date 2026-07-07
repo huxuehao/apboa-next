@@ -67,6 +67,7 @@ const runDockWidth = ref(440)
 const versionModalOpen = ref(false)
 const validationPanelOpen = ref(false)
 const validationPanelWidth = ref(440)
+const validating = ref(false)
 const validationResult = ref<WorkflowValidationResult | null>(null)
 const publishModalOpen = ref(false)
 const publishing = ref(false)
@@ -634,13 +635,19 @@ async function validateWorkflow() {
   const canContinue = await saveWorkflow()
   if (!canContinue) return false
   if (!workflow.value.id) return false
-  const result = await store.validate(workflow.value.id)
-  validationResult.value = result
   validationPanelOpen.value = true
+  validationResult.value = null
+  validating.value = true
   runDockOpen.value = false
   selectedNodeId.value = null
-  markValidation(result.valid, result.errors)
-  return result.valid
+  try {
+    const result = await store.validate(workflow.value.id)
+    validationResult.value = result
+    markValidation(result.valid, result.errors)
+    return result.valid
+  } finally {
+    validating.value = false
+  }
 }
 
 async function publishWorkflow() {
@@ -986,6 +993,7 @@ function clearAllPanels() {
     <WorkflowValidationPanel
       v-model:width="validationPanelWidth"
       :open="validationPanelOpen"
+      :loading="validating"
       :result="validationResult"
       :node-names="nodeNames"
       @close="validationPanelOpen = false"

@@ -4,20 +4,21 @@ import com.hxh.apboa.agent.service.AgentCodeExecutionService;
 import com.hxh.apboa.agent.service.AgentDefinitionService;
 import com.hxh.apboa.agent.service.AgentSubAgentService;
 import com.hxh.apboa.agent.service.CodeExecutionConfigService;
-import com.hxh.apboa.common.entity.AgentDefinition;
-import com.hxh.apboa.common.entity.CodeExecutionConfig;
-import com.hxh.apboa.common.entity.ToolConfig;
+import com.hxh.apboa.common.entity.*;
 import com.hxh.apboa.common.enums.ToolType;
 import com.hxh.apboa.engine.agent.A2aAgentHelper;
 import com.hxh.apboa.engine.agent.ReActAgentHelper;
 import com.hxh.apboa.engine.agui.AgentContext;
 import com.hxh.apboa.engine.hook.builtins.IConfirmationHook;
 import com.hxh.apboa.engine.mcp.McpClientFactory;
-import com.hxh.apboa.engine.skill.SkillBoxFactory;
 import com.hxh.apboa.engine.tool.dynamices.DynamicAgentTool;
 import com.hxh.apboa.engine.workspace.tool.SearchReplaceFileTool;
 import com.hxh.apboa.tool.service.AgentToolService;
 import com.hxh.apboa.tool.service.ToolService;
+import com.hxh.apboa.workflowbiz.core.WorkflowDefinitionCompiler;
+import com.hxh.apboa.workflowbiz.service.AgentWorkflowService;
+import com.hxh.apboa.workflowbiz.service.WorkflowRunService;
+import com.hxh.apboa.workflowbiz.service.WorkflowService;
 import io.agentscope.core.tool.AgentTool;
 import io.agentscope.core.tool.Toolkit;
 import io.agentscope.core.tool.ToolkitConfig;
@@ -46,6 +47,10 @@ public class ToolkitFactory {
     private final AgentCodeExecutionService agentCodeExecutionService;
     private final CodeExecutionConfigService codeExecutionConfigService;
     private final CustomToolkitConfig customToolkitConfig;
+    private final AgentWorkflowService agentWorkflowService;
+    private final WorkflowService workflowService;
+    private final WorkflowRunService workflowRunService;
+    private final WorkflowDefinitionCompiler workflowDefinitionCompiler;
 
     public ToolkitFactory(ToolService toolService,
                           AgentToolService agentToolService,
@@ -58,6 +63,10 @@ public class ToolkitFactory {
                           AgentCodeExecutionService agentCodeExecutionService,
                           CodeExecutionConfigService codeExecutionConfigService,
                           AgentDefinitionService agentDefinitionService,
+                          AgentWorkflowService agentWorkflowService,
+                          WorkflowService workflowService,
+                          WorkflowRunService workflowRunService,
+                          WorkflowDefinitionCompiler workflowDefinitionCompiler,
                           CustomToolkitConfig customToolkitConfig) {
         this.toolService = toolService;
         this.agentToolService = agentToolService;
@@ -68,6 +77,10 @@ public class ToolkitFactory {
         this.agentCodeExecutionService = agentCodeExecutionService;
         this.codeExecutionConfigService = codeExecutionConfigService;
         this.agentDefinitionService = agentDefinitionService;
+        this.agentWorkflowService = agentWorkflowService;
+        this.workflowService = workflowService;
+        this.workflowRunService = workflowRunService;
+        this.workflowDefinitionCompiler = workflowDefinitionCompiler;
         this.customToolkitConfig = customToolkitConfig;
     }
 
@@ -80,6 +93,13 @@ public class ToolkitFactory {
             // 注册工具
             registerTools(toolkit, toolService.listByIds(toolIds));
         }
+
+        // 注册工作流
+        List<Long> workflowIds = agentWorkflowService.getWorkflowIds(agentDefinition.getId());
+        if (!workflowIds.isEmpty()) {
+            registerWorkflows(toolkit, workflowIds);
+        }
+
 
         // 注册文件搜索替换工具
         Long codeExecutionId = agentCodeExecutionService.getCodeExecutionIdByAgentId(agentDefinition.getId());
@@ -171,6 +191,33 @@ public class ToolkitFactory {
                         } else {
                             IConfirmationHook.removeNeedConfirmTool(toolConfig.getToolId());
                         }
+                    }
+                });
+    }
+
+    /**
+     * 注册工作流
+     *
+     * @param toolkit     工具集
+     * @param workflowIds 工作流ID
+     */
+    public void registerWorkflows(Toolkit toolkit, List<Long> workflowIds) {
+        if (workflowIds == null || workflowIds.isEmpty()) {
+            return;
+        }
+
+        List<Workflow> workflows = workflowService.listByIds(workflowIds);
+        workflows.stream()
+                .filter(Workflow::getEnabled)
+                .forEach(workflow -> {
+                    WorkflowVersion workflowVersion = workflowService.latestPublishedVersion(workflow.getId());
+                    if (workflowVersion != null) {
+                        toolkit.registerTool(new WorkflowTool(
+                                workflow,
+                                workflowVersion,
+                                workflowRunService,
+                                workflowDefinitionCompiler)
+                        );
                     }
                 });
     }

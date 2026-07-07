@@ -35,6 +35,10 @@ export function workflowRemove(ids: string[], force = 0) {
   return request.delete<ApiResponse<boolean>>(`/api/workflow/${force}`, { data: ids })
 }
 
+export function usedWithAgent(ids: string[]) {
+  return request.post<ApiResponse<unknown[]>>('/api/workflow/used-with-agent', ids)
+}
+
 export function workflowCopy(id: string) {
   return request.post<ApiResponse<Workflow>>(`/api/workflow/${id}/copy`)
 }

@@ -9,13 +9,11 @@ import com.hxh.apboa.common.mp.support.MP;
 import com.hxh.apboa.common.r.R;
 import com.hxh.apboa.workflowbiz.dto.WorkflowQueryDTO;
 import com.hxh.apboa.workflowbiz.dto.WorkflowRunQueryDTO;
-import com.hxh.apboa.workflowbiz.dto.WorkflowRunRequest;
 import com.hxh.apboa.workflowbiz.service.WorkflowMetadataService;
 import com.hxh.apboa.workflowbiz.service.WorkflowRunService;
 import com.hxh.apboa.workflowbiz.service.WorkflowService;
 import com.hxh.apboa.workflowbiz.vo.NodeMetadata;
 import com.hxh.apboa.workflowbiz.vo.WorkflowDetailVO;
-import com.hxh.apboa.workflowbiz.vo.WorkflowRunResult;
 import com.hxh.apboa.workflowbiz.vo.WorkflowValidationResult;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -62,6 +60,14 @@ public class WorkflowController {
     @DeleteMapping("/{force}")
     public R<Boolean> delete(@PathVariable("force") Integer force, @RequestBody List<Long> ids) {
         return R.data(workflowService.deleteWorkflow(force, ids));
+    }
+
+    /**
+     * 被哪些Agent使用
+     */
+    @PostMapping("used-with-agent")
+    public R<List<Object>> usedWithAgent(@RequestBody List<Long> ids) {
+        return R.data(workflowService.usedWithAgent(ids));
     }
 
     @PostMapping("/{id}/copy")

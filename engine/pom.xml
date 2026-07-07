@@ -29,6 +29,10 @@
             <groupId>com.hxh.apboa.next</groupId>
             <artifactId>biz-resource</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.hxh.apboa.next</groupId>
+            <artifactId>biz-workflow</artifactId>
+        </dependency>
         <!--脚本安全: ANTLR4 + Rhino-->
         <dependency>
             <groupId>org.antlr</groupId>

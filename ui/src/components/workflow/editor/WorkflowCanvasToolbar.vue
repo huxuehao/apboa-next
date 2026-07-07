@@ -11,6 +11,7 @@ import {
   UnlockOutlined
 } from '@ant-design/icons-vue'
 import { Modal } from 'ant-design-vue';
+import { GuideModal, guideEntries } from '../guide'
 
 const props = defineProps<{
   locked: boolean
@@ -95,6 +96,10 @@ const handleToggleLock = () => {
       <AButton type="text" @click="$emit('clearSelection')">
         <template #icon><ClearOutlined /></template>
       </AButton>
+    </ATooltip>
+    <div class="toolbar-divider" />
+    <ATooltip placement="right" title="使用说明">
+      <GuideModal :entries="guideEntries" />
     </ATooltip>
   </div>
 </template>

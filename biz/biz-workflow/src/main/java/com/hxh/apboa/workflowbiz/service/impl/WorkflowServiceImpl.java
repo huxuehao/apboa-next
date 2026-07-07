@@ -2,30 +2,37 @@ package com.hxh.apboa.workflowbiz.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.hxh.apboa.common.consts.TableConst;
+import com.hxh.apboa.common.entity.AgentDefinition;
 import com.hxh.apboa.common.entity.Workflow;
 import com.hxh.apboa.common.entity.WorkflowRun;
 import com.hxh.apboa.common.entity.WorkflowVersion;
 import com.hxh.apboa.common.enums.workflow.WorkflowStatus;
 import com.hxh.apboa.common.util.RedisUtils;
+import com.hxh.apboa.common.util.TenantUtils;
 import com.hxh.apboa.common.util.UserUtils;
 import com.hxh.apboa.workflow.run.cache.RunWorkflowCache;
 import com.hxh.apboa.workflowbiz.core.WorkflowDefinitionCompiler;
 import com.hxh.apboa.workflowbiz.mapper.WorkflowMapper;
 import com.hxh.apboa.workflowbiz.mapper.WorkflowRunMapper;
 import com.hxh.apboa.workflowbiz.mapper.WorkflowVersionMapper;
+import com.hxh.apboa.workflowbiz.service.AgentWorkflowService;
 import com.hxh.apboa.workflowbiz.service.WorkflowResourceBindingService;
 import com.hxh.apboa.workflowbiz.service.WorkflowService;
 import com.hxh.apboa.workflowbiz.service.WorkflowValidator;
 import com.hxh.apboa.workflowbiz.vo.WorkflowDetailVO;
 import com.hxh.apboa.workflowbiz.vo.WorkflowValidationResult;
 import lombok.RequiredArgsConstructor;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -35,7 +42,9 @@ public class WorkflowServiceImpl extends ServiceImpl<WorkflowMapper, Workflow> i
     private final WorkflowValidator workflowValidator;
     private final WorkflowResourceBindingService resourceBindingService;
     private final WorkflowDefinitionCompiler compiler;
+    private final AgentWorkflowService agentWorkflowService;
     private final RedisUtils redisUtils;
+    private final JdbcTemplate jdbcTemplate;
 
     @Override
     public WorkflowDetailVO detail(Long id) {
@@ -93,6 +102,11 @@ public class WorkflowServiceImpl extends ServiceImpl<WorkflowMapper, Workflow> i
                     .in(WorkflowRun::getWorkflowId, ids.stream().map(String::valueOf).toList()));
             if (runCount != null && runCount > 0) {
                 throw new RuntimeException("workflow has run history, choose force delete");
+            }
+            List<Long> agentIds = agentWorkflowService.getAgentIds(ids);
+            if (!agentIds.isEmpty()) {
+                List<Object> agentNames = usedWithAgent(ids);
+                throw new RuntimeException("workflow is used by agents: " + agentNames + ", please unbind first");
             }
         }
         ids.forEach(id -> {
@@ -230,6 +244,18 @@ public class WorkflowServiceImpl extends ServiceImpl<WorkflowMapper, Workflow> i
     }
 
     @Override
+    public WorkflowVersion latestPublishedVersion(Long workflowId) {
+        WorkflowVersion version = workflowVersionMapper.selectOne(new LambdaQueryWrapper<WorkflowVersion>()
+                .eq(WorkflowVersion::getWorkflowId, String.valueOf(workflowId))
+                .orderByDesc(WorkflowVersion::getId)
+                .last("limit 1"));
+        if (version == null) {
+            throw new RuntimeException("workflow has no published version");
+        }
+        return version;
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public Workflow rollback(Long id, String version) {
         WorkflowVersion snapshot = workflowVersionMapper.selectOne(new LambdaQueryWrapper<WorkflowVersion>()
@@ -247,6 +273,14 @@ public class WorkflowServiceImpl extends ServiceImpl<WorkflowMapper, Workflow> i
         resourceBindingService.sync(String.valueOf(id), snapshot.getConfig());
         RunWorkflowCache.remove(String.valueOf(id));
         return workflow;
+    }
+
+    @Override
+    public List<Object> usedWithAgent(List<Long> ids) {
+        List<Object> names = new ArrayList<>();
+        getAgentDefinitions(agentWorkflowService.getAgentIds(ids)).forEach(agentDefinition ->
+                names.add(agentDefinition.getName()));
+        return names;
     }
 
     @Override
@@ -273,5 +307,25 @@ public class WorkflowServiceImpl extends ServiceImpl<WorkflowMapper, Workflow> i
         Long count = workflowVersionMapper.selectCount(new LambdaQueryWrapper<WorkflowVersion>()
                 .eq(WorkflowVersion::getWorkflowId, String.valueOf(id)));
         return String.valueOf((count == null ? 0 : count) + 1);
+    }
+
+    private List<AgentDefinition> getAgentDefinitions(List<Long> agentIds) {
+        if (agentIds == null || agentIds.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        String subSql = agentIds.stream().map(String::valueOf).collect(Collectors.joining(","));
+
+        String sql = String.format("SELECT * FROM %s WHERE id IN (%s)", TableConst.AGENT, subSql);
+        if (TenantUtils.getCurrentTenantId() != null) {
+            sql += " AND tenant_id = " + TenantUtils.getCurrentTenantId();
+        }
+        return jdbcTemplate.query(sql, (rs, rowNum) -> {
+            AgentDefinition agent = new AgentDefinition();
+            agent.setId(rs.getLong("id"));
+            agent.setName(rs.getString("name"));
+            agent.setDescription(rs.getString("description"));
+            return agent;
+        });
     }
 }

@@ -28,6 +28,7 @@ public class TableConst {
     public static final String ATTACH = "attach";
     public static final String AGENT_SCOPE_SESSIONS = "agentscope_sessions";
     public static final String AGENT_TOOL = "agent_tools";
+    public static final String AGENT_WORKFLOW = "agent_workflows";
     public static final String AGENT_CHAT_KEY = "agent_chat_key";
     public static final String SKILL_TOOL = "skill_tools";
     public static final String AGENT_AGENT = "agent_sub_agents";
