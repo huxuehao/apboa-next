@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, type CSSProperties } from 'vue'
+import { computed, inject, ref, type CSSProperties } from 'vue'
 import { SearchOutlined } from '@ant-design/icons-vue'
 import { WORKFLOW_GROUPS, workflowNodeSchemas } from '@/config/workflow/nodeSchemas'
 import type { WorkflowNodeSchema } from '@/types/workflow'
@@ -19,6 +19,7 @@ const emit = defineEmits<{
 }>()
 
 const keyword = ref('')
+const subWorkflow = inject<{ active: ReturnType<typeof import('vue')['ref']> } | null>('subWorkflow', null)
 const hovered = ref<WorkflowNodeSchema | null>(null)
 const detailY = ref(0)
 const libraryRef = ref<HTMLElement | null>(null)
@@ -45,10 +46,12 @@ function handleMouseMove(e: MouseEvent) {
 
 const groups = computed(() => {
   const normalized = keyword.value.trim().toLowerCase()
+  const blockedTypes = subWorkflow?.active.value ? new Set(['START', 'END', 'LOOP']) : new Set<string>()
   return WORKFLOW_GROUPS.map((group) => ({
     ...group,
     nodes: workflowNodeSchemas.filter((schema) => {
       if (schema.group !== group.key) return false
+      if (blockedTypes.has(schema.type)) return false
       if (!normalized) return true
       return `${schema.title} ${schema.type} ${schema.description}`.toLowerCase().includes(normalized)
     }),

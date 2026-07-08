@@ -48,6 +48,7 @@ export const ICON_DEFS: IconDef[] = [
   { name: 'nodenon_empty_select', label: '非空选择', unicode: '\\e634' },
   { name: 'nodetool', label: '工具执行', unicode: '\\e679' },
   { name: 'nodemcp', label: 'MCP调用', unicode: '\\e9d8' },
+  { name: 'nodevariable', label: '变量', unicode: '\\e61f' },
 ]
 
 /**

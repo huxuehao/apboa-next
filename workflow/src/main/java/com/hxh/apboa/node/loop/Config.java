@@ -1,13 +1,10 @@
 package com.hxh.apboa.node.loop;
 
-import com.hxh.apboa.node.base.Node;
 import com.hxh.apboa.node.base.NodeConfig;
-import com.hxh.apboa.workflow.core.Edge;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.hxh.apboa.workflow.core.Workflow;
 import lombok.Getter;
 import lombok.Setter;
-
-import java.util.List;
 
 /**
  * 描述：循环节点配置
@@ -36,14 +33,14 @@ public class Config implements NodeConfig {
     private String terminationExpression;
 
     /**
-     * 子工作流节点列表
+     * 子工作流节点定义（JSON数组，每个元素为节点定义对象）
      */
-    private List<Node> subNodes;
+    private JsonNode subNodes;
 
     /**
-     * 子工作流边列表
+     * 子工作流边定义（JSON数组，每个元素为边定义对象）
      */
-    private List<Edge> subEdges;
+    private JsonNode subEdges;
 
     /**
      * 子工作流入口节点ID（必须是 subNodes 中的一个节点）
@@ -64,6 +61,7 @@ public class Config implements NodeConfig {
 
     /**
      * 持有 SubWorkflow 的工作流实例（用于执行子工作流）
+     * 由 LoopSubWorkflowCompiler 在运行时注入
      */
     private Workflow workflow;
 }

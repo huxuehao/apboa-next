@@ -1,6 +1,7 @@
 package com.hxh.apboa.workflow.core;
 
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
@@ -10,6 +11,7 @@ import lombok.Setter;
  **/
 @Getter
 @Setter
+@NoArgsConstructor
 public class Edge {
     // 边的id
     private String id;

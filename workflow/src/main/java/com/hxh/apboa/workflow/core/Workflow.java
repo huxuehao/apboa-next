@@ -9,7 +9,9 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 描述：工作流
@@ -66,13 +68,13 @@ public abstract class Workflow {
         }
 
         // 构建临时节点查找映射
-        java.util.Map<String, Node> nodeMap = new java.util.HashMap<>();
+        Map<String, Node> nodeMap = new HashMap<>();
         for (Node node : subNodes) {
             nodeMap.put(node.getId(), node);
         }
 
         // 构建临时边查找映射
-        java.util.Map<String, Edge> edgeMap = new java.util.HashMap<>();
+        Map<String, Edge> edgeMap = new HashMap<>();
         for (Edge edge : subEdges) {
             edgeMap.put(edge.getId(), edge);
         }

@@ -286,7 +286,15 @@ function fitNode(nodeId: string) {
   flow.fitView({ nodes: [nodeId], padding: 0.4, duration: 200 })
 }
 
-defineExpose({ addAtCenter, fitAll, zoomInCanvas, zoomOutCanvas, resetZoom, fitNode })
+function getViewport() {
+  return { ...viewport.value }
+}
+
+function restoreViewport(vp: { x: number; y: number; zoom: number }) {
+  flow.setViewport(vp, { duration: 0 })
+}
+
+defineExpose({ addAtCenter, fitAll, zoomInCanvas, zoomOutCanvas, resetZoom, fitNode, getViewport, restoreViewport })
 </script>
 
 <template>

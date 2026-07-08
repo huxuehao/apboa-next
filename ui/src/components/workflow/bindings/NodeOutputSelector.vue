@@ -84,6 +84,14 @@ const groupedItems = computed(() => {
   return [...map.values()]
 })
 
+// 区分当前流程和主流程来源
+const localGroups = computed(() =>
+  groupedItems.value.filter((g) => !(g.node.data as any)._parentSource),
+)
+const parentGroups = computed(() =>
+  groupedItems.value.filter((g) => !!(g.node.data as any)._parentSource),
+)
+
 function selectOutput(nodeId: string, outputName: string) {
   emit('select', { nodeId, outputName })
   popoverOpen.value = false
@@ -133,13 +141,13 @@ watch(popoverOpen, (open) => {
         </div>
 
         <div class="dropdown-list" :class="{ empty: !groupedItems.length }">
-          <template v-if="groupedItems.length">
-            <div v-for="group in groupedItems" :key="group.node.id" class="node-group">
+          <template v-if="localGroups.length || parentGroups.length">
+            <!-- 当前子流程节点 -->
+            <div v-for="group in localGroups" :key="group.node.id" class="node-group">
               <div class="node-group-header">
                 <IconFont :name="getNodeIconName(group.node.data.type)" :size="14" :color="group.node.data.schema?.color || '#1677ff'" />
                 <span class="node-group-name">{{ group.node.data.label }}</span>
               </div>
-
               <div class="node-group-outputs">
                 <div
                   v-for="output in group.outputs"
@@ -154,6 +162,32 @@ watch(popoverOpen, (open) => {
                 </div>
               </div>
             </div>
+
+            <!-- 分隔线 + 主流程区域 -->
+            <template v-if="parentGroups.length">
+              <div class="source-divider">
+                <span class="source-divider-text">以下输出来自主流程</span>
+              </div>
+              <div v-for="group in parentGroups" :key="group.node.id" class="node-group parent-section">
+                <div class="node-group-header">
+                  <IconFont :name="getNodeIconName(group.node.data.type)" :size="14" :color="group.node.data.schema?.color || '#1677ff'" />
+                  <span class="node-group-name">{{ group.node.data.label }}</span>
+                </div>
+                <div class="node-group-outputs">
+                  <div
+                    v-for="output in group.outputs"
+                    :key="`${group.node.id}-${output.name}`"
+                    class="output-row"
+                    :class="{ selected: nodeId === group.node.id && outputName === output.name }"
+                    :title="`${output.name} · ${output.type} · ${output.description || '无描述' }`"
+                    @click="selectOutput(group.node.id, output.name)"
+                  >
+                    <span class="output-row-text">{{ output.name }}&ensp;·&ensp;{{ output.type || 'Object' }}</span>
+                    <span class="output-row-desc">{{ output.description || '无描述' }}</span>
+                  </div>
+                </div>
+              </div>
+            </template>
           </template>
 
           <div v-else-if="upstreamNodes.length === 0" class="dropdown-empty">
@@ -292,6 +326,34 @@ watch(popoverOpen, (open) => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.parent-source-tag {
+  flex-shrink: 0;
+  padding: 0 4px;
+  font-size: 10px;
+  color: #1677ff;
+  background: rgba(22, 119, 255, 0.06);
+  border-radius: 2px;
+  line-height: 16px;
+}
+
+.source-divider {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px 6px;
+  margin: 4px 0 0;
+  border-top: 1px solid #f0f0f0;
+}
+
+.source-divider-text {
+  font-size: 11px;
+  color: #8c8c8c;
+  letter-spacing: 0.3px;
+}
+
+.parent-section .node-group-header {
+  opacity: 0.85;
 }
 
 .node-group-outputs {

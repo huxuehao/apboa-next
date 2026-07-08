@@ -5,6 +5,7 @@ import com.hxh.apboa.node.base.NodeOutput;
 import com.hxh.apboa.common.enums.NodeType;
 import com.hxh.apboa.node.base.context.NodeContext;
 import com.hxh.apboa.node.base.request.ParamItem;
+import com.hxh.apboa.node.loop.LoopNode;
 import com.hxh.apboa.node.start.Param;
 import com.hxh.apboa.node.start.StartNode;
 import com.hxh.apboa.workflow.core.Edge;
@@ -32,6 +33,7 @@ public class RunWorkflow extends Workflow {
      */
     @Override
     public Object execute(NodeContext context) {
+        injectWorkflowToLoopNodes();
         List<Node> nodes = executeStart(context);
         while (nodes != null && !nodes.isEmpty()) {
             // 条件成立：下一执行节点为单个
@@ -76,6 +78,17 @@ public class RunWorkflow extends Workflow {
            throw new RuntimeException("没有有效的下一节点");
         }
         return nextNodes;
+    }
+
+    /**
+     * 向所有 LoopNode 注入当前工作流实例，使其能够执行子工作流。
+     */
+    public void injectWorkflowToLoopNodes() {
+        for (Node node : getNodes()) {
+            if (node instanceof LoopNode loopNode) {
+                loopNode.getConfig().setWorkflow(this);
+            }
+        }
     }
 
     /**

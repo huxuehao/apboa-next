@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, provide } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
+import { ArrowLeftOutlined } from '@ant-design/icons-vue'
 import { Graph, layout as dagreLayout } from '@dagrejs/dagre'
 import WorkflowCanvasViewport from '@/components/workflow/editor/WorkflowCanvasViewport.vue'
 import WorkflowCanvasToolbar from '@/components/workflow/editor/WorkflowCanvasToolbar.vue'
@@ -79,6 +80,27 @@ const resources = ref<WorkflowResourceMaps>({ caches: [], datasources: [], mqs: 
 const history = ref<WorkflowDefinition[]>([])
 const future = ref<WorkflowDefinition[]>([])
 const contextMenu = ref({ open: false, nodeId: '', x: 0, y: 0 })
+
+// 子流程编辑模式
+const subWorkflowActive = ref(false)
+const subWorkflowParentNodeId = ref<string | null>(null)
+const subWorkflowParentLabel = ref('')
+/** 进入子流程前父工作流的完整快照 */
+const mainDefinitionSnapshot = ref<WorkflowDefinition | null>(null)
+/** 主流程中 Loop 节点上游的所有节点（供子流程节点输出绑定使用） */
+const parentUpstreamNodes = ref<WorkflowFlowNode[]>([])
+/** 进入子流程前主流程的面板打开状态（退出时恢复） */
+const savedPanelState = ref({ selectedNodeId: null as string | null, validationOpen: false, runDockOpen: false })
+/** 进入子流程前父工作流画布位置（退出时恢复） */
+const savedViewport = ref<{ x: number; y: number; zoom: number } | null>(null)
+
+provide('subWorkflow', {
+  active: subWorkflowActive,
+  parentNodeId: subWorkflowParentNodeId,
+  enter: enterSubWorkflow,
+  exit: exitSubWorkflow,
+})
+provide('parentUpstreamNodes', parentUpstreamNodes)
 
 const workflowId = computed(() => String(route.params.id || ''))
 const selectedNode = computed(() => nodes.value.find((item) => item.id === selectedNodeId.value) || null)
@@ -170,7 +192,7 @@ onBeforeRouteLeave(async () => {
 })
 
 watch(draftSignature, (signature) => {
-  if (!savedDraftSignature.value || saving.value || readonly.value) return
+  if (!savedDraftSignature.value || saving.value || readonly.value || subWorkflowActive.value) return
   if (signature !== savedDraftSignature.value) {
     saveState.value = 'dirty'
   } else if (saveState.value === 'dirty') {
@@ -859,6 +881,10 @@ function waitForSavingFinished() {
 }
 
 function goBack() {
+  if (subWorkflowActive.value) {
+    exitSubWorkflow()
+    return
+  }
   if (saving.value || saveState.value === 'dirty') {
     leaveConfirmOpen.value = true
     return
@@ -911,10 +937,140 @@ function clearAllPanels() {
   publishModalOpen.value = false
   versionModalOpen.value = false
 }
+
+/** 进入子流程编辑模式：保存父工作流快照，将 Loop 节点的 subNodes/subEdges 加载到画布 */
+async function enterSubWorkflow(nodeId: string) {
+  const loopNode = nodes.value.find((n) => n.id === nodeId)
+  if (!loopNode || loopNode.data.type !== 'LOOP') return
+
+  // 保存父工作流完整快照（用于退出时恢复）
+  mainDefinitionSnapshot.value = toDefinition()
+  history.value = []
+  future.value = []
+  subWorkflowParentNodeId.value = nodeId
+  subWorkflowParentLabel.value = loopNode.data.label || '循环'
+  subWorkflowActive.value = true
+  savedPanelState.value = {
+    selectedNodeId: selectedNodeId.value,
+    validationOpen: validationPanelOpen.value,
+    runDockOpen: runDockOpen.value,
+  }
+  savedViewport.value = canvasRef.value?.getViewport() || null
+  selectedNodeId.value = null
+  validationPanelOpen.value = false
+  runDockOpen.value = false
+
+  // 计算主流程中 Loop 节点上游的所有节点（供子流程节点输出绑定候选）
+  parentUpstreamNodes.value = computeParentUpstreamNodes(nodeId)
+
+  // 替换画布内容为子工作流
+  const config = loopNode.data.config as Record<string, unknown>
+  const subNodes = (config.subNodes as Array<Record<string, unknown>>) || []
+  const subEdges = (config.subEdges as Array<Record<string, unknown>>) || []
+
+  nodes.value = subNodes.map((sn) => toFlowNode(sn as unknown as WorkflowNodeDefinition)) as WorkflowFlowNode[]
+  edges.value = (subEdges.map((se) => ({
+    id: String(se.id || ''),
+    source: String(se.source || ''),
+    target: String(se.target || ''),
+    sourceHandle: String(se.sourceHandle || 'output'),
+    targetHandle: String(se.targetHandle || 'input'),
+    type: 'workflow',
+  })) as unknown) as WorkflowFlowEdge[]
+
+  await nextTick()
+  canvasRef.value?.resetZoom()
+  await new Promise(r => setTimeout(r, 100))
+  canvasRef.value?.fitAll()
+}
+
+/** 退出子流程编辑模式：回写子流程到 Loop 节点，恢复父工作流 */
+async function exitSubWorkflow() {
+  if (!subWorkflowActive.value || !subWorkflowParentNodeId.value || !mainDefinitionSnapshot.value) return
+
+  // 1. 将当前画布的子流程序列化
+  const subDef = toDefinition()
+
+  // 2. 在父工作流快照中找到 Loop 节点并更新其 config
+  const updatedNodes = mainDefinitionSnapshot.value.nodes.map((n) => {
+    if (n.id === subWorkflowParentNodeId.value) {
+      return {
+        ...n,
+        config: {
+          ...(n.config || {}),
+          subNodes: subDef.nodes,
+          subEdges: subDef.edges,
+        },
+      }
+    }
+    return n
+  })
+  mainDefinitionSnapshot.value = { ...mainDefinitionSnapshot.value, nodes: updatedNodes }
+
+  // 3. 恢复父工作流
+  loadDefinition(mainDefinitionSnapshot.value)
+  mainDefinitionSnapshot.value = null
+
+  subWorkflowActive.value = false
+  subWorkflowParentNodeId.value = null
+  subWorkflowParentLabel.value = ''
+  selectedNodeId.value = savedPanelState.value.selectedNodeId
+  validationPanelOpen.value = savedPanelState.value.validationOpen
+  runDockOpen.value = savedPanelState.value.runDockOpen
+  parentUpstreamNodes.value = []
+
+  await nextTick()
+  if (savedViewport.value) {
+    canvasRef.value?.restoreViewport(savedViewport.value)
+  } else {
+    canvasRef.value?.fitAll()
+  }
+}
+
+/** 从当前 nodes/edges 计算指定节点上游的所有节点 */
+function computeParentUpstreamNodes(startNodeId: string): WorkflowFlowNode[] {
+  const edgeList = edges.value
+  const nodeList = nodes.value
+  if (!edgeList.length || !startNodeId) return []
+
+  const reverseAdj = new Map<string, string[]>()
+  for (const edge of edgeList) {
+    const list = reverseAdj.get(edge.target)
+    if (list) { list.push(edge.source) }
+    else { reverseAdj.set(edge.target, [edge.source]) }
+  }
+
+  const visited = new Set<string>()
+  const queue: string[] = [startNodeId]
+  while (queue.length) {
+    const nodeId = queue.shift()!
+    if (visited.has(nodeId)) continue
+    visited.add(nodeId)
+    const sources = reverseAdj.get(nodeId)
+    if (sources) {
+      for (const source of sources) {
+        if (!visited.has(source)) queue.push(source)
+      }
+    }
+  }
+  visited.delete(startNodeId)
+
+  const result: WorkflowFlowNode[] = []
+  for (const nodeId of visited) {
+    const node = nodeList.find((n) => n.id === nodeId)
+    if (node) result.push(node)
+  }
+  return result
+}
 </script>
 
 <template>
   <main class="workflow-editor-shell">
+    <!-- 子流程编辑模式横幅 -->
+    <div v-if="subWorkflowActive" class="sub-workflow-banner">
+      <span class="sub-workflow-banner-text">正在编辑「{{ subWorkflowParentLabel }}」的子流程</span>
+    </div>
+
     <WorkflowCanvasViewport
       ref="canvasRef"
       v-model:nodes="nodes"
@@ -928,6 +1084,7 @@ function clearAllPanels() {
     />
 
     <WorkflowTopLeft
+      v-if="!subWorkflowActive"
       :title="workflow.name || ''"
       :status="workflow.status"
       :version="workflow.version"
@@ -938,8 +1095,16 @@ function clearAllPanels() {
       @update-title="updateWorkflowTitle"
     />
 
+    <!-- 子流程模式下的简化返回栏 -->
+    <div v-if="subWorkflowActive" class="sub-workflow-topbar">
+      <AButton type="text" class="sub-workflow-back-btn" @click="exitSubWorkflow">
+        <template #icon><ArrowLeftOutlined /></template>
+        完成编辑，返回主流程
+      </AButton>
+    </div>
+
     <WorkflowTopActions
-      v-if="!readonly"
+      v-if="!readonly && !subWorkflowActive"
       :saving="saving"
       :running="running"
       @save="saveWorkflow"
@@ -957,6 +1122,7 @@ function clearAllPanels() {
       :has-nodes="nodes.length > 0"
       :library-open="libraryOpen"
       :lock-toggling="lockToggling"
+      :hide-lock="subWorkflowActive"
       @add-node="toggleLibrary"
       @fit="canvasRef?.fitAll()"
       @zoom-in="canvasRef?.zoomInCanvas()"
@@ -1075,5 +1241,64 @@ function clearAllPanels() {
 .leave-confirm-message {
   margin: 0;
   color: #595959;
+}
+
+.sub-workflow-banner {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 16px;
+  background: rgba(22, 119, 255, 0.08);
+  backdrop-filter: blur(8px);
+  border-radius: 0 0 8px 8px;
+  overflow: hidden;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -30%;
+    width: 30%;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.6),
+      transparent
+    );
+    transform: skewX(-16deg);
+    animation: wave 1.5s ease-in-out infinite;
+  }
+}
+
+.sub-workflow-banner-text {
+  font-size: 13px;
+  color: #1677ff;
+  font-weight: 500;
+  position: relative;
+  z-index: 1;
+}
+
+@keyframes wave {
+  0% { left: -30%; }
+  100% { left: 130%; }
+}
+
+.sub-workflow-topbar {
+  position: absolute;
+  top: 12px;
+  left: 16px;
+  z-index: 10;
+}
+
+.sub-workflow-back-btn {
+  font-size: 14px;
+  color: rgba(0, 0, 0, 0.65);
+  &:hover { color: #1677ff; }
 }
 </style>

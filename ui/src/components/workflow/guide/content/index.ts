@@ -2,6 +2,7 @@ import { markRaw } from 'vue'
 import CtrlAddNodeGuide from './CtrlAddNodeGuide.vue'
 import QuickInputGuide from './QuickInputGuide.vue'
 import FormatterGuide from './FormatterGuide.vue'
+import LoopGuide from './LoopGuide.vue'
 import type { GuideEntry } from '../types'
 
 /**
@@ -28,6 +29,11 @@ export const guideEntries: GuideEntry[] = [
     id: 'formatter',
     title: '参数模板格式',
     component: markRaw(FormatterGuide),
+  },
+  {
+    id: 'loop',
+    title: '循环节点',
+    component: markRaw(LoopGuide),
   },
   // 未来在此追加：
   // { id: 'node-connection', title: '节点连线与数据流', component: markRaw(NodeConnectionGuide) },

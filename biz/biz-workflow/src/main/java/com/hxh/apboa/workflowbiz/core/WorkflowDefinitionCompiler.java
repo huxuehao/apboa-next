@@ -82,6 +82,13 @@ public class WorkflowDefinitionCompiler {
     }
 
     private Node compileNode(JsonNode nodeJson) {
+        return compileSubNode(nodeJson);
+    }
+
+    /**
+     * 公开的子节点编译方法，供 LoopSubWorkflowCompiler 等调用。
+     */
+    public Node compileSubNode(JsonNode nodeJson) {
         String id = text(nodeJson, "id", null);
         String name = text(nodeJson, "name", text(nodeJson, "label", id));
         NodeType type = NodeType.valueOf(text(nodeJson, "type", null));

@@ -557,17 +557,17 @@
 }
 
 /* 其他 */
-.required-field::before {
-  display: inline-block;
-  margin-inline-end: 4px;
-  color: #ff4d4f;
-  font-size: 14px;
-  font-family: SimSun, sans-serif;
-  line-height: 1;
-  content: "*";
-}
+/*.required-field::before {*/
+/*  display: inline-block;*/
+/*  margin-inline-end: 4px;*/
+/*  color: #ff4d4f;*/
+/*  font-size: 14px;*/
+/*  font-family: SimSun, sans-serif;*/
+/*  line-height: 1;*/
+/*  content: "*";*/
+/*}*/
 
-.required-field_end::after {
+.required-field::after {
   display: inline-block;
   margin-inline-start: 4px;
   color: #ff4d4f;

@@ -129,7 +129,7 @@ public abstract class EnhancedNode implements Node {
     }
 
     /**
-     * 添加输入配置 @TODO 该方法必须在节点被初始化的时候进行调用？
+     * 添加输入配置
      *
      * @param config 输入配置
      */
@@ -142,7 +142,7 @@ public abstract class EnhancedNode implements Node {
     }
 
     /**
-     * 添加输出配置 @TODO 该方法必须在节点被初始化的时候进行调用？
+     * 添加输出配置
      *
      * @param config 输出配置
      */

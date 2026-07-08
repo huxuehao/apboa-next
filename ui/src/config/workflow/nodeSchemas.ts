@@ -93,7 +93,7 @@ public class DataProcess implements IteratorExecutor {
     type: 'LOOP', title: '循环', group: 'logic',
     description: '按次数或数据源执行子工作流。',
     icon: 'loop', color: '#fa8c16', panelComponent: 'LoopNodePanel',
-    defaultConfig: { loopVariable: 'loopIndex', maxIterations: 1000, itemVariable: 'item', subNodes: [], subEdges: [] },
+    defaultConfig: { loopVariable: 'loopIndex', maxIterations: 1000, terminationExpression: '', iterateDataSource: '', itemVariable: 'item', entryNodeId: '', subNodes: [], subEdges: [] },
     inputConfigs: input(), outputConfigs: output(),
     summaryComponent: 'LoopNodeSummary',
     showSummary: true,

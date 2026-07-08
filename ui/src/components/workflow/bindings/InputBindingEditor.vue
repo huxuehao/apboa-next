@@ -31,6 +31,7 @@ const emit = defineEmits<{
 const bindings = computed(() => (props.modelValue?.length ? props.modelValue : [{ name: 'input', sourceType: 'NODE_OUTPUT' as const }]))
 
 const injectedEdges = inject<ComputedRef<WorkflowFlowEdge[]>>('workflowEdges', computed(() => []))
+const parentUpstream = inject<ComputedRef<WorkflowFlowNode[]>>('parentUpstreamNodes', computed(() => []))
 
 // 从 currentNodeId 出发沿边反向 BFS，收集所有上游节点
 const upstreamNodes = computed(() => {
@@ -75,6 +76,18 @@ const upstreamNodes = computed(() => {
     const node = props.nodes.find((n) => n.id === nodeId)
     if (node) result.push(node)
   }
+
+  // 合并主流程上游节点（子流程模式下由 WorkflowEditorView 提供）
+  const parentNodes = parentUpstream.value
+  if (parentNodes.length) {
+    const existingIds = new Set(result.map((n) => n.id))
+    for (const pn of parentNodes) {
+      if (!existingIds.has(pn.id)) {
+        result.push({ ...pn, data: { ...pn.data, _parentSource: true } as any })
+      }
+    }
+  }
+
   return result
 })
 

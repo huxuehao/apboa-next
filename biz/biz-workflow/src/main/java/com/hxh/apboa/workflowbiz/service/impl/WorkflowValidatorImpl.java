@@ -121,9 +121,9 @@ public class WorkflowValidatorImpl implements WorkflowValidator {
 
         try {
             RunWorkflow workflow = compiler.compile("validate", definition);
-            NodeContext context = new NodeContext("validate");
+            workflow.injectWorkflowToLoopNodes();
             for (Node node : workflow.getNodes()) {
-                VerifyResult verifyResult = node.verifyConfig(java.util.Map.of());
+                VerifyResult verifyResult = node.verifyConfig(Map.of());
                 if (!verifyResult.isValid()) {
                     for (VerifyFail error : verifyResult.getErrors()) {
                         result.addError(node.getId(), error.getField(), error.getMessage());
