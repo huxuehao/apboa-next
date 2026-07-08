@@ -129,9 +129,9 @@ function removeBinding(index: number) {
       <ATextarea
         v-if="binding.sourceType === 'CONSTANT'"
         :rows="1"
-        :model-value="typeof binding.value === 'string' ? binding.value : JSON.stringify(binding.value ?? '', null, 2)"
+        :value="typeof binding.value === 'string' ? binding.value : JSON.stringify(binding.value ?? '', null, 2)"
         placeholder="常量值，可填写字符串或 JSON"
-        @update:model-value="(value: string) => update(index, { value })"
+        @update:value="(value: string) => update(index, { value })"
       />
 
       <BlurInput
@@ -153,9 +153,9 @@ function removeBinding(index: number) {
       <ATextarea
         v-else
         :rows="1"
-        :model-value="typeof binding.value === 'string' ? binding.value : JSON.stringify(binding.value ?? '', null, 2)"
+        :value="typeof binding.value === 'string' ? binding.value : JSON.stringify(binding.value ?? '', null, 2)"
         placeholder="支持编写GroovyShell表单式"
-        @update:model-value="(value: string) => update(index, { value })"
+        @update:value="(value: string) => update(index, { value })"
       />
     </div>
 
