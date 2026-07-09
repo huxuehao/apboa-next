@@ -1,6 +1,7 @@
 package com.hxh.apboa.runtime.endpoint;
 
 import com.hxh.apboa.common.r.R;
+import com.hxh.apboa.common.util.UserUtils;
 import com.hxh.apboa.workflowbiz.dto.WorkflowRunRequest;
 import com.hxh.apboa.workflowbiz.service.WorkflowRunService;
 import com.hxh.apboa.workflowbiz.vo.WorkflowRunResult;
@@ -25,6 +26,6 @@ public class WorkflowEndPoint {
 
     @PostMapping("/{id}/run")
     public R<WorkflowRunResult> run(@PathVariable("id") Long id, @RequestBody(required = false) WorkflowRunRequest request) {
-        return R.data(workflowRunService.run(id, request));
+        return R.data(workflowRunService.run(id, request, UserUtils.getUserDetail()));
     }
 }

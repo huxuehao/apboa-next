@@ -34,6 +34,7 @@ import type {
   WorkflowResourceMaps,
   WorkflowRunRequest,
   WorkflowValidationResult,
+  WorkflowVariable,
 } from '@/types/workflow'
 import { useAccountStore } from '@/stores'
 import { getToken } from '@/utils/auth'
@@ -80,6 +81,7 @@ const resources = ref<WorkflowResourceMaps>({ caches: [], datasources: [], mqs: 
 const history = ref<WorkflowDefinition[]>([])
 const future = ref<WorkflowDefinition[]>([])
 const contextMenu = ref({ open: false, nodeId: '', x: 0, y: 0 })
+const customVariables = ref<WorkflowVariable[]>([])
 
 // 子流程编辑模式
 const subWorkflowActive = ref(false)
@@ -101,6 +103,8 @@ provide('subWorkflow', {
   exit: exitSubWorkflow,
 })
 provide('parentUpstreamNodes', parentUpstreamNodes)
+provide('workflowVariables', customVariables)
+provide('subWorkflowActive', subWorkflowActive)
 
 const workflowId = computed(() => String(route.params.id || ''))
 const selectedNode = computed(() => nodes.value.find((item) => item.id === selectedNodeId.value) || null)
@@ -299,6 +303,7 @@ function loadDefinition(definition: WorkflowDefinition) {
   const safeDefinition = ensureWorkflowDefinition(definition)
   nodes.value = (safeDefinition.nodes || []).map(toFlowNode)
   edges.value = (safeDefinition.edges || []).map(toFlowEdge)
+  customVariables.value = (safeDefinition.variables || []).filter((v) => v.source === 'custom')
   history.value = []
   future.value = []
 }
@@ -353,6 +358,7 @@ function toDefinition(): WorkflowDefinition {
       targetHandle: edge.targetHandle || 'input',
       label: String(edge.label || ''),
     })),
+    variables: customVariables.value,
     viewport: { x: 0, y: 0, zoom: 1 },
     metadata: {
       schemaVersion: '1.0',

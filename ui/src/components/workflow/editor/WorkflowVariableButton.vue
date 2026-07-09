@@ -1,65 +1,75 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
-import { PlusOutlined, DeleteOutlined, EditOutlined, CheckOutlined } from '@ant-design/icons-vue'
+import { ref, computed, inject, watch, nextTick, onMounted, onUnmounted } from 'vue'
+import type { ComputedRef, Ref } from 'vue'
+import { PlusOutlined, SearchOutlined, DeleteOutlined } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
-import {getNodeIconName} from "@/config/workflow/common.ts";
-import IconFont from "@/components/common/IconFont.vue";
+import IconFont from '@/components/common/IconFont.vue'
+import type { VariableType, WorkflowVariable } from '@/types/workflow'
 
-// ========== 类型定义 ==========
+// ========== 系统变量 ==========
 
-type VariableType = 'string' | 'number' | 'boolean' | 'object' | 'array'
+const systemVariables: WorkflowVariable[] = [
+  { id: 'sys_1', name: 'tenantId', type: 'number', source: 'system', description: '当前租户ID' },
+  { id: 'sys_2', name: 'tenantCode', type: 'string', source: 'system', description: '当前租户编号' },
+  { id: 'sys_3', name: 'userId', type: 'number', source: 'system', description: '当前用户ID' },
+  { id: 'sys_4', name: 'userName', type: 'string', source: 'system', description: '当前用户名称' },
+]
 
-interface VariableItem {
-  id: string
-  name: string
-  description: string
-  type: VariableType
-  defaultValue?: string
-  source: 'system' | 'custom'
-}
+// ========== 注入数据 ==========
+
+const customVariables = inject<Ref<WorkflowVariable[]>>('workflowVariables', ref([]))
+const readonly = inject<ComputedRef<boolean>>('subWorkflowActive', computed(() => false))
 
 // ========== 状态 ==========
 
 const modalOpen = ref(false)
-const activeTab = ref<'system' | 'custom'>('system')
+const searchText = ref('')
+const searchDebounceTimer = ref<ReturnType<typeof setTimeout> | null>(null)
+const debouncedSearchText = ref('')
 const adding = ref(false)
 const editingId = ref<string | null>(null)
-const editForm = ref({ name: '', description: '', type: 'string' as VariableType, defaultValue: '' })
+const editName = ref('')
+const editType = ref<VariableType>('string')
+const listRef = ref<HTMLDivElement | null>(null)
 
-// ========== 系统变量（Mock 数据） ==========
+// ========== 类型选项 ==========
 
-const systemVariables = ref<VariableItem[]>([
-  { id: 'sys_1', name: 'workflow.id', description: '当前工作流ID', type: 'string', source: 'system' },
-  { id: 'sys_2', name: 'workflow.name', description: '当前工作流名称', type: 'string', source: 'system' },
-  { id: 'sys_3', name: 'tenant.id', description: '当前租户ID', type: 'string', source: 'system' },
-  { id: 'sys_4', name: 'user.id', description: '当前用户ID', type: 'string', source: 'system' },
-  { id: 'sys_5', name: 'user.name', description: '当前用户名', type: 'string', source: 'system' },
-  { id: 'sys_6', name: 'timestamp.now', description: '当前时间戳（毫秒）', type: 'number', source: 'system' },
-  { id: 'sys_7', name: 'timestamp.date', description: '当前日期（yyyy-MM-dd）', type: 'string', source: 'system' },
-  { id: 'sys_8', name: 'env.mode', description: '运行环境模式', type: 'string', source: 'system' },
-])
+const typeOptions: { value: VariableType; label: string }[] = [
+  { value: 'string', label: 'string' },
+  { value: 'number', label: 'number' },
+  { value: 'boolean', label: 'boolean' },
+  { value: 'object', label: 'object' },
+  { value: 'array', label: 'array' },
+]
 
-// ========== 自定义变量 ==========
+// ========== 搜索防抖 ==========
 
-const customVariables = ref<VariableItem[]>([])
+watch(searchText, (val) => {
+  if (searchDebounceTimer.value) {
+    clearTimeout(searchDebounceTimer.value)
+  }
+  searchDebounceTimer.value = setTimeout(() => {
+    debouncedSearchText.value = val
+  }, 300)
+})
 
-// ========== 类型颜色映射（仅用于圆点） ==========
+// ========== 过滤后的变量列表 ==========
 
-const typeColorMap: Record<VariableType, string> = {
-  string: '#1677ff',
-  number: '#52c41a',
-  boolean: '#fa8c16',
-  object: '#722ed1',
-  array: '#eb2f96',
-}
+const filteredSystemVariables = computed(() => {
+  const query = debouncedSearchText.value.trim().toLowerCase()
+  if (!query) return systemVariables
+  return systemVariables.filter(
+    (v) => v.name.toLowerCase().includes(query) || v.type.toLowerCase().includes(query),
+  )
+})
 
-const typeLabelMap: Record<VariableType, string> = {
-  string: 'string',
-  number: 'number',
-  boolean: 'boolean',
-  object: 'object',
-  array: 'array',
-}
+const filteredCustomVariables = computed(() => {
+  const query = debouncedSearchText.value.trim().toLowerCase()
+  if (!query) return customVariables.value
+  return customVariables.value.filter(
+    (v) => v.name.toLowerCase().includes(query) || v.type.toLowerCase().includes(query),
+  )
+})
 
 // ========== 面板控制 ==========
 
@@ -71,6 +81,8 @@ function closeModal() {
   modalOpen.value = false
   adding.value = false
   editingId.value = null
+  searchText.value = ''
+  debouncedSearchText.value = ''
 }
 
 // ========== 自定义变量 CRUD ==========
@@ -78,60 +90,73 @@ function closeModal() {
 function startAdd() {
   adding.value = true
   editingId.value = null
-  editForm.value = { name: '', description: '', type: 'string', defaultValue: '' }
+  editName.value = ''
+  editType.value = 'string'
+  nextTick(() => {
+    scrollToBottom()
+  })
 }
 
-function cancelEdit() {
-  adding.value = false
-  editingId.value = null
-  editForm.value = { name: '', description: '', type: 'string', defaultValue: '' }
-}
-
-function startEdit(item: VariableItem) {
+function startEdit(item: WorkflowVariable) {
+  if (readonly.value) return
   adding.value = false
   editingId.value = item.id
-  editForm.value = {
-    name: item.name,
-    description: item.description,
-    type: item.type,
-    defaultValue: item.defaultValue || '',
-  }
+  editName.value = item.name
+  editType.value = item.type
 }
 
-function saveEdit() {
-  const { name, description, type, defaultValue } = editForm.value
-  if (!name.trim()) {
+function saveCurrentEdit() {
+  const name = editName.value.trim()
+  const type = editType.value
+
+  if (!name && !type) {
+    // 清空则删除
+    if (editingId.value) {
+      customVariables.value = customVariables.value.filter((v) => v.id !== editingId.value)
+    }
+    cancelEdit()
+    return
+  }
+
+  if (!name) {
     message.warning('变量名不能为空')
     return
   }
 
   if (editingId.value) {
+    // 编辑模式
     const item = customVariables.value.find((v) => v.id === editingId.value)
     if (item) {
-      item.name = name.trim()
-      item.description = description.trim()
+      item.name = name
       item.type = type
-      item.defaultValue = defaultValue.trim() || undefined
     }
-    editingId.value = null
   } else {
+    // 新增模式
     customVariables.value.push({
       id: `cust_${Date.now()}`,
-      name: name.trim(),
-      description: description.trim(),
+      name,
       type,
-      defaultValue: defaultValue.trim() || undefined,
       source: 'custom',
     })
-    adding.value = false
   }
-  editForm.value = { name: '', description: '', type: 'string', defaultValue: '' }
+  cancelEdit()
 }
 
-function removeVariable(id: string) {
+function cancelEdit() {
+  adding.value = false
+  editingId.value = null
+  editName.value = ''
+  editType.value = 'string'
+}
+
+function deleteVariable(id: string) {
   customVariables.value = customVariables.value.filter((v) => v.id !== id)
-  if (editingId.value === id) {
-    editingId.value = null
+  cancelEdit()
+}
+
+function scrollToBottom() {
+  if (listRef.value) {
+    listRef.value.scrollTop = listRef.value.scrollHeight
   }
 }
 
@@ -139,7 +164,6 @@ function removeVariable(id: string) {
 
 function handleEscape(e: KeyboardEvent) {
   if (e.key === 'Escape' && modalOpen.value) {
-    // AModal 自身处理 ESC，这里做兜底
     if (adding.value || editingId.value) {
       cancelEdit()
     }
@@ -152,6 +176,9 @@ onMounted(() => {
 
 onUnmounted(() => {
   document.removeEventListener('keydown', handleEscape)
+  if (searchDebounceTimer.value) {
+    clearTimeout(searchDebounceTimer.value)
+  }
 })
 </script>
 
@@ -175,128 +202,126 @@ onUnmounted(() => {
     width="520px"
     :footer="null"
     :destroy-on-close="false"
+    :mask-closable="false"
     @cancel="closeModal"
   >
     <div class="var-modal">
-      <!-- 标签切换 -->
-      <div class="modal-tabs">
-        <button
-          type="button"
-          class="modal-tab"
-          :class="{ active: activeTab === 'system' }"
-          @click="activeTab = 'system'"
+      <!-- 顶部操作栏：添加按钮 + 搜索框 -->
+      <div class="var-toolbar">
+        <AButton
+          v-if="!readonly"
+          size="small"
+          type="primary"
+          :disabled="adding || editingId !== null"
+          @click="startAdd"
         >
-          系统变量
-        </button>
-        <button
-          type="button"
-          class="modal-tab"
-          :class="{ active: activeTab === 'custom' }"
-          @click="activeTab = 'custom'"
-        >
-          自定义变量
-        </button>
-      </div>
-
-      <!-- 系统变量列表 -->
-      <div v-if="activeTab === 'system'" class="modal-body">
-        <div class="var-list">
-          <div
-            v-for="item in systemVariables"
-            :key="item.id"
-            class="var-row"
-          >
-            <div class="var-row-top">
-              <span class="var-dot" :style="{ background: typeColorMap[item.type] }" />
-              <span class="var-name">{{ item.name }}</span>
-              <span class="var-type-label">{{ typeLabelMap[item.type] }}</span>
-            </div>
-            <div class="var-row-desc">{{ item.description }}</div>
-          </div>
-        </div>
-        <div v-if="systemVariables.length === 0" class="var-empty">
-          暂无系统变量
+          <template #icon><PlusOutlined /></template>
+          添加变量
+        </AButton>
+        <div class="var-search">
+          <SearchOutlined class="search-icon" />
+          <input
+            v-model="searchText"
+            type="text"
+            class="search-input"
+            placeholder="搜索变量名或类型..."
+          />
         </div>
       </div>
 
-      <!-- 自定义变量列表 -->
-      <div v-if="activeTab === 'custom'" class="modal-body">
-        <div v-if="customVariables.length > 0" class="var-list">
-          <div
-            v-for="item in customVariables"
-            :key="item.id"
-            class="var-row var-row-custom"
-          >
-            <div class="var-row-top">
-              <span class="var-dot" :style="{ background: typeColorMap[item.type] }" />
+      <!-- 变量列表 -->
+      <div ref="listRef" class="var-list-container">
+        <!-- 系统变量 -->
+        <ATooltip
+          v-for="item in filteredSystemVariables"
+          :key="item.id"
+          :title="item.description"
+          placement="left"
+        >
+          <div class="var-row var-row-system">
+            <div class="var-row-content">
               <span class="var-name">{{ item.name }}</span>
-              <span class="var-type-label">{{ typeLabelMap[item.type] }}</span>
-              <div class="var-row-actions">
-                <button type="button" class="var-row-btn" title="编辑" @click="startEdit(item)">
-                  <EditOutlined />
-                </button>
-                <button type="button" class="var-row-btn var-row-btn-del" title="删除" @click="removeVariable(item.id)">
-                  <DeleteOutlined />
-                </button>
-              </div>
-            </div>
-            <div class="var-row-desc">{{ item.description }}</div>
-            <div v-if="item.defaultValue !== undefined" class="var-row-default">
-              默认值：<code>{{ item.defaultValue }}</code>
+              <span class="var-type">{{ item.type }}</span>
             </div>
           </div>
+        </ATooltip>
+
+        <!-- 自定义变量分隔线 -->
+        <div v-if="filteredCustomVariables.length > 0" class="var-divider">
+          <span class="var-divider-text">自定义变量</span>
         </div>
 
-        <div v-if="customVariables.length === 0 && !adding && !editingId" class="var-empty">
-          暂无自定义变量，点击下方按钮添加
-        </div>
-
-        <!-- 编辑/新增表单 -->
-        <div v-if="adding || editingId" class="var-form">
-          <div class="var-form-grid">
-            <div class="var-form-item">
-              <label class="var-form-label">变量名</label>
-              <AInput v-model:value="editForm.name" placeholder="如 myVar" size="small" />
-            </div>
-            <div class="var-form-item">
-              <label class="var-form-label">类型</label>
-              <ASelect
-                v-model:value="editForm.type"
-                size="small"
-                style="width: 100%"
-                :options="[
-                  { value: 'string', label: 'string' },
-                  { value: 'number', label: 'number' },
-                  { value: 'boolean', label: 'boolean' },
-                  { value: 'object', label: 'object' },
-                  { value: 'array', label: 'array' },
-                ]"
+        <!-- 自定义变量 -->
+        <div
+          v-for="item in filteredCustomVariables"
+          :key="item.id"
+          class="var-row var-row-custom"
+          :class="{ editing: editingId === item.id }"
+          @click="startEdit(item)"
+        >
+          <template v-if="editingId === item.id">
+            <div class="var-edit-row">
+              <input
+                v-model="editName"
+                class="var-edit-input"
+                placeholder="变量名"
+                @blur="saveCurrentEdit"
+                @keydown.enter="saveCurrentEdit"
+                @keydown.escape="cancelEdit"
               />
+              <ASelect
+                v-model:value="editType"
+                size="small"
+                class="var-edit-select"
+                :options="typeOptions"
+                @blur="saveCurrentEdit"
+              />
+              <button
+                type="button"
+                class="var-delete-btn"
+                title="删除变量"
+                @mousedown.prevent="deleteVariable(item.id)"
+              >
+                <DeleteOutlined />
+              </button>
             </div>
-            <div class="var-form-item var-form-item-wide">
-              <label class="var-form-label">说明</label>
-              <AInput v-model:value="editForm.description" placeholder="变量用途说明" size="small" />
+          </template>
+          <template v-else>
+            <div class="var-row-content">
+              <span class="var-name">{{ item.name }}</span>
+              <span class="var-type">{{ item.type }}</span>
             </div>
-            <div class="var-form-item var-form-item-wide">
-              <label class="var-form-label">默认值</label>
-              <AInput v-model:value="editForm.defaultValue" placeholder="可选" size="small" />
-            </div>
-          </div>
-          <div class="var-form-footer">
-            <AButton size="small" @click="cancelEdit">取消</AButton>
-            <AButton size="small" type="primary" @click="saveEdit">
-              <template #icon><CheckOutlined /></template>
-              {{ editingId ? '保存' : '添加' }}
-            </AButton>
+          </template>
+        </div>
+
+        <!-- 新增行 -->
+        <div v-if="adding" class="var-row var-row-custom editing">
+          <div class="var-edit-row">
+            <input
+              v-model="editName"
+              class="var-edit-input"
+              placeholder="变量名"
+              autofocus
+              @blur="saveCurrentEdit"
+              @keydown.enter="saveCurrentEdit"
+              @keydown.escape="cancelEdit"
+            />
+            <ASelect
+              v-model:value="editType"
+              size="small"
+              class="var-edit-select"
+              :options="typeOptions"
+              @blur="saveCurrentEdit"
+            />
           </div>
         </div>
 
-        <!-- 添加按钮 -->
-        <div v-if="!adding && !editingId" class="var-add-area">
-          <AButton type="dashed" size="small" block @click="startAdd">
-            <template #icon><PlusOutlined /></template>
-            添加自定义变量
-          </AButton>
+        <!-- 空状态 -->
+        <div
+          v-if="filteredSystemVariables.length === 0 && filteredCustomVariables.length === 0 && !adding"
+          class="var-empty"
+        >
+          暂无匹配的变量
         </div>
       </div>
     </div>
@@ -326,73 +351,88 @@ onUnmounted(() => {
   max-height: 56vh;
 }
 
-// ========== 标签切换 ==========
-.modal-tabs {
+// ========== 顶部操作栏 ==========
+.var-toolbar {
   display: flex;
-  gap: 0;
-  margin-bottom: 16px;
-  border-bottom: 1px solid #f0f0f0;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
 }
 
-.modal-tab {
-  padding: 6px 16px;
-  border: none;
-  border-bottom: 2px solid transparent;
-  background: transparent;
-  color: #8c8c8c;
+.var-search {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: #F2F4F7;
+  border-radius: 6px;
+}
+
+.search-icon {
+  color: #bfbfbf;
   font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  margin-bottom: -1px;
+  flex-shrink: 0;
+}
 
-  &:hover {
-    color: #434343;
-  }
+.search-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-size: 13px;
+  color: #262626;
+  background: transparent;
+  min-width: 0;
 
-  &.active {
-    color: #1677ff;
-    border-bottom-color: #1677ff;
+  &::placeholder {
+    color: #bfbfbf;
   }
 }
 
-// ========== 主体内容 ==========
-.modal-body {
+// ========== 变量列表容器 ==========
+.var-list-container {
   flex: 1;
   overflow-y: auto;
   min-height: 0;
 }
 
-// ========== 变量列表 ==========
-.var-list {
-  display: flex;
-  flex-direction: column;
-}
-
+// ========== 变量行 ==========
 .var-row {
-  padding: 10px 0;
-  border-bottom: 1px solid #fafafa;
+  padding: 8px 12px;
+  border-radius: 6px;
+  transition: background 0.15s;
 
-  &:last-child {
-    border-bottom: none;
+  & + .var-row {
+    margin-top: 2px;
   }
 }
 
-.var-row-top {
+.var-row-system {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.var-row-custom {
+  cursor: pointer;
+
+  &:hover {
+    background: rgba(0, 0, 0, 0.04);
+  }
+
+  &.editing {
+    background: #e6f4ff;
+    cursor: default;
+  }
+}
+
+.var-row-content {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-width: 0;
-}
-
-.var-dot {
-  flex-shrink: 0;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
 }
 
 .var-name {
+  flex: 1;
+  min-width: 0;
   font-size: 13px;
   font-weight: 600;
   color: #262626;
@@ -402,37 +442,76 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
-.var-type-label {
+.var-type {
   flex-shrink: 0;
-  margin-left: auto;
   font-size: 12px;
-  color: #bfbfbf;
+  color: #8c8c8c;
   font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
 }
 
-.var-row-desc {
-  margin-top: 4px;
-  padding-left: 15px;
-  font-size: 12px;
-  color: #8c8c8c;
-  line-height: 1.4;
+// ========== 分隔线 ==========
+.var-divider {
+  display: flex;
+  align-items: center;
+  padding: 12px 12px 6px;
 }
 
-.var-row-default {
-  margin-top: 2px;
-  padding-left: 15px;
+.var-divider-text {
   font-size: 11px;
-  color: #bfbfbf;
+  color: #8c8c8c;
+  letter-spacing: 0.5px;
+}
 
-  code {
-    padding: 1px 5px;
-    border-radius: 3px;
-    background: #f5f5f5;
-    font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
-    font-size: 11px;
+// ========== 编辑行 ==========
+.var-edit-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.var-edit-input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
+  outline: none;
+  transition: border-color 0.2s;
+
+  &:focus {
+    border-color: #1677ff;
   }
 }
 
+.var-edit-select {
+  width: 100px;
+}
+
+.var-delete-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #bfbfbf;
+  font-size: 13px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.2s;
+
+  &:hover {
+    color: #ff4d4f;
+    background: #fff1f0;
+  }
+}
+
+// ========== 空状态 ==========
 .var-empty {
   display: flex;
   align-items: center;
@@ -441,94 +520,10 @@ onUnmounted(() => {
   color: #bfbfbf;
   font-size: 13px;
 }
-
-// ========== 自定义变量行操作按钮 ==========
-.var-row-actions {
-  display: flex;
-  gap: 2px;
-  margin-left: 4px;
-  opacity: 0;
-  transition: opacity 0.15s ease;
-}
-
-.var-row-custom:hover .var-row-actions {
-  opacity: 1;
-}
-
-.var-row-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: #8c8c8c;
-  font-size: 12px;
-  cursor: pointer;
-
-  &:hover {
-    color: #1677ff;
-    background: #e6f4ff;
-  }
-
-  &.var-row-btn-del:hover {
-    color: #ff4d4f;
-    background: #fff1f0;
-  }
-}
-
-// ========== 编辑表单 ==========
-.var-form {
-  margin-top: 12px;
-  padding: 14px;
-  border: 1px solid #e6f4ff;
-  border-radius: 8px;
-  background: #fafcff;
-}
-
-.var-form-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px 12px;
-}
-
-.var-form-item {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.var-form-item-wide {
-  grid-column: 1 / -1;
-}
-
-.var-form-label {
-  font-size: 12px;
-  font-weight: 500;
-  color: #595959;
-}
-
-.var-form-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-// ========== 添加按钮 ==========
-.var-add-area {
-  margin-top: 12px;
-}
 </style>
 
 <style>
 /* 全局样式：弹窗内 ant 组件微调 */
-.var-modal .ant-input-sm {
-  font-size: 12px;
-}
-
 .var-modal .ant-select-sm {
   font-size: 12px;
 }

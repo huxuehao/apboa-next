@@ -26,6 +26,7 @@ export interface WorkflowRunQuery extends PageQuery {
 export interface WorkflowDefinition {
   nodes: WorkflowNodeDefinition[]
   edges: WorkflowEdgeDefinition[]
+  variables?: WorkflowVariable[]
   viewport?: { x: number; y: number; zoom: number }
   metadata?: {
     schemaVersion?: string
@@ -212,6 +213,16 @@ export interface WorkflowResourceMaps {
   caches: WorkflowResource[]
   datasources: WorkflowResource[]
   mqs: WorkflowResource[]
+}
+
+export type VariableType = 'string' | 'number' | 'boolean' | 'object' | 'array'
+
+export interface WorkflowVariable {
+  id: string
+  name: string
+  type: VariableType
+  source: 'system' | 'custom'
+  description?: string
 }
 
 export type FlowNodeData = {

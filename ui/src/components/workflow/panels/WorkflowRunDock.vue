@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, inject, ref, watch } from 'vue'
+import type { Ref } from 'vue'
 import { CloseOutlined, PlayCircleOutlined, BugOutlined, ReloadOutlined, CopyOutlined, CheckCircleFilled, CloseCircleFilled, PlayCircleFilled, ExclamationCircleFilled } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
 import ConfigCodeEditor from '@/components/editor/ConfigCodeEditor.vue'
-import type { WorkflowFlowNode, WorkflowNodeExecution, WorkflowRunRequest, WorkflowRunResult } from '@/types/workflow'
+import type { WorkflowFlowNode, WorkflowNodeExecution, WorkflowRunRequest, WorkflowRunResult, WorkflowVariable } from '@/types/workflow'
 
 const props = defineProps<{
   open: boolean
@@ -36,12 +37,16 @@ const hasStartParams = computed(() => startParams.value.length > 0)
 const runStatus = computed(() => props.result?.run?.status)
 const finalOutput = computed(() => props.result?.output ?? props.result?.run?.outputs ?? null)
 const inputIssues = computed(() => collectInputIssues())
+const workflowVariables = inject<Ref<WorkflowVariable[]>>('workflowVariables', ref([]))
+const hasCustomVariables = computed(() => workflowVariables.value.length > 0)
 
 watch(
   startParams,
   () => resetFromStartParams(),
   { immediate: true, deep: true },
 )
+
+watch(workflowVariables, () => syncVariablesFromWorkflow(), { deep: true })
 
 watch([paramValues, variablesText], syncInputText, { deep: true })
 
@@ -71,6 +76,53 @@ function defaultValueByType(type: string) {
   if (type === 'Array') return '[]'
   if (type === 'Object') return '{}'
   return ''
+}
+
+function variableDefaultValue(type: string): unknown {
+  switch (type) {
+    case 'string': return ''
+    case 'number': return 0
+    case 'boolean': return false
+    case 'object': return {}
+    case 'array': return []
+    default: return ''
+  }
+}
+
+function isValueTypeMatch(value: unknown, type: string): boolean {
+  if (value === undefined || value === null) return true
+  switch (type) {
+    case 'string': return typeof value === 'string'
+    case 'number': return typeof value === 'number'
+    case 'boolean': return typeof value === 'boolean'
+    case 'object': return typeof value === 'object' && !Array.isArray(value)
+    case 'array': return Array.isArray(value)
+    default: return true
+  }
+}
+
+function syncVariablesFromWorkflow() {
+  const vars = workflowVariables.value
+  if (!vars || vars.length === 0) {
+    variablesText.value = '{}'
+    return
+  }
+  const result: Record<string, unknown> = {}
+  try {
+    const existing = JSON.parse(variablesText.value || '{}')
+    for (const v of vars) {
+      if (existing[v.name] !== undefined && isValueTypeMatch(existing[v.name], v.type)) {
+        result[v.name] = existing[v.name]
+      } else {
+        result[v.name] = variableDefaultValue(v.type)
+      }
+    }
+  } catch {
+    for (const v of vars) {
+      result[v.name] = variableDefaultValue(v.type)
+    }
+  }
+  variablesText.value = JSON.stringify(result, null, 2)
 }
 
 function syncInputText() {
@@ -124,7 +176,7 @@ function collectInputIssues() {
   try {
     JSON.parse(variablesText.value || '{}')
   } catch {
-    issues.push('全局变量不是合法 JSON')
+    issues.push('全局自定义变量不是合法 JSON')
   }
   try {
     JSON.parse(inputText.value || '{}')
@@ -282,15 +334,17 @@ function beginResize(event: MouseEvent) {
             </div>
             <AEmpty v-else description="开始节点未定义输入参数" />
 
-            <div class="debug-section-title mt">全局变量</div>
-            <div class="debug-section-desc" style="margin-top: 2px;">定义可在工作流中引用的变量，格式为 JSON 对象。</div>
-            <ConfigCodeEditor
-              :model-value="variablesText"
-              language="json"
-              height="90px"
-              :maximize="false"
-              @update:model-value="(v: string) => variablesText = v"
-            />
+            <template v-if="hasCustomVariables">
+              <div class="debug-section-title mt">全局自定义变量</div>
+              <div class="debug-section-desc" style="margin-top: 2px;">定义可在工作流中引用的全局自定义变量，格式为 JSON 对象。</div>
+              <ConfigCodeEditor
+                :model-value="variablesText"
+                language="json"
+                height="90px"
+                :maximize="false"
+                @update:model-value="(v: string) => variablesText = v"
+              />
+            </template>
           </div>
           <div class="debug-footer">
             <AButton type="primary" :loading="loading" block @click="runWithValidation">

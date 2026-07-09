@@ -4,6 +4,7 @@ import type { ComputedRef } from 'vue'
 import { QuestionCircleOutlined } from '@ant-design/icons-vue'
 import BlurInput from '@/components/workflow/panels/shared/BlurInput.vue'
 import NodeOutputSelector from './NodeOutputSelector.vue'
+import VariableSelector from './VariableSelector.vue'
 import type { WorkflowFlowEdge, WorkflowFlowNode, WorkflowInputConfig } from '@/types/workflow'
 
 const sourceTypeOptions = [
@@ -147,11 +148,11 @@ function removeBinding(index: number) {
         @update:value="(value: string) => update(index, { value })"
       />
 
-      <BlurInput
+      <VariableSelector
         v-else-if="binding.sourceType === 'VARIABLE'"
         :model-value="binding.variableName"
-        placeholder="全局变量名"
         @update:model-value="(value: string) => update(index, { variableName: value })"
+        @clear="update(index, { variableName: undefined })"
       />
 
       <NodeOutputSelector

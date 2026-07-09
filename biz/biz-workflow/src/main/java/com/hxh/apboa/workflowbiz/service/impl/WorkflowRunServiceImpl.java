@@ -3,6 +3,7 @@ package com.hxh.apboa.workflowbiz.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hxh.apboa.common.UserDetail;
 import com.hxh.apboa.common.entity.Workflow;
 import com.hxh.apboa.common.entity.WorkflowNodeExecution;
 import com.hxh.apboa.common.entity.WorkflowRun;
@@ -10,6 +11,7 @@ import com.hxh.apboa.common.entity.WorkflowVersion;
 import com.hxh.apboa.common.enums.NodeRunStatus;
 import com.hxh.apboa.common.enums.NodeType;
 import com.hxh.apboa.common.enums.WorkflowRunStatus;
+import com.hxh.apboa.common.util.UserUtils;
 import com.hxh.apboa.node.base.NodeOutput;
 import com.hxh.apboa.node.base.context.NodeContext;
 import com.hxh.apboa.node.base.request.ParamItem;
@@ -28,7 +30,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -49,17 +50,17 @@ public class WorkflowRunServiceImpl extends ServiceImpl<WorkflowRunMapper, Workf
         if (workflow == null) {
             throw new RuntimeException("workflow not found");
         }
-        return doRun(workflow, request, false);
+        return doRun(workflow, request,  UserUtils.getUserDetail(), false);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public WorkflowRunResult run(Long workflowId, WorkflowRunRequest request) {
+    public WorkflowRunResult run(Long workflowId, WorkflowRunRequest request, UserDetail userDetail) {
         Workflow workflow = workflowMapper.selectById(workflowId);
         if (workflow == null) {
             throw new RuntimeException("workflow not found");
         }
-        return doRun(workflow, request, true);
+        return doRun(workflow, request, userDetail, true);
     }
 
     @Override
@@ -69,7 +70,7 @@ public class WorkflowRunServiceImpl extends ServiceImpl<WorkflowRunMapper, Workf
                 .orderByAsc(WorkflowNodeExecution::getStartTime));
     }
 
-    private WorkflowRunResult doRun(Workflow workflow, WorkflowRunRequest request, boolean publishedOnly) {
+    private WorkflowRunResult doRun(Workflow workflow, WorkflowRunRequest request, UserDetail userDetail, boolean publishedOnly) {
         WorkflowVersion publishedVersion = publishedOnly ? latestPublishedVersion(workflow.getId()) : null;
         Object config = publishedVersion == null ? workflow.getConfig() : publishedVersion.getConfig();
         if (config == null) {
@@ -97,6 +98,15 @@ public class WorkflowRunServiceImpl extends ServiceImpl<WorkflowRunMapper, Workf
         context.setRequestParams(toRequestParams(request));
         if (request != null && request.getVariables() != null) {
             request.getVariables().forEach(context.getVariables()::storeVariable);
+        }
+
+        if (userDetail != null) {
+            context.getVariables().storeVariable("tenantId", userDetail.getTenantId());
+            context.getVariables().storeVariable("tenantCode", userDetail.getTenantCode());
+            context.getVariables().storeVariable("userId", userDetail.getId());
+            context.getVariables().storeVariable("userName", userDetail.getUsername());
+        } else {
+            throw new RuntimeException("user detail is empty");
         }
 
         Object output = null;

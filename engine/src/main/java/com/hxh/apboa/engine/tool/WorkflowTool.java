@@ -1,9 +1,12 @@
 package com.hxh.apboa.engine.tool;
 
+import com.hxh.apboa.common.UserDetail;
 import com.hxh.apboa.common.entity.Workflow;
 import com.hxh.apboa.common.entity.WorkflowVersion;
 import com.hxh.apboa.common.util.FuncUtils;
 import com.hxh.apboa.common.util.JsonUtils;
+import com.hxh.apboa.common.vo.AccountVO;
+import com.hxh.apboa.engine.agui.AgentContext;
 import com.hxh.apboa.node.base.Node;
 import com.hxh.apboa.common.enums.NodeType;
 import com.hxh.apboa.node.base.inputout.OutputConfig;
@@ -118,9 +121,27 @@ public class WorkflowTool implements AgentTool {
 
     @Override
     public Mono<ToolResultBlock> callAsync(ToolCallParam param) {
+        AgentContext agentContext = param.getContext().get(AgentContext.class);
+        if (agentContext == null) {
+            return Mono.just(ToolResultBlock.error("System error, AgentContext is null"));
+        }
+
+        // 获取 UserDetail
+        AccountVO userInfo = agentContext.getUserInfo();
+        UserDetail userDetail = UserDetail.builder()
+                .id(userInfo.getId())
+                .name(userInfo.getNickname())
+                .username(userInfo.getUsername())
+                .email(userInfo.getEmail())
+                .tenantId(agentContext.getTenantId())
+                .tenantCode(agentContext.getTenantCode())
+                .tenantRole(userInfo.getTenantRole())
+                .build();
+
         return Mono.fromCallable(() -> {
             try {
-                WorkflowRunResult run = workflowRunService.run(workflow.getId(), getRunRequest(param));
+                // 执行工作流
+                WorkflowRunResult run = workflowRunService.run(workflow.getId(), getRunRequest(param), userDetail);
                 return ToolResultBlock.of(
                         param.getToolUseBlock().getId(),
                         param.getToolUseBlock().getName(),
