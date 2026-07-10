@@ -125,6 +125,14 @@ const router: Router = createRouter({
         title: '对话界面',
       },
     },
+    {
+      path: '/workflow',
+      name: 'Workflow',
+      component: () => import('./views/WorkflowDoc.vue'),
+      meta: {
+        title: '工作流',
+      },
+    },
   ],
   scrollBehavior() {
     return { top: 0 };
