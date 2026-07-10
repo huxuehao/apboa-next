@@ -35,6 +35,7 @@ Apboa Next 是基于ReAct理念的智能体开发与管理平台，旨在简化A
 - [贡献指南](#贡献指南)
 - [交流与赞助](#交流与赞助)
 - [开源协议](#开源协议)
+- [Workflow 专题](#workflow-可视化工作流引擎)
 
 ## 快速开始
 
@@ -145,6 +146,32 @@ Shell 命令通过独立 Proxy 进程执行，Docker 容器 `cap_drop: ALL` + `r
 
 完整多租户体系：租户发现、申请、审批流程，双层 RBAC（平台 3 级 + 租户 4 级）。MyBatis-Plus 租户拦截器自动注入，48 张业务表数据完全隔离。
 
+### 🔄 Workflow 可视化工作流引擎
+
+**30+ 开箱即用节点，让复杂业务流程像搭积木一样简单。**
+
+Apboa Workflow 是平台的核心能力之一，提供企业级可视化工作流编排引擎。通过拖拽式操作，用户可以快速构建包含 AI 智能体调用、数据库操作、外部 API 集成、消息队列推送等复杂业务流程，无需编写代码。
+
+**核心亮点：**
+
+| 特性 | 说明 |
+|------|------|
+| **30+ 节点类型** | 基础（START/END）、逻辑（IF_ELSE/LOOP/ITERATE/MATCH）、数据（DB CRUD）、缓存（Cache CRUD）、消息（MQ）、集成（AGENT/TOOL/MCP/HTTP/CODE）、转换（String/Split/Template/Serialize）、列表（Filter/Sort）、变量（Agg） |
+| **可视化编排** | 基于 Vue Flow 的画布引擎，拖拽节点、自动连线、对齐辅助线、小地图导航 |
+| **灵活数据绑定** | 四种输入来源：常量、变量、节点输出、Groovy 表达式，BFS 算法自动发现上游节点 |
+| **实时调试** | 执行轨迹可视化、节点级耗时统计、失败节点自动高亮、错误即时定位 |
+| **模板引擎** | 支持 String / Velocity / JSON 三种模板格式化器 |
+| **子工作流** | LOOP 节点支持内嵌子工作流，实现复杂循环逻辑 |
+| **桥接解耦** | workflow 模块定义接口，engine 模块提供实现，独立演进 |
+
+**典型应用场景：**
+
+- **智能客服**：接收消息 → AI 分析意图 → 条件分支 → 知识库查询 → 生成回答
+- **数据处理**：数据源 → 查询 → 迭代处理 → 格式化 → 缓存 → 消息通知
+- **多系统集成**：事件触发 → API 调用 → AI 决策 → MCP 执行 → 数据更新
+
+> 详细技术文档请参考：[Apboa Workflow 技术文章](ui/src/views/Workflow/apboa-workflow-技术文章.md)
+
 ---
 
 ## 系统架构
@@ -219,6 +246,7 @@ PgVector / Milvus / Elasticsearch / Qdrant / Weaviate——修改 `VECTOR_STORE_
 - **文档识别** — 与模型解耦的文档解析能力，可扩展支持任意类型文档内容识别
 - **交互式表单（APIP）** — AI 生成交互组件，对话不再局限于纯文本
 - **视觉增强（VEP）** — 结构化数据卡片与 ECharts 图表，信息呈现更加直观
+- **可视化工作流（Workflow）** — 30+ 节点类型、拖拽编排、实时调试、模板引擎、子工作流、桥接解耦
 
 ---
 
@@ -228,6 +256,7 @@ PgVector / Milvus / Elasticsearch / Qdrant / Weaviate——修改 `VECTOR_STORE_
 - **前端** — Vue 3.5 · Ant Design Vue 4 · Vite 7 · Pinia 3 · Vue Router 5
 - **编辑器** — CodeMirror 6（JS / TS / Java / Python / HTML / CSS / JSON / XML / Markdown）
 - **可视化** — ECharts 6 · Mermaid 11 · Vue Flow · KaTeX
+- **工作流** — Vue Flow 画布引擎 · Groovy 表达式 · Velocity 模板 · 30+ 节点类型
 - **数据库** — MySQL 8.0 · Redis 7 · pgvector (PG 16)
 - **消息通信** — WebSocket + Redis Pub/Sub 集群
 - **任务调度** — Quartz + Redis 分布式锁
@@ -245,6 +274,9 @@ PgVector / Milvus / Elasticsearch / Qdrant / Weaviate——修改 `VECTOR_STORE_
 
 |  ![智能体编排](image/image-20260617181923101.png)    |     ![会话记录](image/image-20260617181959087.png) |   ![数据可视化](image/image-20260617182021804.png)   |
 | ---- | ---- | ---- |
+
+| ![image-20260710171008016](image/image-20260710171008016.png) | ![image-20260710171108812](image/image-20260710171108812.png) |
+| ---- | ---- |
 
 ---
 
@@ -308,6 +340,9 @@ apboa-next/
 │   ├── security/         #   脚本安全扫描引擎
 │   ├── workspace/        #   工作空间 + 安全校验
 │   └── mpatch/           #   代码增量更新器
+├── workflow/             # 工作流引擎层
+│   ├── node/             #   30+ 节点实现（base/cache/code/condition/db/http/loop/mcp/mq/...）
+│   └── workflow/         #   工作流核心（Workflow/Edge/RunWorkflow）
 ├── scheduler/            # 调度层：Quartz + 分布式锁
 ├── heartbeat/            # 基础设施：心跳监控
 ├── runner-console/       # 应用：管理控制台（36 个 Controller）
