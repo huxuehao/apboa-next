@@ -17,6 +17,7 @@ import {
   AppstoreOutlined,
   BookOutlined,
   MessageOutlined,
+  BranchesOutlined,
 } from '@ant-design/icons-vue';
 import { RouterLink } from 'vue-router';
 
@@ -33,6 +34,7 @@ const features = [
   { icon: ApiOutlined, title: 'MCP 服务', desc: '接入和管理 MCP 协议服务，支持 HTTP/SSE/STDIO 协议，标准化工具调用方式', color: '#66BB6A' },
   { icon: DatabaseOutlined, title: '知识库', desc: '通过 RAG 技术将企业私有文档构建为可检索、可推理的结构化知识体系', color: '#42A5F5' },
   { icon: AppstoreOutlined, title: '技能包', desc: '组合多个工具和脚本形成技能包，实现复杂业务流程自动化', color: '#AB47BC' },
+  { icon: BranchesOutlined, title: '工作流编排', desc: '可视化拖拽编排业务流程，支持条件分支、循环迭代、数据处理等复杂逻辑', color: '#1677ff' },
 ];
 
 /**
@@ -49,6 +51,7 @@ const docNavItems = [
   { path: '/knowledge', icon: DatabaseOutlined, title: '知识库', desc: '通过 RAG 技术构建结构化知识体系，为智能体提供专业知识。', color: '#42A5F5' },
   { path: '/agent', icon: RobotOutlined, title: '智能体', desc: '创建、配置和管理智能体，支持自定义和A2A两种类型。', color: '#5C6BC0' },
   { path: '/chat', icon: MessageOutlined, title: '对话界面', desc: '与智能体进行流式对话，支持文件上传、工具调用确认等交互能力。', color: '#FF8C00' },
+  { path: '/workflow', icon: BranchesOutlined, title: '工作流', desc: '可视化编排业务流程，支持节点拖拽、条件分支、循环迭代等复杂逻辑。', color: '#1677ff' },
   { path: '/markdown-extension', icon: BookOutlined, title: 'Markdown 扩展指南', desc: '了解平台支持的 Markdown 扩展语法，包括数学公式、流程图、代码高亮等。', color: '#409eff' },
 ];
 </script>

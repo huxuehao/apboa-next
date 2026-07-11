@@ -3,6 +3,8 @@ import 'highlight.js/styles/github.min.css';
 import 'katex/dist/katex.min.css';
 import './styles/markdown.scss';
 import './assets/main.css'
+import './assets/iconfont/iconfont.css'
+
 
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'

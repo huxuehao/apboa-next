@@ -87,6 +87,31 @@ export enum HealthStatus {
 }
 
 /**
+ * 工作流数据源类型
+ */
+export enum DatasourceType {
+  MYSQL = 'MYSQL',
+  ORACLE = 'ORACLE',
+  POSTGRESQL = 'POSTGRESQL'
+}
+
+/**
+ * 工作流缓存类型
+ */
+export enum CacheType {
+  REDIS = 'REDIS'
+}
+
+/**
+ * 工作流消息队列类型
+ */
+export enum MqType {
+  KAFKA = 'KAFKA',
+  RABBITMQ = 'RABBITMQ',
+  ROCKETMQ = 'ROCKETMQ'
+}
+
+/**
  * 知识库类型
  */
 export enum KbType {

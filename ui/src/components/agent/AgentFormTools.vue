@@ -12,7 +12,8 @@ import * as toolApi from '@/api/tool'
 import * as skillApi from '@/api/skill'
 import * as sensitiveApi from '@/api/sensitive'
 import * as hookApi from '@/api/hook'
-import type { ToolVO, SkillPackageVO, SensitiveWordConfigVO, HookConfigVO } from '@/types'
+import * as workflowApi from '@/api/workflow'
+import type { ToolVO, SkillPackageVO, SensitiveWordConfigVO, HookConfigVO, Workflow } from '@/types'
 import { ToolChoiceStrategy } from '@/types'
 import { countCommonElements } from '@/utils/tools'
 
@@ -25,6 +26,7 @@ const props = defineProps<{
     toolChoiceStrategy: ToolChoiceStrategy
     tool: string[]
     specificToolName: string
+    workflow: string[]
     skill: string[]
     sensitiveWordConfigId: string
     sensitiveFilterEnabled: boolean
@@ -48,6 +50,7 @@ const skillCategories = ref<string[]>([])
 const allSkills = ref<SkillPackageVO[]>([])
 const sensitiveCategories = ref<string[]>([])
 const allSensitives = ref<SensitiveWordConfigVO[]>([])
+const allWorkflows = ref<Workflow[]>([])
 
 /**
  * 表单数据
@@ -244,6 +247,14 @@ async function loadAllHooks() {
 }
 
 /**
+ * 加载所有已发布启用的工作流
+ */
+async function loadAllWorkflows() {
+  const response = await workflowApi.workflowPage({ page: 1, size: 1000, status: 'PUBLISHED', enabled: true })
+  allWorkflows.value = response.data.data.records || []
+}
+
+/**
  * 验证表单
  */
 async function validate(): Promise<boolean> {
@@ -298,6 +309,17 @@ const handleHookChange = (hookId: string, checked: boolean) => {
   }
 };
 
+const handleWorkflowChange = (workflowId: string, checked: boolean) => {
+  if (checked) {
+    formData.value.workflow.push(workflowId);
+  } else {
+    const index = formData.value.workflow.indexOf(workflowId);
+    if (index > -1) {
+      formData.value.workflow.splice(index, 1);
+    }
+  }
+};
+
 watch(
   () => selectedHooks.value.length,
   async (len) => {
@@ -317,6 +339,7 @@ onMounted(async () => {
   loadAllSkills()
   loadSensitiveCategories()
   loadAllSensitives()
+  loadAllWorkflows()
   if (selectedHooks.value.length > 0) {
     await nextTick()
     initHookSortable()
@@ -424,6 +447,28 @@ defineExpose({
         </ASelect>
         <div class="text-placeholder text-xs mt-xs">
           从已选择的工具中指定一个工具作为默认工具
+        </div>
+      </AFormItem>
+
+      <AFormItem label="工作流">
+        <div class="checkbox-grid" v-if="allWorkflows?.length > 0">
+          <ACheckbox
+            v-for="workflow in allWorkflows"
+            :checked="formData.workflow.includes(workflow.id as string)"
+            @change="(e: any) => handleWorkflowChange(workflow.id as string, e.target.checked)"
+            :key="workflow.id"
+            :value="workflow.id"
+            class="checkbox-item"
+          >
+            <div class="item-info">
+              <div class="item-name text-ellipsis" :title="workflow.name">{{ workflow.name }}</div>
+              <div class="item-desc text-placeholder text-xs text-ellipsis" :title="workflow.remark">{{ workflow.remark }}</div>
+            </div>
+          </ACheckbox>
+        </div>
+        <div v-else class="text-placeholder mt-xs">
+          <AButton type="text">暂无已发布的工作流</AButton>
+          <AButton type="link" @click="loadAllWorkflows()">刷新</AButton>
         </div>
       </AFormItem>
 

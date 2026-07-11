@@ -14,6 +14,10 @@ import java.util.*;
 public class FuncUtils {
     private static final Map<String, String> EVN_VALUES_CACHE = new HashMap<>();
 
+    public static boolean isNotEmpty(Object obj) {
+        return !isEmpty(obj);
+    }
+
     public static boolean isEmpty(Object obj) {
         if (obj == null) {
             return true;

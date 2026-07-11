@@ -14,6 +14,7 @@ import {
   FileTextOutlined,
   ApiOutlined,
   RobotOutlined,
+  ApartmentOutlined,
   ToolOutlined,
   AppstoreOutlined,
   CloudServerOutlined,
@@ -32,6 +33,7 @@ const iconMap: Record<string, Component> = {
   'prompt': FileTextOutlined,
   'model': ApiOutlined,
   'agent': RobotOutlined,
+  'workflow': ApartmentOutlined,
   'tool': ToolOutlined,
   'hook': LoginOutlined,
   'skill': AppstoreOutlined,
@@ -82,4 +84,7 @@ const selectedValue = computed({
 
 <style scoped lang="scss">
 @use '@/styles/components/menu' as *;
+:deep(.ant-segmented) {
+  background-color: transparent;
+}
 </style>

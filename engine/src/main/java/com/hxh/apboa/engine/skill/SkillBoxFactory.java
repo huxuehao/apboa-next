@@ -3,14 +3,10 @@ package com.hxh.apboa.engine.skill;
 import com.hxh.apboa.common.consts.SysConst;
 import com.hxh.apboa.common.entity.*;
 import com.hxh.apboa.common.enums.SkillFileType;
-import com.hxh.apboa.common.enums.ToolType;
 import com.hxh.apboa.engine.agui.AgentContext;
-import com.hxh.apboa.engine.hook.builtins.IConfirmationHook;
 import com.hxh.apboa.engine.skill.builtins.UserInteractionProtocolSkill;
 import com.hxh.apboa.engine.skill.builtins.VisionEnhancementProtocolSkill;
 import com.hxh.apboa.engine.tool.ToolkitFactory;
-import com.hxh.apboa.engine.tool.ToolsRegister;
-import com.hxh.apboa.engine.tool.dynamices.DynamicAgentTool;
 import com.hxh.apboa.engine.workspace.skills.SearchReplaceSkill;
 import com.hxh.apboa.engine.workspace.skills.WorkspaceSkill;
 import com.hxh.apboa.skill.service.AgentSkillPackageService;
@@ -26,6 +22,7 @@ import io.agentscope.core.tool.coding.ShellCommandTool;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -54,6 +51,29 @@ public class SkillBoxFactory {
      */
     public SkillBox getSkillBox(AgentDefinition agentDefinition, CodeExecutionConfig codeExecutionConfig) {
         return getSkillBox(agentDefinition, new Toolkit(), codeExecutionConfig);
+    }
+
+    /**
+     * 根据技能包ID列表构建SkillBox。
+     *
+     * @param skillPackageIds 技能包ID列表
+     * @param toolkit         工具箱
+     * @return SkillBox
+     */
+    public SkillBox getSkillBox(List<Long> skillPackageIds, Toolkit toolkit) {
+        Toolkit currentToolkit = toolkit == null ? new Toolkit() : toolkit;
+        SkillBox skillBox = new SkillBox(currentToolkit);
+
+        // 注册智能体基础技能，不启用代码执行能力。
+        skillBox.registerSkill(UserInteractionProtocolSkill.getAgentSkill());
+        skillBox.registerSkill(VisionEnhancementProtocolSkill.getAgentSkill());
+
+        if (skillPackageIds == null || skillPackageIds.isEmpty()) {
+            return skillBox;
+        }
+
+        registerSkills(skillBox, skillPackageIds, currentToolkit);
+        return skillBox;
     }
 
     /**
@@ -123,10 +143,21 @@ public class SkillBoxFactory {
                 .findFirst()
                 .orElse("");
 
-        AgentSkill.Builder skillBuilder = AgentSkill.builder()
+        List<SkillFile> resourceFiles = files.stream()
+                .filter(f -> f.getFileType() != SkillFileType.SKILL_MD)
+                .toList();
+
+        AgentSkill baseSkill = AgentSkill.builder()
                 .name(skillPackage.getName())
                 .description(skillPackage.getDescription())
-                .skillContent(addToolInfoToContent(skillContent, toolConfigs))
+                .skillContent((skillContent))
+                .build();
+
+        AgentSkill.Builder skillBuilder = baseSkill.toBuilder()
+                .skillContent(
+                        addToolInfoToContent(
+                                appendResourceUsageHint(baseSkill, resourceFiles),
+                                toolConfigs))
                 .source(SysConst.SKILL_SOURCE);
 
         // 添加所有资源引用（references/examples/scripts 类型的文件）
@@ -137,7 +168,58 @@ public class SkillBoxFactory {
         skillBox.registration().skill(skillBuilder.build()).apply();
     }
 
-    public String addToolInfoToContent(String content, List<ToolConfig> toolConfigs) {
+    /**
+     * 添加资源使用提示
+     *
+     * @param baseSkill     基础技能
+     * @param resourceFiles 资源文件列表
+     * @return 添加资源使用提示后的技能内容
+     */
+    private String appendResourceUsageHint(AgentSkill baseSkill, List<SkillFile> resourceFiles) {
+        if (resourceFiles == null || resourceFiles.isEmpty()) {
+            return baseSkill.getSkillContent();
+        }
+
+        List<String> resourcePaths = resourceFiles.stream()
+                .filter(f -> f.getFileType() != SkillFileType.SKILL_MD)
+                .map(SkillFile::getFilePath)
+                .filter(path -> path != null && !path.isBlank())
+                .map(path -> path.replace('\\', '/'))
+                .distinct()
+                .sorted(Comparator.naturalOrder())
+                .toList();
+        if (resourcePaths.isEmpty()) {
+            return baseSkill.getSkillContent();
+        }
+
+        String skillContent = baseSkill.getSkillContent();
+        String resourceList = resourcePaths.stream()
+                .map(path -> "- `" + path + "`")
+                .collect(Collectors.joining("\n"));
+
+        String hint = """
+            
+            ================ Skill Resources Explanation ==================
+            
+            When this skill refers to files in this directory, examples/, references/, or scripts/,
+            treat them as skill resources, not workspace files. Load them with:
+            
+            `load_skill_through_path(skillId="%s", path="<resource-path>")`
+            
+            Available resource paths:
+            %s""".formatted(baseSkill.getSkillId(), resourceList);
+
+        return (skillContent == null ? "" : skillContent) + hint;
+    }
+
+    /**
+     * 添加工具信息到技能内容
+     *
+     * @param content       技能内容
+     * @param toolConfigs   工具配置列表
+     * @return 添加工具信息后的技能内容
+     */
+    private String addToolInfoToContent(String content, List<ToolConfig> toolConfigs) {
         if (toolConfigs == null || toolConfigs.isEmpty()) {
             return content;
         }
@@ -155,7 +237,7 @@ public class SkillBoxFactory {
      * @param skillBox SkillBox
      * @param config   代码执行配置
      */
-    public void configureCodeExecution(SkillBox skillBox, CodeExecutionConfig config) {
+    private void configureCodeExecution(SkillBox skillBox, CodeExecutionConfig config) {
         if (skillBox == null || config == null) {
             return;
         }

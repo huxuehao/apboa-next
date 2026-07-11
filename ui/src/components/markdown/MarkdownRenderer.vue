@@ -19,6 +19,8 @@
         v-else-if="part.type === 'vep'"
         :code="part.code as string"
         :is-streaming="isStreaming"
+        :disabled="disabled"
+        @retry="emit('vepRetry', $event)"
       />
     </template>
   </div>
@@ -43,6 +45,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   interactionSubmit: [payload: InteractionSubmitPayload]
   uipRetry: [uipCode: string]
+  vepRetry: [vepCode: string]
 }>()
 
 const container = ref<HTMLElement>()

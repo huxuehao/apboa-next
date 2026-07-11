@@ -385,6 +385,16 @@ const handleUIPRetry = async (uipCode: string) => {
   await sendMessage(retryText, [{ id: 'uip', role: 'user', content: retryText }] as ChatMessageVO[])
 }
 
+// 处理 VEP 视觉卡片渲染失败重试
+const handleVEPRetry = async (vepCode: string) => {
+  if (!currentSessionId.value || isRunning.value) return
+
+  // 构造重试消息：提示文本 + 原始 VEP 内容，让智能体参考修正
+  const retryText = `上一条消息中的视觉卡片生成有误，请重新生成。\n\n原始卡片内容：\n${vepCode}`
+
+  await sendMessage(retryText, [{ id: 'vep', role: 'user', content: retryText }] as ChatMessageVO[])
+}
+
 // 发送消息
 const handleSend = async () => {
   const text = inputText.value.trim()
@@ -594,6 +604,7 @@ watch(isRunning, (running) => {
       @plan-destroyed="currentPlan = null"
       @interaction-submit="handleInteractionSubmit"
       @uip-retry="handleUIPRetry"
+      @vep-retry="handleVEPRetry"
     />
     <!-- 工作空间面板（作为 flex 子项从右侧滑出） -->
     <WorkspacePanel

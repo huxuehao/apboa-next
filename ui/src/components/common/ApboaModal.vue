@@ -307,6 +307,8 @@ watch(
   padding: 0 18px;
   transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
+  border-left: 1px solid var(--ant-color-fill-2, rgba(0, 0, 0, 0.06));
+  border-right: 1px solid var(--ant-color-fill-2, rgba(0, 0, 0, 0.06));
 }
 
 /* ===================== Header ===================== */

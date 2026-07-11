@@ -86,6 +86,7 @@ defineEmits<{
   inputTagPreview: [value: unknown]
   interactionSubmit: [payload: InteractionSubmitPayload]
   uipRetry: [uipCode: string]
+  vepRetry: [vepCode: string]
 }>()
 
 const isUser = computed(() => props.role === 'user')
@@ -259,7 +260,8 @@ const openPreview = (index: number) => {
             :is-streaming="isStreaming"
             :disabled="currentIndex !== totalMessages - 1"
             @interaction-submit="$emit('interactionSubmit', $event)"
-            @uip-retry="$emit('uipRetry', $event)" />
+            @uip-retry="$emit('uipRetry', $event)"
+            @vep-retry="$emit('vepRetry', $event)" />
           <!-- 复制按钮：悬浮显现于正文下方 -->
           <span
             v-if="content"

@@ -16,6 +16,7 @@ defineEmits<{
   (e: 'inputTagPreview', value: FlatFileItem): void
   (e: 'interactionSubmit', payload: InteractionSubmitPayload): void
   (e: 'uipRetry', uipCode: string): void
+  (e: 'vepRetry', vepCode: string): void
 }>()
 </script>
 
@@ -26,6 +27,7 @@ defineEmits<{
       @inputTagPreview="$emit('inputTagPreview', $event as FlatFileItem)"
       @interaction-submit="$emit('interactionSubmit', $event)"
       @uip-retry="$emit('uipRetry', $event)"
+      @vep-retry="$emit('vepRetry', $event)"
       :id="msg.id"
       :current-index="index"
       :total-messages="messages.length"

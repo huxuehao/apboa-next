@@ -18,6 +18,7 @@ COPY common/pom.xml ./common/
 COPY heartbeat/pom.xml ./heartbeat/
 COPY engine/pom.xml ./engine/
 COPY scheduler/pom.xml ./scheduler/
+COPY workflow/pom.xml ./workflow/
 COPY runner-console/pom.xml ./runner-console/
 COPY runner-runtime/pom.xml ./runner-runtime/
 COPY runner-proxy/pom.xml ./runner-proxy/
@@ -40,6 +41,7 @@ COPY biz/biz-sk/pom.xml ./biz/biz-sk/
 COPY biz/biz-skill/pom.xml ./biz/biz-skill/
 COPY biz/biz-studio/pom.xml ./biz/biz-studio/
 COPY biz/biz-tool/pom.xml ./biz/biz-tool/
+COPY biz/biz-workflow/pom.xml ./biz/biz-workflow/
 
 # 复制 Maven 私有仓库配置
 COPY docker/maven/settings.xml /root/.m2/settings.xml

@@ -107,6 +107,7 @@ export interface AgentDefinitionVO {
   modelConfigId: string
   modelParamsOverride: Record<string, unknown> | null
   skill: string[]
+  workflow: string[]
   tool: string[]
   mcp: string[]
   mcpBindings: AgentMcpBindingVO[]

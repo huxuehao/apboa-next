@@ -67,6 +67,7 @@ const formData = ref({
     toolChoiceStrategy: ToolChoiceStrategy.AUTO,
     tool: [] as string[],
     specificToolName: '',
+    workflow: [] as string[],
     skill: [] as string[],
     sensitiveWordConfigId: '',
     sensitiveFilterEnabled: false
@@ -157,6 +158,7 @@ watch(
           toolChoiceStrategy: props.data.toolChoiceStrategy,
           tool: props.data.tool || [],
           specificToolName: props.data.specificToolName || '',
+          workflow: props.data.workflow || [],
           skill: props.data.skill || [],
           sensitiveWordConfigId: props.data.sensitiveWordConfigId || '',
           sensitiveFilterEnabled: props.data.sensitiveFilterEnabled
@@ -214,6 +216,7 @@ function resetForm() {
       toolChoiceStrategy: ToolChoiceStrategy.AUTO,
       tool: [],
       specificToolName: '',
+      workflow: [],
       skill: [],
       sensitiveWordConfigId: '',
       sensitiveFilterEnabled: false
@@ -298,6 +301,7 @@ async function handleSubmit() {
       toolChoiceStrategy: formData.value.tools.toolChoiceStrategy,
       tool: formData.value.tools.tool,
       specificToolName: formData.value.tools.specificToolName,
+      workflow: formData.value.tools.workflow,
       skill: formData.value.tools.skill,
       sensitiveWordConfigId: formData.value.tools.sensitiveWordConfigId,
       sensitiveFilterEnabled: formData.value.tools.sensitiveFilterEnabled,

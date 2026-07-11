@@ -66,6 +66,7 @@ const emit = defineEmits<{
   (e: 'planDestroyed'): void
   (e: 'interactionSubmit', payload: InteractionSubmitPayload): void
   (e: 'uipRetry', uipCode: string): void
+  (e: 'vepRetry', vepCode: string): void
 }>()
 
 // 滚动容器 ref
@@ -316,6 +317,7 @@ defineExpose({
             @toolContent="(content: any) => $emit('toolContent', content)"
             @interaction-submit="$emit('interactionSubmit', $event)"
             @uip-retry="$emit('uipRetry', $event)"
+            @vep-retry="$emit('vepRetry', $event)"
           />
         </div>
         <MessageNavigator

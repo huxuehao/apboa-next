@@ -23,6 +23,9 @@ export const RouteNames = {
 
   // Agent管理
   AGENT: 'Agent',
+  WORKFLOW: 'Workflow',
+  WORKFLOW_NEW: 'WorkflowNew',
+  WORKFLOW_EDIT: 'WorkflowEdit',
 
   // 模型管理
   MODEL: 'Model',
@@ -82,6 +85,9 @@ export const RoutePaths = {
 
   // Agent管理
   AGENT: 'agent',
+  WORKFLOW: 'workflow',
+  WORKFLOW_NEW: 'workflow/new',
+  WORKFLOW_EDIT: 'workflow/:id',
 
   // 模型管理
   MODEL: 'model',

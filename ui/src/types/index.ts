@@ -32,3 +32,8 @@ export * from './chat-mention'
 
 // Plan 类型
 export * from './plan'
+
+export * from './workflow'
+
+// Workflow resource maintenance types
+export * from './workflowResources'

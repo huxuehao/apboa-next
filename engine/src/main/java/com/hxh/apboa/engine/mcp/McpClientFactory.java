@@ -8,6 +8,7 @@ import com.hxh.apboa.common.enums.McpActivationStatus;
 import com.hxh.apboa.common.enums.McpProtocol;
 import com.hxh.apboa.common.enums.McpToolExposureMode;
 import com.hxh.apboa.common.vo.AgentMcpBindingVO;
+import com.hxh.apboa.node.agent.McpConfig;
 import com.hxh.apboa.mcp.config.impl.HttpMcpClientConfig;
 import com.hxh.apboa.mcp.config.impl.SseMcpClientConfig;
 import com.hxh.apboa.mcp.config.impl.StdioMcpClientConfig;
@@ -109,6 +110,66 @@ public class McpClientFactory {
             if (runtimeTools.isEmpty()) {
                 closeStaleContext(mcpId);
                 log.warn("MCP '{}' has no runtime tools after governance filtering; skip lazy registration",
+                        mcpServer.getName());
+                continue;
+            }
+
+            LazyMcpAgentTool.RuntimeDegradeContext degradeContext = new LazyMcpAgentTool.RuntimeDegradeContext(
+                    mcpServer.getId(),
+                    mcpServer.getName(),
+                    mcpServer.getActivationRevision(),
+                    mcpServer.getConfigHash(),
+                    mcpServer.getRuntimeFailThreshold());
+
+            runtimeTools.forEach(tool -> {
+                McpSchema.Tool toolSchema = parseToolSchema(tool);
+                if (toolSchema == null) {
+                    return;
+                }
+                result.add(new LazyMcpAgentTool(
+                        degradeContext,
+                        toolSchema,
+                        () -> getInitializedClient(mcpServer.getId()),
+                        mcpRuntimeDegradeService));
+            });
+        }
+        return result;
+    }
+
+    /**
+     * 根据节点配置构建懒加载MCP工具。
+     *
+     * @param mcps MCP节点配置列表
+     * @return 懒加载MCP工具列表
+     */
+    public List<AgentTool> getLazyMcpTools(List<McpConfig> mcps) {
+        List<AgentTool> result = new ArrayList<>();
+        if (mcps == null || mcps.isEmpty()) {
+            return result;
+        }
+
+        for (McpConfig config : mcps) {
+            Long mcpId = config.getMcpServerId();
+            McpServer mcpServer = mcpServerService.getById(mcpId);
+            if (!isRuntimeAvailable(mcpServer)) {
+                closeStaleContext(mcpId);
+                continue;
+            }
+
+            mcpToolService.ensureBackfilledFromCache(mcpServer);
+            List<McpTool> runtimeTools = mcpToolService.listRuntimeTools(mcpId);
+            if (config.getExposureMode() == McpToolExposureMode.SELECTED_ONLY) {
+                Set<Long> selectedIds = new HashSet<>(config.getMcpToolIds() == null
+                        ? List.of()
+                        : config.getMcpToolIds());
+                runtimeTools = runtimeTools.stream()
+                        .filter(tool -> selectedIds.contains(tool.getId()))
+                        .toList();
+            }
+
+            if (runtimeTools.isEmpty()) {
+                closeStaleContext(mcpId);
+                log.warn("MCP '{}' has no runtime tools after workflow node filtering; skip lazy registration",
                         mcpServer.getName());
                 continue;
             }

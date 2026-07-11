@@ -172,4 +172,14 @@ public class AgentDefinitionController {
     public R<List<SkillPackage>> getEnabledSkillsOfAgent(@PathVariable("agentId") Long agentId) {
         return R.data(agentDefinitionService.getEnabledSkillsOfAgent(agentId));
     }
+
+    /**
+     * 获取Agent启用的工作流
+     */
+    @SkAccess
+    @ChatKeyAccess
+    @GetMapping("/{agentId}/enabled/workflows")
+    public R<List<Workflow>> getEnabledWorkflowsOfAgent(@PathVariable("agentId") Long agentId) {
+        return R.data(agentDefinitionService.getEnabledWorkflowsOfAgent(agentId));
+    }
 }

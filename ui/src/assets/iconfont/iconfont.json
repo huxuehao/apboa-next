@@ -1,0 +1,268 @@
+{
+  "id": "5065047",
+  "name": "RouteLab-node",
+  "font_family": "iconfont",
+  "css_prefix_text": "icon-node",
+  "description": "",
+  "glyphs": [
+    {
+      "icon_id": "4734164",
+      "name": "联网",
+      "font_class": "online_search",
+      "unicode": "e613",
+      "unicode_decimal": 58899
+    },
+    {
+      "icon_id": "4958750",
+      "name": "提问",
+      "font_class": "question",
+      "unicode": "e82f",
+      "unicode_decimal": 59439
+    },
+    {
+      "icon_id": "5428219",
+      "name": "业务模块",
+      "font_class": "business",
+      "unicode": "e608",
+      "unicode_decimal": 58888
+    },
+    {
+      "icon_id": "5755492",
+      "name": "工具",
+      "font_class": "tool",
+      "unicode": "e679",
+      "unicode_decimal": 59001
+    },
+    {
+      "icon_id": "6570230",
+      "name": "文档",
+      "font_class": "doc",
+      "unicode": "e61b",
+      "unicode_decimal": 58907
+    },
+    {
+      "icon_id": "9486967",
+      "name": "工作流程",
+      "font_class": "workflow",
+      "unicode": "e60f",
+      "unicode_decimal": 58895
+    },
+    {
+      "icon_id": "10811795",
+      "name": "清单",
+      "font_class": "list",
+      "unicode": "e632",
+      "unicode_decimal": 58930
+    },
+    {
+      "icon_id": "20647546",
+      "name": "知识库",
+      "font_class": "knowledge_base",
+      "unicode": "e602",
+      "unicode_decimal": 58882
+    },
+    {
+      "icon_id": "40621753",
+      "name": "变量",
+      "font_class": "variable",
+      "unicode": "e61f",
+      "unicode_decimal": 58911
+    },
+    {
+      "icon_id": "41885209",
+      "name": "文本处理",
+      "font_class": "text",
+      "unicode": "e766",
+      "unicode_decimal": 59238
+    },
+    {
+      "icon_id": "45599122",
+      "name": "MCP",
+      "font_class": "mcp",
+      "unicode": "e9d8",
+      "unicode_decimal": 59864
+    },
+    {
+      "icon_id": "46765830",
+      "name": "多模态",
+      "font_class": "multimodal",
+      "unicode": "e603",
+      "unicode_decimal": 58883
+    },
+    {
+      "icon_id": "21053793",
+      "name": "缓存",
+      "font_class": "cache",
+      "unicode": "e684",
+      "unicode_decimal": 59012
+    },
+    {
+      "icon_id": "33680120",
+      "name": "非空选择",
+      "font_class": "non_empty_select",
+      "unicode": "e634",
+      "unicode_decimal": 58932
+    },
+    {
+      "icon_id": "430682",
+      "name": "结束",
+      "font_class": "end",
+      "unicode": "e6de",
+      "unicode_decimal": 59102
+    },
+    {
+      "icon_id": "1393668",
+      "name": "代码执行",
+      "font_class": "code",
+      "unicode": "e6f7",
+      "unicode_decimal": 59127
+    },
+    {
+      "icon_id": "2593577",
+      "name": "列表排序",
+      "font_class": "list_sort",
+      "unicode": "e609",
+      "unicode_decimal": 58889
+    },
+    {
+      "icon_id": "7712224",
+      "name": "消息推送",
+      "font_class": "mq_push",
+      "unicode": "e729",
+      "unicode_decimal": 59177
+    },
+    {
+      "icon_id": "9587698",
+      "name": "循环",
+      "font_class": "loop",
+      "unicode": "e62b",
+      "unicode_decimal": 58923
+    },
+    {
+      "icon_id": "9789051",
+      "name": "列表过滤",
+      "font_class": "list_filter",
+      "unicode": "e718",
+      "unicode_decimal": 59160
+    },
+    {
+      "icon_id": "10047417",
+      "name": "字符串模版",
+      "font_class": "string_template",
+      "unicode": "e69f",
+      "unicode_decimal": 59039
+    },
+    {
+      "icon_id": "11320697",
+      "name": "插件",
+      "font_class": "plugin",
+      "unicode": "e7b6",
+      "unicode_decimal": 59318
+    },
+    {
+      "icon_id": "18169751",
+      "name": "更新数据",
+      "font_class": "db_update",
+      "unicode": "e93d",
+      "unicode_decimal": 59709
+    },
+    {
+      "icon_id": "18169758",
+      "name": "查询数据",
+      "font_class": "db_select",
+      "unicode": "e93f",
+      "unicode_decimal": 59711
+    },
+    {
+      "icon_id": "33493966",
+      "name": "外部http请求",
+      "font_class": "http_external",
+      "unicode": "e9d7",
+      "unicode_decimal": 59863
+    },
+    {
+      "icon_id": "34240285",
+      "name": "结果匹配",
+      "font_class": "match_result",
+      "unicode": "e600",
+      "unicode_decimal": 58880
+    },
+    {
+      "icon_id": "34966368",
+      "name": "变量聚合",
+      "font_class": "variable_agg",
+      "unicode": "e680",
+      "unicode_decimal": 59008
+    },
+    {
+      "icon_id": "36756565",
+      "name": "字符串拆分",
+      "font_class": "string_split",
+      "unicode": "ed26",
+      "unicode_decimal": 60710
+    },
+    {
+      "icon_id": "38980287",
+      "name": "内联http请求",
+      "font_class": "http_inline",
+      "unicode": "e619",
+      "unicode_decimal": 58905
+    },
+    {
+      "icon_id": "42852004",
+      "name": "开始",
+      "font_class": "start",
+      "unicode": "e8e8",
+      "unicode_decimal": 59624
+    },
+    {
+      "icon_id": "44634192",
+      "name": "反序列化",
+      "font_class": "unserialize",
+      "unicode": "e601",
+      "unicode_decimal": 58881
+    },
+    {
+      "icon_id": "45510522",
+      "name": "迭代",
+      "font_class": "iterate",
+      "unicode": "e62a",
+      "unicode_decimal": 58922
+    },
+    {
+      "icon_id": "45629419",
+      "name": "序列化",
+      "font_class": "serialize",
+      "unicode": "e665",
+      "unicode_decimal": 58981
+    },
+    {
+      "icon_id": "45883066",
+      "name": "条件分支",
+      "font_class": "if_else",
+      "unicode": "e616",
+      "unicode_decimal": 58902
+    },
+    {
+      "icon_id": "45969863",
+      "name": "大模型",
+      "font_class": "llm",
+      "unicode": "e8f1",
+      "unicode_decimal": 59633
+    },
+    {
+      "icon_id": "46032024",
+      "name": "新增数据",
+      "font_class": "db_insert",
+      "unicode": "e80a",
+      "unicode_decimal": 59402
+    },
+    {
+      "icon_id": "46032025",
+      "name": "删除数据",
+      "font_class": "db_delete",
+      "unicode": "e80b",
+      "unicode_decimal": 59403
+    }
+  ]
+}

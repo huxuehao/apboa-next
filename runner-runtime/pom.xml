@@ -21,6 +21,10 @@
             <groupId>com.hxh.apboa.next</groupId>
             <artifactId>scheduler</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.hxh.apboa.next</groupId>
+            <artifactId>biz-workflow</artifactId>
+        </dependency>
         <!-- 心跳上报模块 -->
         <dependency>
             <groupId>com.hxh.apboa.next</groupId>

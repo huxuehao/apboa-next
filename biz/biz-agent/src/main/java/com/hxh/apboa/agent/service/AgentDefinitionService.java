@@ -3,6 +3,7 @@ package com.hxh.apboa.agent.service;
 import com.hxh.apboa.common.entity.AgentDefinition;
 import com.hxh.apboa.common.entity.SkillPackage;
 import com.hxh.apboa.common.entity.ToolConfig;
+import com.hxh.apboa.common.entity.Workflow;
 import com.hxh.apboa.common.vo.AgentDefinitionVO;
 import com.baomidou.mybatisplus.extension.service.IService;
 
@@ -28,4 +29,5 @@ public interface AgentDefinitionService extends IService<AgentDefinition> {
     List<String> allowFileType(Long id);
     List<ToolConfig> getEnabledToolsOfAgent(Long agentId);
     List<SkillPackage> getEnabledSkillsOfAgent(Long agentId);
+    List<Workflow> getEnabledWorkflowsOfAgent(Long agentId);
 }

@@ -65,5 +65,9 @@
             <groupId>com.hxh.apboa.next</groupId>
             <artifactId>biz-longterm</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.hxh.apboa.next</groupId>
+            <artifactId>biz-workflow</artifactId>
+        </dependency>
     </dependencies>
 </project>

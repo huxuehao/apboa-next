@@ -28,6 +28,7 @@ public class TableConst {
     public static final String ATTACH = "attach";
     public static final String AGENT_SCOPE_SESSIONS = "agentscope_sessions";
     public static final String AGENT_TOOL = "agent_tools";
+    public static final String AGENT_WORKFLOW = "agent_workflows";
     public static final String AGENT_CHAT_KEY = "agent_chat_key";
     public static final String SKILL_TOOL = "skill_tools";
     public static final String AGENT_AGENT = "agent_sub_agents";
@@ -52,4 +53,16 @@ public class TableConst {
     public static final String LONG_TERM_MEMORY_CONFIG = "long_term_memory_config";
     public static final String AGENT_LONG_TERM_MEMORY = "agent_long_term_memory";
     public static final String SKILL_TOKEN = "skill_token";
+    public static final String CACHE = "cache";
+    public static final String DATASOURCE = "datasource";
+    public static final String MQ = "mq";
+    public static final String PLUGIN = "plugin";
+    public static final String WORKFLOW = "workflow";
+    public static final String WORKFLOW_CACHE = "workflow_cache";
+    public static final String WORKFLOW_DATASOURCE = "workflow_datasource";
+    public static final String WORKFLOW_MQ = "workflow_mq";
+    public static final String WORKFLOW_NODE_EXECUTION = "workflow_node_execution";
+    public static final String WORKFLOW_PLUGIN = "workflow_plugin";
+    public static final String WORKFLOW_RUN = "workflow_run";
+    public static final String WORKFLOW_VERSION = "workflow_version";
 }

@@ -9,6 +9,7 @@ import { useSkillStore } from './modules/skill'
 import { useKnowledgeStore } from './modules/knowledge'
 import { useModelStore } from './modules/model'
 import { useAgentStore } from './modules/agent'
+import { useWorkflowStore } from './modules/workflow'
 
 export {
   useAccountStore,
@@ -21,5 +22,6 @@ export {
   useSkillStore,
   useKnowledgeStore,
   useModelStore,
-  useAgentStore
+  useAgentStore,
+  useWorkflowStore
 }
