@@ -294,82 +294,54 @@ const goToForgotPassword = () => {
         </div>
         <p class="auth-card-subtitle">登录 Apboa Next 智能体平台</p>
 
-        <!-- 标签页 -->
-        <div class="auth-tabs">
-          <div
-            class="auth-tab"
-            :class="{ active: activeTab === 'account' }"
-            @click="activeTab = 'account'"
-          >
-            账号登录
-          </div>
-          <div
-            class="auth-tab"
-            :class="{ active: activeTab === 'sso' }"
-            @click="activeTab = 'sso'"
-          >
-            SSO 登录
-          </div>
-        </div>
+        <AForm
+          ref="formRef"
+          :model="formState"
+          :rules="rules"
+          layout="vertical"
+          @finish="handleLogin"
+        >
+          <div class="auth-form-label">账号 / 邮箱</div>
+          <AFormItem name="username" class="auth-form-item">
+            <AInput
+              v-model:value="formState.username"
+              size="large"
+              placeholder="请输入账号或邮箱"
+            />
+          </AFormItem>
 
-        <!-- 账号登录 -->
-        <div v-if="activeTab === 'account'">
-          <AForm
-            ref="formRef"
-            :model="formState"
-            :rules="rules"
-            layout="vertical"
-            @finish="handleLogin"
-          >
-            <div class="auth-form-label">账号 / 邮箱</div>
-            <AFormItem name="username" class="auth-form-item">
-              <AInput
-                v-model:value="formState.username"
-                size="large"
-                placeholder="请输入账号或邮箱"
-              />
-            </AFormItem>
+          <div class="auth-form-label">密码</div>
+          <AFormItem name="password" class="auth-form-item">
+            <AInputPassword
+              v-model:value="formState.password"
+              size="large"
+              placeholder="请输入密码"
+            />
+          </AFormItem>
 
-            <div class="auth-form-label">密码</div>
-            <AFormItem name="password" class="auth-form-item">
-              <AInputPassword
-                v-model:value="formState.password"
-                size="large"
-                placeholder="请输入密码"
-              />
-            </AFormItem>
+          <AFormItem class="auth-form-item">
+            <div class="flex justify-between items-center">
+              <ACheckbox v-model:checked="formState.remember">
+                记住我
+              </ACheckbox>
+              <a @click="goToForgotPassword" style="color: #4F6EF7; font-size: 14px; cursor: pointer;">
+                忘记密码?
+              </a>
+            </div>
+          </AFormItem>
 
-            <AFormItem class="auth-form-item">
-              <div class="flex justify-between items-center">
-                <ACheckbox v-model:checked="formState.remember">
-                  记住我
-                </ACheckbox>
-                <a @click="goToForgotPassword" style="color: #4F6EF7; font-size: 14px; cursor: pointer;">
-                  忘记密码?
-                </a>
-              </div>
-            </AFormItem>
-
-            <AFormItem>
-              <AButton
-                type="primary"
-                html-type="submit"
-                size="large"
-                :loading="loading"
-                class="auth-submit-btn"
-              >
-                登录
-              </AButton>
-            </AFormItem>
-          </AForm>
-        </div>
-
-        <!-- SSO登录占位 -->
-        <div v-else class="sso-placeholder">
-          <div class="sso-empty">
-            <p>SSO 登录功能暂未上线</p>
-          </div>
-        </div>
+          <AFormItem>
+            <AButton
+              type="primary"
+              html-type="submit"
+              size="large"
+              :loading="loading"
+              class="auth-submit-btn"
+            >
+              登录
+            </AButton>
+          </AFormItem>
+        </AForm>
 
         <!-- 仓库地址 -->
         <div class="auth-divider">Apboa Next 项目仓库地址</div>

@@ -206,12 +206,6 @@ onMounted(() => {
     </div>
     <p class="auth-card-subtitle">注册 Apboa Next 智能体平台</p>
 
-    <!-- 步骤指示器 -->
-    <ASteps :current="currentStep" size="small" class="register-steps">
-      <AStep title="选择组织" />
-      <AStep title="填写信息" />
-    </ASteps>
-
     <AForm
       ref="formRef"
       :model="formState"
@@ -247,7 +241,6 @@ onMounted(() => {
 
         <!-- 创建组织模式 -->
         <div v-if="formState.registerMode === 'create'" class="tenant-section">
-          <div class="tenant-section-title">组织信息</div>
           <AFormItem name="tenantName" class="auth-form-item">
             <AInput
               v-model:value="formState.tenantName"
@@ -273,10 +266,6 @@ onMounted(() => {
 
         <!-- 加入已有组织模式 -->
         <div v-if="formState.registerMode === 'join'" class="tenant-section join-wrapper">
-          <div class="tenant-section-title">
-            选择要加入的组织
-            <ASpin :spinning="joinLoading" size="small" class="ml-sm" />
-          </div>
           <div class="join-scroll-area">
             <div v-if="discoverableTenants.length === 0 && !joinLoading" class="empty-hint">
               暂无可加入的组织，你可以选择「创建我的组织」
@@ -497,15 +486,6 @@ onMounted(() => {
 .join-scroll-area {
   max-height: 210px;
   overflow-y: auto;
-}
-
-.tenant-section-title {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-secondary, #666);
-  margin-bottom: 12px;
-  display: flex;
-  align-items: center;
 }
 
 .empty-hint {

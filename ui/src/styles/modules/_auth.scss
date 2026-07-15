@@ -8,7 +8,6 @@
 .auth-page {
   min-height: 100vh;
   display: flex;
-  background-color: #F2F4F7;
   background: linear-gradient(135deg, #f8faff 0%, #ecf0fd 50%, #f6f2fd 100%);
   padding: 24px;
   gap: 24px;
@@ -246,7 +245,7 @@
   font-size: 14px;
   font-weight: 500;
   color: #333;
-  margin-bottom: 8px;
+  margin-bottom: 2px;
 }
 
 // ========== 登录按钮 ==========
