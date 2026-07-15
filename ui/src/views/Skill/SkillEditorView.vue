@@ -481,7 +481,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="skill-editor-view" :style="{ height: 'calc(100vh - 56px)', gridTemplateColumns: `${leftPanelWidth}px 4px 1fr` }">
+  <div class="skill-editor-view" :style="{ height: '100%', gridTemplateColumns: `${leftPanelWidth}px 4px 1fr` }">
     <!-- 左侧面板 -->
     <div class="left-panel">
       <!-- 顶部工具栏 -->

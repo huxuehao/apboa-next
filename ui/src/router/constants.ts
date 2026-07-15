@@ -102,8 +102,8 @@ export const RoutePaths = {
   // Agent管理
   AGENT: 'agent',
   WORKFLOW: 'workflow',
-  WORKFLOW_NEW: 'workflow/new',
-  WORKFLOW_EDIT: 'workflow/:id',
+  WORKFLOW_NEW: '/workflow/new',
+  WORKFLOW_EDIT: '/workflow/:id',
 
   // 模型管理
   MODEL: 'model',
@@ -115,7 +115,7 @@ export const RoutePaths = {
   KNOWLEDGE: 'knowledge',
 
   // 知识库文档管理
-  KNOWLEDGE_DOCUMENTS: 'knowledge/:id/documents',
+  KNOWLEDGE_DOCUMENTS: '/knowledge/:id/documents',
 
   // 工具管理
   TOOL: 'tool',

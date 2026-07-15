@@ -235,7 +235,7 @@ function handleEditorSave() {
           :show-toolbar="false"
           language="txt"
           theme="light"
-          height="calc(100vh - 100px)"
+          height="calc(100vh - 60px)"
           @update:model-value="handleContentChange"
           @save="handleEditorSave"
         />

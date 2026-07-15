@@ -9,7 +9,7 @@
 
 <template>
   <div class="home-page">
-    <ACard title="欢迎使用 APBOA">
+    <ACard title="欢迎使用 APBOA NEXT">
       <p>这是一个基于 AI 的业务编排应用平台</p>
       <p>布局已经成功创建，包含以下部分：</p>
       <ul>

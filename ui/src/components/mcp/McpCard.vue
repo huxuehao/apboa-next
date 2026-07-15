@@ -8,11 +8,11 @@ import { computed } from 'vue'
 import {
   CheckCircleFilled,
   CloseCircleFilled,
-  CloudServerOutlined,
   EllipsisOutlined,
   LoadingOutlined,
   WarningFilled
 } from '@ant-design/icons-vue'
+import mcpAvatar from '@/assets/avatar/mcp.png'
 import type { McpServerVO } from '@/types'
 import { McpActivationStatus } from '@/types'
 import {
@@ -78,12 +78,9 @@ const isNotActivated = computed(() => props.data.activationStatus === McpActivat
 /** 已激活但无工具（有连接但工具目录为空） */
 const isActiveNoTool = computed(() => isActive.value && (props.data.toolCount || 0) === 0)
 
-/** 头像样式类 */
+/** 头像样式类：仅 success 为正常色，其余灰色 */
 const avatarClass = computed(() => ({
-  disabled: isDisabled.value,
-  activating: isActivating.value,
-  failed: isFailed.value,
-  'no-tool': isNotActivated.value || isActiveNoTool.value
+  success: isActive.value && !isActiveNoTool.value && !isDisabled.value
 }))
 
 /**
@@ -179,8 +176,8 @@ function handleMenuClick({ key }: { key: string }) {
       <div class="card-avatar-wrapper">
         <ATooltip :title="cornerTooltip" placement="top">
           <div class="card-avatar flex-center" :class="avatarClass">
-            <LoadingOutlined v-if="isActivating" spin />
-            <CloudServerOutlined v-else />
+            <LoadingOutlined v-if="isActivating" spin  style="font-size: 18px;" />
+            <img v-else :src="mcpAvatar" alt="mcp" />
           </div>
           <!-- 角标 -->
           <span class="avatar-corner-badge" :class="`badge-${cornerBadgeType}`">
@@ -244,36 +241,27 @@ function handleMenuClick({ key }: { key: string }) {
     .card-avatar {
       width: 40px;
       height: 40px;
-      background-color: #e8f5e9;
-      color: #66bb6a;
+      background-color: #e7e7e7;
       border-radius: var(--border-radius-xl);
-      font-size: var(--font-size-2xl);
-      font-weight: 600;
       flex-shrink: 0;
       transition: background-color var(--transition-base), color var(--transition-base);
 
-      /* 停用态 */
-      &.disabled {
-        color: #757575 !important;
-        background-color: #e7e7e7 !important;
+      img {
+        width: 30px;
+        height: 30px;
+        object-fit: contain;
+        filter: grayscale(100%);
+        opacity: 0.5;
       }
 
-      /* 激活中 - 加载动画 */
-      &.activating {
-        background-color: #e3f2fd;
-        color: #42a5f5;
-      }
+      /* 正常态（已激活且有工具） */
+      &.success {
+        background-color: #e8eaf6;
 
-      /* 激活失败 */
-      &.failed {
-        background-color: #ffebee;
-        color: #ef5350;
-      }
-
-      /* 已激活但无工具, 或待连接 */
-      &.no-tool {
-        background-color: #fff8e1;
-        color: #ffa726;
+        img {
+          filter: none;
+          opacity: 1;
+        }
       }
     }
 
@@ -290,27 +278,19 @@ function handleMenuClick({ key }: { key: string }) {
       cursor: pointer;
       font-size: 12px;
 
-      /* 图标型角标 */
-      &.badge-warning {
-        width: 18px;
-        height: 18px;
-        background: #fff;
-        color: #faad14;
-      }
-
+      &.badge-warning,
       &.badge-error {
         width: 18px;
         height: 18px;
         background: #fff;
-        color: #ff4d4f;
+        color: #8c8c8c;
       }
 
-      /* 绿色对号型角标 */
       &.badge-success {
         width: 18px;
         height: 18px;
         background: #fff;
-        color: #52c41a;
+        color: #1677ff;
       }
     }
 

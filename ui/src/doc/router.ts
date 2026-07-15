@@ -143,7 +143,7 @@ const router: Router = createRouter({
  * 设置页面标题
  */
 router.beforeEach((to, _from, next) => {
-  const defaultTitle = 'Apboa 使用手册';
+  const defaultTitle = 'Apboa Next 使用手册';
   const title = to.meta?.title as string | undefined;
   document.title = title ? `${title} - ${defaultTitle}` : defaultTitle;
   next();

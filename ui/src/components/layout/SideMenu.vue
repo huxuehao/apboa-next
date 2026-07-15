@@ -6,29 +6,13 @@
  */
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import type { Component } from 'vue'
-import {
-  DashboardOutlined,
-  RobotOutlined,
-  ApartmentOutlined,
-  DatabaseOutlined,
-  ApiOutlined,
-  AppstoreOutlined,
-  CloudServerOutlined,
-  ToolOutlined,
-  LoginOutlined,
-  FileTextOutlined,
-  SafetyCertificateOutlined,
-  AuditOutlined,
-  KeyOutlined,
-  MonitorOutlined,
-  CloudUploadOutlined,
-  UserOutlined,
-  TeamOutlined,
-  GlobalOutlined,
-  SettingOutlined,
-  InfoCircleOutlined
-} from '@ant-design/icons-vue'
+
+/**
+ * Props定义
+ */
+const props = defineProps<{
+  collapsed?: boolean
+}>()
 
 const route = useRoute()
 const router = useRouter()
@@ -39,7 +23,7 @@ const router = useRouter()
 interface MenuItem {
   key: string
   label: string
-  icon?: Component
+  avatar?: string
   path: string
   type: 'menu' | 'category'
 }
@@ -48,11 +32,18 @@ interface MenuItem {
  * 菜单配置
  */
 const menuConfig: MenuItem[] = [
+  // 开发分类
+  {
+    key: 'dev-category',
+    label: '首页',
+    path: '',
+    type: 'category'
+  },
   // 工作台
   {
     key: 'dashboard',
     label: '工作台',
-    icon: DashboardOutlined,
+    avatar: '/src/assets/avatar/home.png',
     path: '/dashboard',
     type: 'menu'
   },
@@ -66,21 +57,21 @@ const menuConfig: MenuItem[] = [
   {
     key: 'agent',
     label: '智能体',
-    icon: RobotOutlined,
+    avatar: '/src/assets/avatar/agent.png',
     path: '/agent',
     type: 'menu'
   },
   {
     key: 'workflow',
     label: '工作流',
-    icon: ApartmentOutlined,
+    avatar: '/src/assets/avatar/workflow.png',
     path: '/workflow',
     type: 'menu'
   },
   {
     key: 'knowledge',
     label: '知识库',
-    icon: DatabaseOutlined,
+    avatar: '/src/assets/avatar/knowledgebase.png',
     path: '/knowledge',
     type: 'menu'
   },
@@ -94,73 +85,52 @@ const menuConfig: MenuItem[] = [
   {
     key: 'model',
     label: '模型',
-    icon: ApiOutlined,
+    avatar: '/src/assets/avatar/model-provider.png',
     path: '/model',
     type: 'menu'
   },
   {
     key: 'skill',
     label: '技能',
-    icon: AppstoreOutlined,
+    avatar: '/src/assets/avatar/skill.png',
     path: '/skill',
     type: 'menu'
   },
   {
     key: 'mcp',
     label: 'MCP',
-    icon: CloudServerOutlined,
+    avatar: '/src/assets/avatar/mcp.png',
     path: '/mcp',
     type: 'menu'
   },
   {
     key: 'tool',
     label: '工具',
-    icon: ToolOutlined,
+    avatar: '/src/assets/avatar/tool.png',
     path: '/tool',
     type: 'menu'
   },
   {
     key: 'hook',
     label: '扩展',
-    icon: LoginOutlined,
+    avatar: '/src/assets/avatar/hook.png',
     path: '/hook',
     type: 'menu'
   },
   {
     key: 'prompt',
     label: '提示词',
-    icon: FileTextOutlined,
+    avatar: '/src/assets/avatar/prompt.png',
     path: '/prompt',
     type: 'menu'
   },
   {
     key: 'sensitive',
     label: '敏感词',
-    icon: SafetyCertificateOutlined,
+    avatar: '/src/assets/avatar/sensitive.png',
     path: '/sensitive',
     type: 'menu'
-  },
-  // 审查分类
-  // {
-  //   key: 'review-category',
-  //   label: '审查',
-  //   path: '',
-  //   type: 'category'
-  // },
-  // {
-  //   key: 'review-agent',
-  //   label: '智能体',
-  //   icon: AuditOutlined,
-  //   path: '/review/agent',
-  //   type: 'menu'
-  // },
-  // {
-  //   key: 'review-workflow',
-  //   label: '工作流',
-  //   icon: AuditOutlined,
-  //   path: '/review/workflow',
-  //   type: 'menu'
-  // }
+  }
 ]
 
 /**
@@ -188,7 +158,7 @@ const handleMenuClick = (item: MenuItem) => {
 </script>
 
 <template>
-  <div class="side-menu-wrapper">
+  <div class="side-menu-wrapper" :class="{ collapsed: props.collapsed }">
     <div class="side-menu">
       <template v-for="item in menuConfig" :key="item.key">
         <!-- 分类 -->
@@ -196,19 +166,20 @@ const handleMenuClick = (item: MenuItem) => {
           {{ item.label }}
         </div>
         <!-- 菜单项 -->
-        <div
+        <ATooltip
           v-else
-          class="menu-item"
-          :class="{ active: activeMenu === item.key }"
-          @click="handleMenuClick(item)"
+          :title="props.collapsed ? item.label : ''"
+          placement="right"
         >
-          <component
-            v-if="item.icon"
-            :is="item.icon"
-            class="menu-icon"
-          />
-          <span class="menu-label">{{ item.label }}</span>
-        </div>
+          <div
+            class="menu-item"
+            :class="{ active: activeMenu === item.key }"
+            @click="handleMenuClick(item)"
+          >
+            <img :src="item.avatar" width="20px" alt="icon"/>
+            <span class="menu-label">{{ item.label }}</span>
+          </div>
+        </ATooltip>
       </template>
     </div>
   </div>
@@ -255,25 +226,30 @@ const handleMenuClick = (item: MenuItem) => {
   }
 }
 
-.menu-icon {
-  font-size: 16px;
-  color: #999;
-  flex-shrink: 0;
-  transition: color 0.2s ease;
-
-  .menu-item:hover & {
-    color: #666;
-  }
-
-  .menu-item.active & {
-    color: #000000;
-  }
-}
-
 .menu-label {
   flex: 1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  transition: opacity 0.3s ease;
+}
+
+/* 收缩态 */
+.side-menu-wrapper.collapsed {
+  .menu-category {
+    height: 0;
+    padding: 0;
+    overflow: hidden;
+    opacity: 0;
+  }
+
+  .menu-item {
+    justify-content: center;
+    padding: 8px;
+  }
+
+  .menu-label {
+    display: none;
+  }
 }
 </style>

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, h } from 'vue'
 import {
-  BranchesOutlined,
   CheckCircleFilled,
   CloseCircleFilled,
   CopyOutlined,
@@ -12,6 +11,7 @@ import {
   LockFilled,
   WarningFilled,
 } from '@ant-design/icons-vue'
+import workflowAvatar from '@/assets/avatar/workflow.png'
 import type { Workflow } from '@/types/workflow'
 import { useAccountStore } from '@/stores'
 
@@ -92,7 +92,7 @@ function handleMenu({ key }: { key: string }) {
       <ATooltip :title="avatarTooltip" placement="top">
         <div class="card-avatar-wrapper">
           <div class="card-avatar" :class="avatarClass">
-            <BranchesOutlined class="avatar-icon" />
+            <img class="avatar-icon" :src="workflowAvatar" alt="workflow" />
           </div>
           <span class="avatar-corner-badge" :class="`badge-${cornerBadgeType}`">
             <CloseCircleFilled v-if="cornerBadgeType === 'disabled'" />
@@ -177,17 +177,17 @@ function handleMenu({ key }: { key: string }) {
   height: 40px;
   overflow: hidden;
   border-radius: var(--border-radius-xl);
-  background: #fff7e6;
-  color: #fa8c16;
+  background: #e7e7e7;
+  color: #8c8c8c;
 }
 
 .card-avatar.published {
-  background: #e6f4ff;
+  background: #e8eaf6;
   color: #1677ff;
 }
 
 .card-avatar.disabled {
-  background: #f5f5f5;
+  background: #e7e7e7;
   color: #8c8c8c;
 }
 
@@ -197,7 +197,20 @@ function handleMenu({ key }: { key: string }) {
 }
 
 .avatar-icon {
-  font-size: 20px;
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+
+/* 未发布（草稿）：图片变灰 */
+.card-avatar:not(.published):not(.disabled):not(.locked) .avatar-icon {
+  filter: grayscale(100%);
+  opacity: 0.5;
+}
+
+/* 已锁定：图片颜色跟随红色背景 */
+.card-avatar.locked .avatar-icon {
+  filter: brightness(0) saturate(100%) invert(36%) sepia(77%) saturate(3585%) hue-rotate(339deg) brightness(93%) contrast(99%);
 }
 
 .avatar-corner-badge {
@@ -220,7 +233,7 @@ function handleMenu({ key }: { key: string }) {
 }
 
 .badge-draft {
-  color: #faad14;
+  color: #8c8c8c;
 }
 
 .badge-locked {

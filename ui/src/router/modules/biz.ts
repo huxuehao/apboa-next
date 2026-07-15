@@ -62,26 +62,6 @@ const bizRoutes: AppRouteRecordRaw[] = [
         },
       },
       {
-        path: RoutePaths.WORKFLOW_NEW,
-        name: RouteNames.WORKFLOW_NEW,
-        component: () => import('@/views/Workflow/WorkflowEditorView.vue'),
-        meta: {
-          title: '新建工作流',
-          hidden: true,
-          hideFooter: true,
-        },
-      },
-      {
-        path: RoutePaths.WORKFLOW_EDIT,
-        name: RouteNames.WORKFLOW_EDIT,
-        component: () => import('@/views/Workflow/WorkflowEditorView.vue'),
-        meta: {
-          title: '编辑工作流',
-          hidden: true,
-          hideFooter: true,
-        },
-      },
-      {
         path: RoutePaths.HOOK,
         name: RouteNames.HOOK,
         component: () => import('@/views/Hook/index.vue'),
@@ -249,7 +229,27 @@ const bizRoutes: AppRouteRecordRaw[] = [
           hidden: false
         },
       }
-    ]
+    ],
+  },
+  {
+    path: RoutePaths.WORKFLOW_NEW,
+    name: RouteNames.WORKFLOW_NEW,
+    component: () => import('@/views/Workflow/WorkflowEditorView.vue'),
+    meta: {
+      title: '新建工作流',
+      hidden: true,
+      hideFooter: true,
+    },
+  },
+  {
+    path: RoutePaths.WORKFLOW_EDIT,
+    name: RouteNames.WORKFLOW_EDIT,
+    component: () => import('@/views/Workflow/WorkflowEditorView.vue'),
+    meta: {
+      title: '编辑工作流',
+      hidden: true,
+      hideFooter: true,
+    },
   }
 ]
 

@@ -9,7 +9,12 @@
 
 <template>
   <div class="system-intro-container">
-    <h1 class="system-intro-title">您的专属智能体，从此高效构建</h1>
+    <div class="system-intro-logo">
+
+    </div>
+    <h1 class="system-intro-title">
+      您的专属智能体，从此高效构建
+    </h1>
 
     <p class="system-intro-paragraph">
       <strong>Apboa Next</strong> 是基于领先的 <strong>React</strong> 理念打造的新一代智能体开发与管理平台。我们致力于将复杂的AI智能体开发过程变得简单、高效，让您能轻松拥有功能强大的专属数字助手。

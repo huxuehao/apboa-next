@@ -1233,7 +1233,7 @@ function computeParentUpstreamNodes(startNodeId: string): WorkflowFlowNode[] {
 .workflow-editor-shell {
   position: relative;
   width: 100%;
-  height: calc(100vh - 55px);
+  height: 100vh;
   overflow: hidden;
   background: #f7f8fa;
 }

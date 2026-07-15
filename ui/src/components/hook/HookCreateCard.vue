@@ -1,5 +1,5 @@
 /**
- * 新增钩子配置卡片组件
+ * 新增扩展配置卡片组件
  *
  * @author huxuehao
  */
@@ -17,8 +17,8 @@ defineEmits<{
 <template>
   <div class="create-card flex-col flex-center cursor-pointer" @click="$emit('click')">
     <PlusOutlined class="create-icon" />
-    <div class="create-text text-secondary">添加新钩子</div>
-    <div class="create-desc text-placeholder text-sm">创建自定义钩子扩展智能体流程</div>
+    <div class="create-text text-secondary">添加新扩展</div>
+    <div class="create-desc text-placeholder text-sm">创建自定义扩展扩展智能体流程</div>
   </div>
 </template>
 

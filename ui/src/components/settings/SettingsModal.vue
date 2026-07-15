@@ -16,8 +16,16 @@ import TenantSettings from './TenantSettings.vue'
 import TenantDiscovery from './TenantDiscovery.vue'
 import ExecutionNodes from './ExecutionNodes.vue'
 
+/**
+ * Props定义
+ */
+const props = defineProps<{
+  /** 打开时默认定位的菜单项 */
+  defaultMenu?: string
+}>()
+
 /** 当前选中的菜单项 */
-const currentMenu = ref<string>('myAccount')
+const currentMenu = ref<string>(props.defaultMenu || 'myAccount')
 
 /** 提供给子组件的上下文 */
 provide('currentMenu', currentMenu)

@@ -1,5 +1,5 @@
 /**
- * 钩子管理主页面
+ * 扩展管理主页面
  *
  * @author huxuehao
  */
@@ -39,7 +39,7 @@ const isFirstLoad = ref(true)
 const HOOK_TYPE_ALL = 'ALL'
 
 /**
- * 钩子类型选项（全部、内置、自定义）
+ * 扩展类型选项（全部、内置、自定义）
  */
 const hookTypeOptions = [
   { label: '全部', value: HOOK_TYPE_ALL },
@@ -48,7 +48,7 @@ const hookTypeOptions = [
 ]
 
 /**
- * 当前选中的钩子类型（用于 Segmented 显示，ALL 表示全部）
+ * 当前选中的扩展类型（用于 Segmented 显示，ALL 表示全部）
  */
 const selectedHookTypeDisplay = computed({
   get: () => (selectedHookType.value === null ? HOOK_TYPE_ALL : selectedHookType.value),
@@ -99,7 +99,7 @@ async function handleDelete(id: string) {
   if (used.length > 0) {
     Modal.confirm({
       title: '二次确认',
-      content: `该钩子正在被 [ ${used.join('、')} ] 智能体引用，删除后可能会影响上述智能体的正常使用！`,
+      content: `该扩展正在被 [ ${used.join('、')} ] 智能体引用，删除后可能会影响上述智能体的正常使用！`,
       okText: '确认并继续删除',
       onOk: async () => {
         await store.deleteConfig(id)
@@ -134,7 +134,7 @@ async function handleView(id: string) {
   const data = response.data.data
 
   ApboaModalApi.open({
-    title: '钩子详情',
+    title: '扩展详情',
     titleIcon: LoginOutlined,
     footer: null,
     content: h('div', {}, [
@@ -147,7 +147,7 @@ async function handleView(id: string) {
       h('p', {}, [h('strong', '状态: '), data.enabled ? '启用' : '禁用']),
       ...(data.code
         ? [
-            h('p', {}, h('strong', '钩子内容:')),
+            h('p', {}, h('strong', '扩展内容:')),
             h('pre', {
               style: {
                 background: '#f5f5f5',
@@ -173,7 +173,7 @@ async function handleEnable(id: string) {
   if (used.length > 0 && enabled) {
     Modal.confirm({
       title: '二次确认',
-      content: `该钩子正在被 [ ${used.join('、')} ] 智能体引用，禁用后可能会影响上述智能体的正常使用！`,
+      content: `该扩展正在被 [ ${used.join('、')} ] 智能体引用，禁用后可能会影响上述智能体的正常使用！`,
       okText: '确认并继续',
       onOk: async () => {
         await store.toggleEnabled(id, !enabled)
@@ -254,9 +254,9 @@ watch([selectedHookType, keyword], () => {
 <template>
   <div class="hook-page">
     <section class="intro-section">
-      <h3 class="intro-title">钩子管理</h3>
+      <h3 class="intro-title">扩展管理</h3>
       <p class="intro-desc text-secondary">
-        钩子（Hook）是智能体执行流程中的切面扩展点，用于在关键节点插入自定义逻辑。行业实践通常在「调用前后、推理前后、工具调用前后、发生错误时」等时机挂载钩子，实现日志、鉴权、限流、审计或业务定制，而不侵入主流程代码。本模块展示已配置的钩子，便于查看与启用状态管理。
+        扩展（Hook）是智能体执行流程中的切面扩展点，用于在关键节点插入自定义逻辑。行业实践通常在「调用前后、推理前后、工具调用前后、发生错误时」等时机挂载扩展，实现日志、鉴权、限流、审计或业务定制，而不侵入主流程代码。本模块展示已配置的扩展，便于查看与启用状态管理。
       </p>
     </section>
 
@@ -271,7 +271,7 @@ watch([selectedHookType, keyword], () => {
       <div class="filter-right flex items-center gap-md">
         <AInput
           v-model:value="keyword"
-          placeholder="搜索钩子名称"
+          placeholder="搜索扩展名称"
           style="width: 300px;"
           @pressEnter="handleSearch"
         >

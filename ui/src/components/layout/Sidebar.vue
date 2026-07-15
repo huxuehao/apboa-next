@@ -4,46 +4,56 @@
  *
  * @author huxuehao
  */
-import { computed } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { computed, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAccountStore } from '@/stores'
 import { RoutePaths } from '@/router/constants'
 import SideMenu from './SideMenu.vue'
 import {
   TeamOutlined,
   SwapOutlined,
-  PlusOutlined,
-  LogoutOutlined,
-  SettingOutlined,
-  BookOutlined
+  PoweroffOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
+  ExportOutlined
 } from '@ant-design/icons-vue'
-import { Modal, message } from 'ant-design-vue'
+import { Modal } from 'ant-design-vue'
 import SettingsModal from '@/components/settings/SettingsModal.vue'
-import type { TenantInfo } from '@/types'
-import { ref, h } from 'vue'
 
-const route = useRoute()
 const router = useRouter()
 const {
   logout,
   userInfo,
+  tenantRole,
   currentTenant,
-  availableTenants,
-  switchTenant
+  availableTenants
 } = useAccountStore()
 
 /** 系统设置模态窗显示状态 */
 const settingsVisible = ref(false)
 
-/** 租户切换加载中 */
-const switchingTenant = ref(false)
+/** 打开设置弹窗时的目标菜单定位 */
+const settingsTargetMenu = ref<string | undefined>(undefined)
+
+/** 弹窗关闭时重置目标菜单 */
+watch(settingsVisible, (val) => {
+  if (!val) settingsTargetMenu.value = undefined
+})
+
+/** 侧边栏收缩状态 */
+const collapsed = ref(false)
+
+/** 切换收缩/展开 */
+function toggleCollapsed() {
+  collapsed.value = !collapsed.value
+}
 
 /**
  * 用户名首字母(用于头像)
  */
 const avatarText = computed(() => {
-  if (!userInfo?.username) return '?'
-  return userInfo.username.charAt(0).toUpperCase()
+  if (!userInfo?.nickname) return '?'
+  return userInfo.nickname.charAt(0).toUpperCase()
 })
 
 /**
@@ -54,33 +64,10 @@ const currentTenantName = computed(() => {
 })
 
 /**
- * 切换租户
- */
-async function handleSwitchTenant(tenant: TenantInfo) {
-  if (tenant.tenantId === currentTenant?.tenantId) return
-  Modal.confirm({
-    title: '切换工作空间',
-    icon: null,
-    content: `确认切换到「${tenant.tenantName}」？切换后当前页面将刷新。`,
-    onOk: async () => {
-      try {
-        switchingTenant.value = true
-        await switchTenant({ tenantId: tenant.tenantId })
-        message.success('已切换工作空间')
-        location.reload()
-      } catch {
-        message.error('切换失败，请重试')
-      } finally {
-        switchingTenant.value = false
-      }
-    }
-  })
-}
-
-/**
  * 打开发现租户页面
  */
 function openTenantDiscovery() {
+  settingsTargetMenu.value = 'tenantDiscovery'
   settingsVisible.value = true
 }
 
@@ -105,20 +92,45 @@ const handleLogout = () => {
     }
   })
 }
+
+const roleName = computed(() => {
+  if (!tenantRole) return '普通用户'
+  switch (tenantRole) {
+    case 'TENANT_OWNER':
+      return '租户所有者'
+    case 'TENANT_ADMIN':
+      return '租户管理员'
+    case 'TENANT_EDITOR':
+      return '租户用户'
+    default:
+      return '普通用户'
+  }
+})
 </script>
 
 <template>
-  <div class="sidebar flex flex-col">
+  <div class="sidebar flex flex-col" :class="{ collapsed: collapsed }">
     <!-- 顶部Logo区域 -->
     <div class="sidebar-logo">
-      <div class="logo-container flex items-center gap-sm">
-        <img src="@/assets/images/logo/logo.png" alt="logo" width="38" style="border-radius: 50%; background-color: white; padding: 4px">
-        <span class="project-name">Apboa</span>
-      </div>
+      <img v-if="!collapsed" src="@/assets/logo/logo_3.png" alt="logo" width="130">
+      <img v-else src="@/assets/logo/logo_1.png" alt="logo" width="38">
+      <ATooltip v-if="!collapsed" :title="collapsed ? '展开菜单' : '收起菜单'" placement="right">
+        <div class="collapse-btn" @click="toggleCollapsed">
+          <MenuFoldOutlined v-if="!collapsed" />
+          <MenuUnfoldOutlined v-else />
+        </div>
+      </ATooltip>
+    </div>
+    <div class="expand" v-if="collapsed">
+      <ATooltip title="展开菜单" placement="right">
+        <div class="expand-btn" @click="toggleCollapsed">
+          <MenuUnfoldOutlined />
+        </div>
+      </ATooltip>
     </div>
 
-    <!-- 租户切换区域 -->
-    <div class="sidebar-tenant" v-if="availableTenants.length > 0">
+    <!-- 租户切换区域 / 收缩后展开按钮 -->
+    <div class="sidebar-tenant" v-if="!collapsed && availableTenants.length > 0">
       <div class="tenant-switcher" @click="openTenantDiscovery">
         <div class="tenant-info flex items-center gap-xs">
           <TeamOutlined />
@@ -127,36 +139,50 @@ const handleLogout = () => {
         <SwapOutlined class="tenant-icon" />
       </div>
     </div>
+    <div class="expand" v-if="collapsed">
+      <ATooltip title="切换租户" placement="right">
+        <div class="expand-btn" @click="openTenantDiscovery">
+          <SwapOutlined />
+        </div>
+      </ATooltip>
+    </div>
 
     <!-- 菜单区域 -->
     <div class="sidebar-menu flex-1">
-      <SideMenu />
+      <SideMenu :collapsed="collapsed" />
     </div>
 
     <!-- 定制菜单区域 -->
     <div class="sidebar-custom">
-      <div class="custom-item" @click="openMarkdownDoc">
-        <BookOutlined />
-        <span>文档</span>
-      </div>
-      <div class="custom-item" @click="settingsVisible = true">
-        <SettingOutlined />
-        <span>设置</span>
-      </div>
+      <ATooltip :title="collapsed ? '文档' : ''" placement="right">
+        <div class="custom-item" @click="openMarkdownDoc">
+          <img src="@/assets/avatar/doc.png" width="20px" alt="icon"/>
+          <span v-show="!collapsed">文档</span>
+          <ExportOutlined v-show="!collapsed" class="doc-external-icon" />
+        </div>
+      </ATooltip>
+      <ATooltip :title="collapsed ? '设置' : ''" placement="right">
+        <div class="custom-item" @click="settingsVisible = true">
+          <img src="@/assets/avatar/setting.png" width="20px" alt="icon"/>
+          <span v-show="!collapsed">设置</span>
+        </div>
+      </ATooltip>
     </div>
 
     <!-- 底部用户区域 -->
     <div class="sidebar-user">
       <div class="user-info flex items-center gap-sm">
-        <div class="user-avatar">
-          {{ avatarText }}
+        <ATooltip :title="collapsed ? (userInfo?.username || '未登录') : ''" placement="right">
+          <div class="user-avatar">
+            {{ avatarText }}
+          </div>
+        </ATooltip>
+        <div class="user-details" v-show="!collapsed">
+          <div class="user-name">{{ userInfo?.nickname || '未登录' }}</div>
+          <div class="user-role">{{ roleName }}</div>
         </div>
-        <div class="user-details">
-          <div class="user-name">{{ userInfo?.username || '未登录' }}</div>
-          <div class="user-role">{{ userInfo?.tenantRole || '普通用户' }}</div>
-        </div>
-        <div class="user-actions">
-          <LogoutOutlined @click="handleLogout" class="logout-icon" />
+        <div class="user-actions" v-show="!collapsed">
+          <PoweroffOutlined @click="handleLogout" class="logout-icon" />
         </div>
       </div>
     </div>
@@ -169,7 +195,7 @@ const handleLogout = () => {
       :destroyOnClose="true"
       :width="'100%'"
     >
-      <SettingsModal />
+      <SettingsModal :defaultMenu="settingsTargetMenu" />
     </AModal>
   </div>
 </template>
@@ -182,17 +208,50 @@ const handleLogout = () => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  transition: width 0.3s ease;
+
+  &.collapsed {
+    width: 72px;
+  }
 }
 
 .sidebar-logo {
-  padding: 16px 20px;
-}
-
-.logo-container {
+  padding: 16px 20px 5px 20px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
+
+  .collapse-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    cursor: pointer;
+    color: #999;
+    font-size: 16px;
+    flex-shrink: 0;
+    transition: all 0.2s ease;
+
+    &:hover {
+      background-color: #E9EAEA;
+      color: #333;
+    }
+  }
 }
+
+.sidebar.collapsed .sidebar-logo {
+  padding: 16px 8px 5px;
+  justify-content: center;
+  flex-direction: column;
+  gap: 12px;
+
+  .collapse-btn {
+    margin-top: 4px;
+  }
+}
+
 
 .project-name {
   font-size: 18px;
@@ -204,19 +263,43 @@ const handleLogout = () => {
   padding: 12px 16px;
 }
 
+.expand {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 0 0;
+
+  .expand-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 6px;
+    cursor: pointer;
+    color: #999;
+    font-size: 17px;
+    transition: all 0.2s ease;
+
+    &:hover {
+      background-color: #E9EAEA;
+      color: #333;
+    }
+  }
+}
+
 .tenant-switcher {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 8px 12px;
-  border: 1px solid #e8e8e8;
+  border: 1px solid transparent;
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.2s ease;
+  background-color: #ffffff;
 
   &:hover {
-    border-color: #1677ff;
-    background-color: #f5f8ff;
+    border-color: #d8d8d8;
   }
 }
 
@@ -245,11 +328,20 @@ const handleLogout = () => {
 .sidebar-menu {
   flex: 1;
   overflow-y: auto;
-  padding: 8px 0;
+  padding: 0;
 }
 
 .sidebar-custom {
-  padding: 12px 16px;
+  padding: 0 16px;
+}
+
+.sidebar.collapsed .sidebar-custom {
+  padding: 0 8px;
+
+  .custom-item {
+    justify-content: center;
+    padding: 8px;
+  }
 }
 
 .custom-item {
@@ -267,10 +359,25 @@ const handleLogout = () => {
     background-color: #E9EAEA;
     color: #1a1a1a;
   }
+
+  .doc-external-icon {
+    margin-left: auto;
+    font-size: 13px;
+    color: #999;
+    flex-shrink: 0;
+  }
 }
 
 .sidebar-user {
   padding: 16px 20px;
+}
+
+.sidebar.collapsed .sidebar-user {
+  padding: 16px 8px;
+
+  .user-info {
+    justify-content: center;
+  }
 }
 
 .user-info {
@@ -288,7 +395,7 @@ const handleLogout = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
+  font-size: 18px;
   font-weight: 500;
   flex-shrink: 0;
 }

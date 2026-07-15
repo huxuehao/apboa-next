@@ -1,11 +1,12 @@
 /**
- * 钩子配置卡片组件
+ * 扩展配置卡片组件
  *
  * @author huxuehao
  */
 <script setup lang="ts">
 import { computed } from 'vue'
-import { EllipsisOutlined, LoginOutlined } from '@ant-design/icons-vue'
+import { EllipsisOutlined } from '@ant-design/icons-vue'
+import hookAvatar from '@/assets/avatar/hook.png'
 import type { HookConfigVO } from '@/types'
 import {
   createViewItem,
@@ -64,7 +65,7 @@ const formattedTime = computed(() => {
 })
 
 /**
- * 钩子类型显示文本
+ * 扩展类型显示文本
  */
 const hookTypeText = computed(() => {
   return props.data.hookType === 'BUILTIN' ? '内置' : '自定义'
@@ -94,7 +95,7 @@ function handleMenuClick({ key }: { key: string }) {
 <template>
   <div class="hook-card">
     <div class="card-header flex items-center gap-sm">
-      <div class="card-avatar flex-center" :class="{ disabled: !data.enabled }"><LoginOutlined /></div>
+      <div class="card-avatar flex-center" :class="{ disabled: !data.enabled }"><img :src="hookAvatar" alt="hook" /></div>
       <div class="card-name flex-1 truncate" :title="data.name" @click="emit('view', data.id as string)">{{ data.name }}</div>
       <ADropdown :trigger="['hover']">
         <AButton type="text" size="small" v-permission="['TENANT_EDITOR','TENANT_ADMIN','TENANT_OWNER']">
@@ -140,12 +141,15 @@ function handleMenuClick({ key }: { key: string }) {
     .card-avatar {
       width: 40px;
       height: 40px;
-      background-color: #fde6f6;
-      color: #db2781;
+      background-color: #e8eaf6;
       border-radius: var(--border-radius-xl);
-      font-size: var(--font-size-xl);
-      font-weight: 600;
       flex-shrink: 0;
+
+      img {
+        width: 30px;
+        height: 30px;
+        object-fit: contain;
+      }
     }
 
     .card-name {
@@ -186,6 +190,10 @@ function handleMenuClick({ key }: { key: string }) {
   .disabled {
     color: #757575 !important;
     background-color: #e7e7e7 !important;
+    img {
+      filter: grayscale(100%);
+      opacity: 0.5;
+    }
   }
 }
 </style>
