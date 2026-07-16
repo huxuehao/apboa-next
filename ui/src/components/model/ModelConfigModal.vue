@@ -19,6 +19,7 @@ const props = defineProps<{
   providerId: string
   providerName: string
   providerType?: string
+  providerBaseUrl?: string
 }>()
 
 /**
@@ -256,6 +257,7 @@ async function handleTest(id: string) {
           v-for="item in modelList"
           :key="item.id"
           :data="item"
+          :provider-base-url="providerBaseUrl"
           @edit="handleEdit"
           @delete="handleDelete"
           @enable="handleEnable"

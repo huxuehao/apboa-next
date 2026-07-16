@@ -10,10 +10,11 @@ import {
   CloseCircleFilled,
   EllipsisOutlined,
   LoadingOutlined,
-  SlackOutlined,
   WarningFilled,
   ApiOutlined
 } from '@ant-design/icons-vue'
+import { getProviderLogo } from '@/utils/providerLogo'
+import modelAvatar from '@/assets/avatar/model.png'
 import type { ModelConfigVO } from '@/types'
 import { ModelConnectivityStatus } from '@/types'
 import {
@@ -25,7 +26,14 @@ import {
 
 const props = defineProps<{
   data: ModelConfigVO
+  providerBaseUrl?: string
 }>()
+
+/** 根据提供商baseUrl匹配品牌Logo */
+const providerLogo = computed(() => {
+  if (props.providerBaseUrl) return getProviderLogo(props.providerBaseUrl)
+  return modelAvatar
+})
 
 const emit = defineEmits<{
   edit: [id: string]
@@ -159,7 +167,7 @@ const formattedTemperature = computed(() => {
         <ATooltip :title="cornerTooltip" placement="top">
           <div class="card-avatar flex-center" :class="avatarClass">
             <LoadingOutlined v-if="isChecking" spin />
-            <SlackOutlined v-else />
+            <img v-else :src="providerLogo" class="provider-logo" />
           </div>
           <!-- 角标 -->
           <span class="avatar-corner-badge" :class="`badge-${cornerBadgeType}`">
@@ -221,17 +229,16 @@ const formattedTemperature = computed(() => {
 .model-config-card {
   min-height: 180px;
   padding: var(--spacing-md);
-  background-color: var(--color-bg-white);
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+  background-color: #FFFFFF;
   border-radius: var(--border-radius-lg);
+  border: 1px solid #ebebeb;
   transition: all var(--transition-base);
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-xs);
+  gap: var(--spacing-sm);
 
   &:hover {
-    box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.12);
+    box-shadow: 0 4px 6px -5px rgba(0, 0, 0, 0.3);
     transform: translateY(-2px);
   }
 
@@ -245,42 +252,50 @@ const formattedTemperature = computed(() => {
     .card-avatar {
       width: 40px;
       height: 40px;
-      background-color: #e8f0fe;
-      color: #4285f4;
+      background-color: #e8eaf6;
       border-radius: var(--border-radius-xl);
-      font-size: var(--font-size-2xl);
-      font-weight: 600;
       flex-shrink: 0;
-      transition: background-color var(--transition-base), color var(--transition-base);
+      transition: background-color var(--transition-base);
+
+      .provider-logo {
+        width: 28px;
+        height: 28px;
+        object-fit: contain;
+      }
 
       /* 停用态 */
       &.disabled {
-        color: #757575 !important;
         background-color: #e7e7e7 !important;
+
+        .provider-logo {
+          filter: grayscale(100%);
+          opacity: 0.5;
+        }
       }
 
       /* 检测中 */
       &.checking {
-        background-color: #e3f2fd;
-        color: #42a5f5;
+        background-color: #e8eaf6;
       }
 
       /* 检测失败 */
       &.failed {
-        background-color: #ffebee;
-        color: #ef5350;
+        background-color: #e7e7e7 !important;
+
+        .provider-logo {
+          filter: grayscale(100%);
+          opacity: 0.5;
+        }
       }
 
       /* 待检测 */
       &.not-checked {
-        background-color: #fff8e1;
-        color: #ffa726;
+        background-color: #e8eaf6;
       }
 
       /* 已连接 */
       &.connected {
-        background-color: #e8f5e9;
-        color: #52c41a;
+        background-color: #e8eaf6;
       }
     }
 
@@ -308,14 +323,14 @@ const formattedTemperature = computed(() => {
         width: 18px;
         height: 18px;
         background: #fff;
-        color: #ff4d4f;
+        color: #8c8c8c;
       }
 
       &.badge-success {
         width: 18px;
         height: 18px;
         background: #fff;
-        color: #52c41a;
+        color: #1677ff;
       }
     }
 

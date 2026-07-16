@@ -68,6 +68,7 @@ const allowedExtensions = ref<string[]>([])
 // 左侧面板宽度（可拖拽调整）
 const leftPanelWidth = ref(280)
 const isResizing = ref(false)
+const containerLeft = ref(0)
 
 /**
  * 拖拽分割条开始
@@ -75,6 +76,11 @@ const isResizing = ref(false)
 function handleResizeStart(e: MouseEvent) {
   e.preventDefault()
   isResizing.value = true
+  // 获取容器相对于视口的左偏移量
+  const container = (e.target as HTMLElement).closest('.skill-editor-view')
+  if (container) {
+    containerLeft.value = container.getBoundingClientRect().left
+  }
   document.body.style.userSelect = 'none'
   document.body.style.cursor = 'col-resize'
   document.addEventListener('mousemove', handleResizeMove)
@@ -86,7 +92,8 @@ function handleResizeStart(e: MouseEvent) {
  */
 function handleResizeMove(e: MouseEvent) {
   if (!isResizing.value) return
-  const width = Math.max(240, Math.min(500, e.clientX))
+  // 计算相对于容器的宽度
+  const width = Math.max(240, Math.min(500, e.clientX - containerLeft.value))
   leftPanelWidth.value = width
 }
 
@@ -526,7 +533,7 @@ onBeforeUnmount(() => {
           </a-button>
           <a-button type="text" danger size="small" @click="handleDeleteSkill">
             <DeleteOutlined />
-            <span>删除技能包</span>
+            <span>删除该技能包</span>
           </a-button>
         </div>
       </div>

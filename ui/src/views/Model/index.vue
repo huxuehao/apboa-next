@@ -6,6 +6,7 @@
 <script setup lang="ts">
 /* eslint-disable vue/multi-word-component-names */
 import { ref, computed, h, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { Modal, message } from 'ant-design-vue'
 import {SearchOutlined, ApiOutlined} from '@ant-design/icons-vue'
 import { useModelStore } from '@/stores'
@@ -15,11 +16,11 @@ import {ModelProviderType, type ModelProviderVO} from '@/types'
 import ModelProviderCard from '@/components/model/ModelProviderCard.vue'
 import CreateProviderCard from '@/components/model/CreateProviderCard.vue'
 import ModelProviderForm from '@/components/model/ModelProviderForm.vue'
-import ModelConfigModal from '@/components/model/ModelConfigModal.vue'
-import {ApboaModalApi} from "@/components/common/ApboaModalApi.ts";
+import {ApboaModalApi} from '@/components/common/ApboaModalApi.ts';
 import ApboaInfiniteLoading from '@/components/common/ApboaInfiniteLoading.vue'
 
 const store = useModelStore()
+const router = useRouter()
 const { list, selectedProviderType, keyword, loading, hasMore } = storeToRefs(store)
 
 const formVisible = ref<boolean>(false)
@@ -28,11 +29,6 @@ const currentData = ref<ModelProviderVO | undefined>(undefined)
 const infiniteLoadingKey = ref(0)
 /** 是否首次加载 */
 const isFirstLoad = ref(true)
-
-const configModalVisible = ref<boolean>(false)
-const currentProviderId = ref<string>('')
-const currentProviderName = ref<string>('')
-const currentProviderType = ref<string>('')
 
 /**
  * 供应商类型选项
@@ -114,13 +110,10 @@ async function handleEdit(id: string) {
 }
 
 /**
- * 处理模型配置
+ * 处理模型配置 - 跳转到配置页面
  */
-function handleConfigModels(id: string, name: string, type?: string) {
-  currentProviderId.value = id
-  currentProviderName.value = name
-  currentProviderType.value = type || ''
-  configModalVisible.value = true
+function handleConfigModels(id: string) {
+  router.push(`/model/${id}/config`)
 }
 
 /**
@@ -309,13 +302,6 @@ watch([selectedProviderType, keyword], () => {
       :data="currentData"
       :model-provider-type="selectedProviderType as ModelProviderType"
       @success="handleFormSuccess"
-    />
-
-    <ModelConfigModal
-      v-model:visible="configModalVisible"
-      :provider-id="currentProviderId"
-      :provider-name="currentProviderName"
-      :provider-type="currentProviderType"
     />
   </div>
 </template>

@@ -42,6 +42,15 @@ const bizRoutes: AppRouteRecordRaw[] = [
           hidden: false
         },
       },
+      {
+        path: RoutePaths.MODEL_PROVIDER_CONFIG,
+        name: RouteNames.MODEL_PROVIDER_CONFIG,
+        component: () => import('@/views/Model/ProviderConfig.vue'),
+        meta: {
+          title: '模型配置',
+          hidden: true
+        },
+      },
 
       {
         path: RoutePaths.AGENT,
@@ -115,6 +124,15 @@ const bizRoutes: AppRouteRecordRaw[] = [
         meta: {
           title: 'MCP',
           hidden: false
+        },
+      },
+      {
+        path: RoutePaths.MCP_TOOL_GOVERNANCE,
+        name: RouteNames.MCP_TOOL_GOVERNANCE,
+        component: () => import('@/views/Mcp/ToolGovernance.vue'),
+        meta: {
+          title: '工具治理',
+          hidden: true
         },
       },
       {

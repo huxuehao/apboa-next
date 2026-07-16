@@ -1,5 +1,5 @@
 /**
- * MCP 工具全屏调试视图
+ * MCP 工具调试视图
  *
  * @author huxuehao
  */
@@ -34,28 +34,20 @@ const emit = defineEmits<{
   exit: []
 }>()
 
-// 调试表单参数
 const formParams = ref<Record<string, unknown>>({})
-// 当前选中的工具
 const currentTool = ref<McpToolVO | null>(null)
-// 执行状态
 const executing = ref(false)
-// 当前调用结果
 const callResult = ref<McpToolDebugResultVO | null>(null)
-// 选中的历史记录
 const selectedHistory = ref<McpDebugHistoryItem | null>(null)
 
 const { historyList, addHistory, removeHistory, clearHistory } = useMcpDebugHistory()
 
-/** 可用工具列表（排除已消失的） */
 const availableTools = computed(() => props.tools.filter(t => !t.missing && t.enabled))
 
-/** 工具选择选项 */
 const toolOptions = computed(() =>
   availableTools.value.map(t => ({ label: t.toolName, value: String(t.id) }))
 )
 
-/** 当前选中工具的 ID */
 const selectedToolId = computed({
   get: () => currentTool.value ? String(currentTool.value.id) : undefined,
   set: (val: string | undefined) => {
@@ -65,7 +57,6 @@ const selectedToolId = computed({
   }
 })
 
-/** 切换工具 */
 function switchTool(tool: McpToolVO) {
   currentTool.value = tool
   formParams.value = {}
@@ -73,7 +64,6 @@ function switchTool(tool: McpToolVO) {
   selectedHistory.value = null
 }
 
-/** 执行调试调用 */
 async function handleExecute() {
   if (!currentTool.value || !props.server) return
   if (executing.value) return
@@ -87,7 +77,6 @@ async function handleExecute() {
     const result = res.data.data
     callResult.value = result
 
-    // 添加到历史
     addHistory({
       toolId: currentTool.value.id,
       toolName: currentTool.value.toolName,
@@ -119,17 +108,14 @@ async function handleExecute() {
   }
 }
 
-/** 选中历史记录 */
 function selectHistory(item: McpDebugHistoryItem) {
   selectedHistory.value = item
 }
 
-/** 返回调试面板 */
 function backToDebug() {
   selectedHistory.value = null
 }
 
-/** 格式化时间为简短格式 */
 function formatTime(dateStr: string): string {
   try {
     const d = new Date(dateStr)
@@ -139,7 +125,6 @@ function formatTime(dateStr: string): string {
   }
 }
 
-/** 格式化结果为 JSON 字符串 */
 function formatResultContent(result: McpToolDebugResultVO): string {
   if (result.content == null) return 'null'
   try {
@@ -149,27 +134,23 @@ function formatResultContent(result: McpToolDebugResultVO): string {
   }
 }
 
-/** 退出调试 */
 function handleExit() {
   emit('update:visible', false)
   emit('exit')
 }
 
-/** 处理清空历史 */
 function handleClearHistory() {
   clearHistory()
   selectedHistory.value = null
   message.success('调试历史已清空')
 }
 
-/** ESC 键退出 */
 function handleKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape' && props.visible) {
     handleExit()
   }
 }
 
-/** visible 变化时初始化 */
 watch(() => props.visible, (val) => {
   if (val) {
     if (props.tool) {
@@ -197,41 +178,33 @@ onUnmounted(() => {
 
 <template>
   <Teleport to="body">
-    <Transition name="mcp-debug">
-      <div v-if="visible" class="mcp-debug-overlay" @keydown.esc="handleExit">
-        <!-- 顶部工具栏 -->
-        <header class="mcp-debug-header">
-          <div class="header-left">
-            <AButton type="text" class="exit-btn" @click="handleExit">
-              <template #icon><ArrowLeftOutlined /></template>
-              退出 MCP 调试面板
-            </AButton>
-          </div>
-          <div class="header-center">
-            <span class="header-title">{{ server?.name || '' }}</span>
-          </div>
-          <div class="header-right">
-            <ASelect
-              v-model:value="selectedToolId"
-              :options="toolOptions"
-              placeholder="选择工具"
-              style="width: 200px"
-              :disabled="executing"
-            >
-              <template #prefixIcon><SwapOutlined /></template>
-            </ASelect>
-          </div>
+    <Transition name="debug-fade">
+      <div v-if="visible" class="debug-overlay">
+        <!-- 顶部栏 -->
+        <header class="debug-header">
+          <AButton type="link" @click="handleExit" class="back-btn">
+            <ArrowLeftOutlined />
+            <span>退出调试</span>
+          </AButton>
+          <span class="header-title">{{ server?.name }}</span>
+          <ASelect
+            v-model:value="selectedToolId"
+            :options="toolOptions"
+            placeholder="选择工具"
+            style="width: 200px"
+            size="small"
+            :disabled="executing"
+          >
+            <template #prefixIcon><SwapOutlined /></template>
+          </ASelect>
         </header>
 
-        <!-- 主体区域 -->
-        <div class="mcp-debug-body">
-          <!-- 左侧历史边栏 -->
+        <!-- 主体 -->
+        <div class="debug-body">
+          <!-- 左侧历史 -->
           <aside class="debug-sidebar">
-            <div class="sidebar-header">
-              <div class="sidebar-title">
-                <ClockCircleOutlined />
-                <span>调试历史</span>
-              </div>
+            <div class="sidebar-head">
+              <span class="sidebar-label">调试历史</span>
               <AButton
                 v-if="historyList.length > 0"
                 type="text"
@@ -239,150 +212,124 @@ onUnmounted(() => {
                 danger
                 @click="handleClearHistory"
               >
-                <template #icon><DeleteOutlined /></template>
+                <DeleteOutlined />
               </AButton>
             </div>
             <div class="sidebar-list">
-              <TransitionGroup name="history-item" tag="div">
-                <div
-                  v-for="item in historyList"
-                  :key="item.id"
-                  class="history-item"
-                  :class="{ active: selectedHistory?.id === item.id }"
-                  @click="selectHistory(item)"
-                >
-                  <div class="history-item-icon">
-                    <CheckCircleFilled v-if="item.result.success" class="icon-success" />
-                    <CloseCircleFilled v-else class="icon-fail" />
+              <div
+                v-for="item in historyList"
+                :key="item.id"
+                class="history-item"
+                :class="{ active: selectedHistory?.id === item.id }"
+                @click="selectHistory(item)"
+              >
+                <CheckCircleFilled v-if="item.result.success" class="history-icon success" />
+                <CloseCircleFilled v-else class="history-icon fail" />
+                <div class="history-info">
+                  <div class="history-name">{{ item.toolName }}</div>
+                  <div class="history-meta">
+                    {{ formatTime(item.executedAt) }}
+                    <span v-if="item.result.durationMs">{{ item.result.durationMs }}ms</span>
                   </div>
-                  <div class="history-item-content">
-                    <div class="history-item-name">{{ item.toolName }}</div>
-                    <div class="history-item-meta">
-                      {{ formatTime(item.executedAt) }}
-                      <span v-if="item.result.durationMs" class="history-item-duration">
-                        {{ item.result.durationMs }}ms
-                      </span>
-                    </div>
-                  </div>
-                  <AButton
-                    type="text"
-                    size="small"
-                    class="history-item-delete"
-                    @click.stop="removeHistory(item.id)"
-                  >
-                    <template #icon><ClearOutlined /></template>
-                  </AButton>
                 </div>
-              </TransitionGroup>
+                <AButton type="text" size="small" class="history-del" @click.stop="removeHistory(item.id)">
+                  <ClearOutlined />
+                </AButton>
+              </div>
               <div v-if="!historyList.length" class="sidebar-empty">
-                <ClockCircleOutlined class="empty-icon" />
+                <ClockCircleOutlined />
                 <span class="text-placeholder text-xs">暂无调试记录</span>
               </div>
             </div>
           </aside>
 
-          <!-- 右侧调试面板 -->
-          <main class="debug-panel">
-            <Transition name="panel-fade" mode="out-in">
-              <!-- 历史详情视图 -->
-              <div v-if="selectedHistory" key="history" class="split-layout">
-                <div class="split-left">
-                  <div class="history-detail-header">
-                    <AButton type="text" style="border: 1px solid #E4E5E7;" @click="backToDebug">
-                      <template #icon><ArrowLeftOutlined /></template>
-                      返回调试
-                    </AButton>
+          <!-- 右侧内容 -->
+          <main class="debug-main">
+            <!-- 历史详情 -->
+            <template v-if="selectedHistory">
+              <div class="debug-pane">
+                <div class="pane-left">
+                  <AButton type="text" size="small" @click="backToDebug" style="margin-bottom: 12px;">
+                    <ArrowLeftOutlined /> 返回调试
+                  </AButton>
+                  <div class="field-group">
+                    <div class="field-label">工具名称</div>
+                    <div>{{ selectedHistory.toolName }}</div>
                   </div>
-                  <div class="history-detail-section">
-                    <div class="section-label">工具名称</div>
-                    <div class="section-value">{{ selectedHistory.toolName }}</div>
-                  </div>
-                  <div class="history-detail-section">
-                    <div class="section-label">调用参数</div>
-                    <pre class="result-code">{{ JSON.stringify(selectedHistory.input, null, 2) || '{}' }}</pre>
+                  <div class="field-group">
+                    <div class="field-label">调用参数</div>
+                    <pre class="code-block">{{ JSON.stringify(selectedHistory.input, null, 2) || '{}' }}</pre>
                   </div>
                 </div>
-                <div class="split-right">
-                  <div class="result-section">
-                    <div class="result-header">
-                      <span class="result-label">调用结果</span>
-                      <ATag :color="selectedHistory.result.success ? 'success' : 'error'" :bordered="false">
-                        {{ selectedHistory.result.success ? '成功' : '失败' }}
-                      </ATag>
-                      <span v-if="selectedHistory.result.durationMs" class="result-duration text-placeholder text-xs">
-                        {{ selectedHistory.result.durationMs }}ms
-                      </span>
-                    </div>
-                    <pre
-                      class="result-code result-code-full"
-                      :class="{ 'result-error': !selectedHistory.result.success }"
-                    >{{ selectedHistory.result.success
-                      ? formatResultContent(selectedHistory.result)
-                      : selectedHistory.result.errorMessage }}</pre>
+                <div class="pane-right">
+                  <div class="pane-head">
+                    <span class="field-label">调用结果</span>
+                    <ATag :color="selectedHistory.result.success ? 'default' : 'error'" :bordered="false">
+                      {{ selectedHistory.result.success ? '成功' : '失败' }}
+                    </ATag>
+                    <span v-if="selectedHistory.result.durationMs" class="text-placeholder text-xs">
+                      {{ selectedHistory.result.durationMs }}ms
+                    </span>
                   </div>
+                  <pre
+                    class="code-block code-full"
+                    :class="{ 'code-error': !selectedHistory.result.success }"
+                  >{{ selectedHistory.result.success
+                    ? formatResultContent(selectedHistory.result)
+                    : selectedHistory.result.errorMessage }}</pre>
                 </div>
               </div>
+            </template>
 
-              <!-- 调试表单视图 -->
-              <div v-else key="debug" class="split-layout">
-                <!-- 左侧：工具信息 + 参数表单 + 执行按钮 -->
-                <div class="split-left">
-                  <div v-if="currentTool" class="tool-info-card">
-                    <div class="tool-info-name">{{ currentTool.toolName }}</div>
-                    <div class="tool-info-desc text-placeholder">
-                      {{ currentTool.description || '暂无描述' }}
-                    </div>
+            <!-- 调试表单 -->
+            <template v-else>
+              <div class="debug-pane">
+                <div class="pane-left">
+                  <div v-if="currentTool" class="tool-brief">
+                    <div class="tool-brief-name">{{ currentTool.toolName }}</div>
+                    <div class="tool-brief-desc text-placeholder">{{ currentTool.description || '暂无描述' }}</div>
                   </div>
-
-                  <div class="debug-form-section">
-                    <McpDebugForm
-                      v-model="formParams"
-                      :schema="currentTool?.inputSchema ?? null"
-                    />
-                  </div>
-
-                  <div class="debug-actions">
-                    <AButton
-                      type="primary"
-                      :loading="executing"
-                      :disabled="!currentTool"
-                      @click="handleExecute"
-                    >
-                      <template #icon><PlayCircleOutlined /></template>
-                      {{ executing ? '执行中...' : '执行调试' }}
-                    </AButton>
-                  </div>
+                  <McpDebugForm
+                    v-model="formParams"
+                    :schema="currentTool?.inputSchema ?? null"
+                  />
+                  <AButton
+                    type="primary"
+                    :loading="executing"
+                    :disabled="!currentTool"
+                    @click="handleExecute"
+                    style="margin-top: 12px;"
+                  >
+                    <PlayCircleOutlined />
+                    {{ executing ? '执行中...' : '执行调试' }}
+                  </AButton>
                 </div>
-
-                <!-- 右侧：执行结果 -->
-                <div class="split-right">
-                  <div v-if="callResult" class="result-section">
-                    <div class="result-header">
-                      <span class="result-label">调用结果</span>
-                      <ATag :color="callResult.success ? 'success' : 'error'" :bordered="false">
+                <div class="pane-right">
+                  <template v-if="callResult">
+                    <div class="pane-head">
+                      <span class="field-label">调用结果</span>
+                      <ATag :color="callResult.success ? 'default' : 'error'" :bordered="false">
                         {{ callResult.success ? '成功' : '失败' }}
                       </ATag>
-                      <span v-if="callResult.durationMs" class="result-duration text-placeholder text-xs">
+                      <span v-if="callResult.durationMs" class="text-placeholder text-xs">
                         {{ callResult.durationMs }}ms
                       </span>
                     </div>
                     <pre
-                      class="result-code result-code-full"
-                      :class="{ 'result-error': !callResult.success }"
+                      class="code-block code-full"
+                      :class="{ 'code-error': !callResult.success }"
                     >{{ callResult.success
                       ? formatResultContent(callResult)
                       : callResult.errorMessage }}</pre>
-                  </div>
-                  <div v-else class="result-placeholder">
-                    <LoadingOutlined v-if="executing" class="result-placeholder-icon"  />
-                    <PlayCircleOutlined v-else class="result-placeholder-icon" />
-                    <span class="text-placeholder">
-                    {{ executing ? '正在执行调试中，请稍候' : '执行调试后，结果将显示在此处' }}
-                    </span>
+                  </template>
+                  <div v-else class="result-empty">
+                    <LoadingOutlined v-if="executing" />
+                    <PlayCircleOutlined v-else />
+                    <span class="text-placeholder">{{ executing ? '正在执行...' : '执行调试后，结果将显示在此处' }}</span>
                   </div>
                 </div>
               </div>
-            </Transition>
+            </template>
           </main>
         </div>
       </div>
@@ -391,148 +338,106 @@ onUnmounted(() => {
 </template>
 
 <style scoped lang="scss">
-/* 全屏遮罩过渡动画 */
-.mcp-debug-enter-active {
-  transition: opacity 0.28s cubic-bezier(0.22, 1, 0.36, 1);
-  .mcp-debug-header,
-  .debug-sidebar,
-  .debug-panel {
-    transition: opacity 0.32s cubic-bezier(0.22, 1, 0.36, 1), transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
-  }
-  .mcp-debug-header { transition-delay: 0.04s; }
-  .debug-sidebar { transition-delay: 0.08s; }
-  .debug-panel { transition-delay: 0.12s; }
+/* 过渡动画 - 单一淡入淡出 */
+.debug-fade-enter-active,
+.debug-fade-leave-active {
+  transition: opacity var(--transition-base);
 }
-.mcp-debug-leave-active {
-  transition: opacity 0.2s cubic-bezier(0.4, 0, 1, 1);
-  .mcp-debug-header,
-  .debug-sidebar,
-  .debug-panel {
-    transition: opacity 0.15s cubic-bezier(0.4, 0, 1, 1), transform 0.15s cubic-bezier(0.4, 0, 1, 1);
-  }
-}
-.mcp-debug-enter-from {
+.debug-fade-enter-from,
+.debug-fade-leave-to {
   opacity: 0;
-  .mcp-debug-header { opacity: 0; transform: translateY(-12px); }
-  .debug-sidebar { opacity: 0; transform: translateX(-16px); }
-  .debug-panel { opacity: 0; transform: translateX(16px); }
 }
-.mcp-debug-leave-to {
-  opacity: 0;
-  .mcp-debug-header,
-  .debug-sidebar,
-  .debug-panel { opacity: 0; transform: translateY(8px); }
-}
-
-/* 面板内容切换动画 */
-.panel-fade-enter-active { transition: opacity 0.22s ease, transform 0.22s ease; }
-.panel-fade-leave-active { transition: opacity 0.15s ease, transform 0.15s ease; }
-.panel-fade-enter-from { opacity: 0; transform: translateY(8px); }
-.panel-fade-leave-to { opacity: 0; transform: translateY(-4px); }
-
-/* 结果面板滑入动画 */
-.result-slide-enter-active { transition: opacity 0.3s ease, transform 0.3s ease; }
-.result-slide-leave-active { transition: opacity 0.15s ease; }
-.result-slide-enter-from { opacity: 0; transform: translateY(12px); }
-.result-slide-leave-to { opacity: 0; }
-
-/* 历史列表项动画 */
-.history-item-enter-active { transition: all 0.25s ease; }
-.history-item-leave-active { transition: all 0.2s ease; position: absolute; }
-.history-item-enter-from { opacity: 0; transform: translateX(-12px); }
-.history-item-leave-to { opacity: 0; transform: translateX(12px); }
-.history-item-move { transition: transform 0.25s ease; }
 
 /* 全屏覆盖层 */
-.mcp-debug-overlay {
+.debug-overlay {
   position: fixed;
   inset: 0;
   z-index: 1050;
   display: flex;
   flex-direction: column;
-  background: #ffffff;
-  color: var(--color-text-primary, #1a1a2e);
+  background: #fff;
 }
 
-/* 顶部工具栏 */
-.mcp-debug-header {
+/* 顶部栏 */
+.debug-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  height: 56px;
-  padding: 0 20px;
-  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
-  flex-shrink: 0;
   gap: 16px;
+  height: 48px;
+  padding: 0 var(--spacing-md);
+  border-bottom: 1px solid #ebebeb;
+  flex-shrink: 0;
+
+  .back-btn {
+    padding: 0;
+    color: rgba(0, 0, 0, 0.45);
+    flex-shrink: 0;
+
+    &:hover {
+      color: rgba(0, 0, 0, 0.88);
+    }
+
+    span {
+      margin-left: 4px;
+    }
+  }
+
+  .header-title {
+    flex: 1;
+    font-size: var(--font-size-base);
+    font-weight: 600;
+    color: var(--color-text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }
-.header-left { flex-shrink: 0; }
-.header-center {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 15px;
-  font-weight: 600;
-  min-width: 0;
-  overflow: hidden;
-}
-.header-icon { opacity: 0.65; font-size: 16px; }
-.header-separator { opacity: 0.3; }
-.header-server {
-  opacity: 0.7;
-  font-weight: 400;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.header-right { flex-shrink: 0; }
-.exit-btn { color: inherit; border: 1px solid #E4E5E7; }
 
 /* 主体布局 */
-.mcp-debug-body {
+.debug-body {
   display: flex;
   flex: 1;
   min-height: 0;
-  overflow: hidden;
 }
 
 /* 左侧历史边栏 */
 .debug-sidebar {
-  width: 300px;
+  width: 280px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid rgba(15, 23, 42, 0.08);
-  background: rgba(245, 247, 250, 0.5);
+  border-right: 1px solid #ebebeb;
+  background: #fafafa;
 }
-.sidebar-header {
+
+.sidebar-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 16px 10px;
+  padding: 12px 16px 8px;
   flex-shrink: 0;
 }
-.sidebar-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
+
+.sidebar-label {
+  font-size: var(--font-size-sm);
   font-weight: 600;
-  opacity: 0.7;
+  color: var(--color-text-regular);
 }
+
 .sidebar-list {
   flex: 1;
   overflow-y: auto;
   padding: 0 8px 8px;
-  position: relative;
 }
+
 .sidebar-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
   gap: 8px;
   padding: 40px 16px;
-  .empty-icon { font-size: 24px; opacity: 0.25; }
+  color: var(--color-text-placeholder);
+  font-size: 24px;
 }
 
 /* 历史记录项 */
@@ -543,70 +448,90 @@ onUnmounted(() => {
   padding: 8px 10px;
   border-radius: 6px;
   cursor: pointer;
-  transition: background 0.15s ease;
-  margin-bottom: 2px;
-  position: relative;
+  transition: background var(--transition-base);
+
   &:hover {
-    background: rgba(15, 23, 42, 0.05);
-    .history-item-delete { opacity: 1; }
+    background: rgba(0, 0, 0, 0.04);
+
+    .history-del {
+      opacity: 1;
+    }
   }
+
   &.active {
-    background: rgba(22, 119, 255, 0.08);
-    .history-item-name { color: #1677ff; }
+    background: rgba(22, 119, 255, 0.06);
   }
 }
-.history-item-icon { flex-shrink: 0; font-size: 14px; }
-.icon-success { color: #52c41a; }
-.icon-fail { color: #ff4d4f; }
-.history-item-content { flex: 1; min-width: 0; }
-.history-item-name {
-  font-size: 13px;
+
+.history-icon {
+  flex-shrink: 0;
+  font-size: 14px;
+
+  &.success {
+    color: #1677ff;
+  }
+
+  &.fail {
+    color: #8c8c8c;
+  }
+}
+
+.history-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.history-name {
+  font-size: var(--font-size-sm);
   font-weight: 500;
+  color: var(--color-text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.history-item-meta {
+
+.history-meta {
   font-size: 11px;
-  opacity: 0.5;
+  color: var(--color-text-placeholder);
   display: flex;
   align-items: center;
-  gap: 4px;
-}
-.history-item-duration { opacity: 0.8; }
-.history-item-delete {
-  opacity: 0;
-  flex-shrink: 0;
-  transition: opacity 0.15s ease;
-  font-size: 12px;
+  gap: 6px;
 }
 
-/* 右侧调试面板 */
-.debug-panel {
+.history-del {
+  opacity: 0;
+  flex-shrink: 0;
+  transition: opacity var(--transition-base);
+  font-size: 12px;
+  color: var(--color-text-placeholder);
+}
+
+/* 右侧主内容区 */
+.debug-main {
   flex: 1;
   min-width: 0;
   overflow-y: auto;
-  padding: 24px 32px;
+  padding: var(--spacing-md);
 }
 
-/* 左右分栏布局 */
-.split-layout {
+.debug-pane {
   display: flex;
   gap: 24px;
   height: 100%;
-  min-height: 0;
 }
-.split-left {
+
+.pane-left {
   width: 50%;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
   overflow-y: auto;
   padding-right: 24px;
-  border-right: 1px solid rgba(15, 23, 42, 0.06);
+  border-right: 1px solid #ebebeb;
 }
-.split-right {
+
+.pane-right {
   flex: 1;
   min-width: 0;
   display: flex;
@@ -614,54 +539,53 @@ onUnmounted(() => {
   overflow-y: auto;
 }
 
-/* 工具信息卡片 */
-.tool-info-card {
-  padding: 14px 16px;
-  border-radius: 8px;
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  background: rgba(22, 119, 255, 0.02);
-}
-.tool-info-name {
-  font-size: 15px;
-  font-weight: 600;
-  margin-bottom: 4px;
-}
-.tool-info-desc {
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-/* 执行按钮区 */
-.debug-actions {
-  display: flex;
-  gap: 8px;
-  padding-top: 4px;
-}
-
-/* 结果区域 */
-.result-section {
-  padding-top: 4px;
-}
-.result-header {
+.pane-head {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
-.result-label {
-  font-size: 14px;
+
+.field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field-label {
+  font-size: var(--font-size-sm);
   font-weight: 600;
+  color: var(--color-text-primary);
 }
-.result-duration {
-  margin-left: auto;
+
+/* 工具简介卡片 */
+.tool-brief {
+  padding: 12px 16px;
+  border-radius: var(--border-radius-lg);
+  border: 1px solid #ebebeb;
+  background: #fff;
 }
-.result-code {
-  background: rgba(15, 23, 42, 0.04);
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  border-radius: 8px;
-  padding: 14px 16px;
-  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
-  font-size: 13px;
+
+.tool-brief-name {
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: 4px;
+}
+
+.tool-brief-desc {
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+
+/* 代码块 */
+.code-block {
+  background: #fafafa;
+  border: 1px solid #ebebeb;
+  border-radius: var(--border-radius-lg);
+  padding: 12px 16px;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: var(--font-size-sm);
   line-height: 1.6;
   overflow-x: auto;
   max-height: 400px;
@@ -669,60 +593,52 @@ onUnmounted(() => {
   white-space: pre-wrap;
   word-break: break-all;
   margin: 0;
-  &.result-error {
-    background: rgba(255, 77, 79, 0.04);
-    border-color: rgba(255, 77, 79, 0.2);
-    color: #cf1322;
+
+  &.code-full {
+    flex: 1;
+    max-height: none;
+  }
+
+  &.code-error {
+    background: #fff2f0;
+    border-color: #ffccc7;
+    color: #820014;
   }
 }
 
-/* 结果占位符 */
-.result-placeholder {
+/* 结果空态 */
+.result-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: 8px;
   flex: 1;
   min-height: 200px;
-}
-.result-placeholder-icon {
-  font-size: 36px;
-  opacity: 0.15;
+  font-size: 32px;
+  color: var(--color-text-placeholder);
 }
 
-/* 历史详情区块 */
-.history-detail-header {
-  display: flex;
-  align-items: center;
-  margin-bottom: 4px;
-}
-.history-detail-section {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.section-label {
-  font-size: 13px;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.section-value {
-  font-size: 14px;
-}
-
-/* 右侧全高结果代码块 */
-.result-code-full {
-  flex: 1;
-  max-height: none;
-}
-
-/* 响应式适配 */
+/* 响应式 */
 @media (max-width: 768px) {
-  .debug-sidebar { width: 220px; }
-  .debug-panel { padding: 16px; }
-  .header-center { display: none; }
+  .debug-sidebar {
+    width: 200px;
+  }
+
+  .debug-main {
+    padding: var(--spacing-sm);
+  }
+
+  .debug-pane {
+    flex-direction: column;
+  }
+
+  .pane-left {
+    width: 100%;
+    padding-right: 0;
+    padding-bottom: 16px;
+    border-right: none;
+    border-bottom: 1px solid #ebebeb;
+  }
 }
 </style>

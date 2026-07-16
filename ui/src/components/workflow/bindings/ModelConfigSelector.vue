@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { SearchOutlined, CloseCircleFilled, SlackOutlined } from '@ant-design/icons-vue'
+import { SearchOutlined, CloseCircleFilled } from '@ant-design/icons-vue'
+import modelAvatar from '@/assets/avatar/model.png'
+import { getProviderLogo } from '@/utils/providerLogo'
 import type { ModelConfigVO, ModelProviderVO } from '@/types'
 
 const props = defineProps<{
@@ -20,6 +22,17 @@ const searchText = ref('')
 const selectedLabel = computed(() => {
   const model = props.models.find((m) => String(m.id) === String(props.modelValue || ''))
   return model?.name || ''
+})
+
+/**
+ * 根据选中模型的提供商匹配对应品牌Logo
+ */
+const selectedLogo = computed(() => {
+  const model = props.models.find((m) => String(m.id) === String(props.modelValue || ''))
+  if (!model) return modelAvatar
+  const provider = props.providers.find((p) => String(p.id) === String(model.providerId))
+  if (!provider?.baseUrl) return modelAvatar
+  return getProviderLogo(provider.baseUrl)
 })
 
 const groupedModels = computed(() => {
@@ -85,7 +98,7 @@ watch(popoverOpen, (open) => {
   >
     <div class="model-selector-trigger" :class="{ placeholder: !selectedLabel }">
       <span v-if="selectedLabel" class="trigger-selected-label">
-        <SlackOutlined style="color: #52C41A;"/>
+        <img :src="selectedLogo" class="select-icon" />
         {{ selectedLabel }}
       </span>
       <span v-else class="trigger-placeholder-text">选择模型...</span>
@@ -166,6 +179,16 @@ watch(popoverOpen, (open) => {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: #262626;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+
+  .select-icon {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    object-fit: contain;
+  }
 }
 
 .trigger-placeholder-text {

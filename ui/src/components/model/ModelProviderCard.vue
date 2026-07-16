@@ -33,7 +33,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   view: [id: string]
   edit: [id: string]
-  configModels: [id: string, name: string, type?: string]
+  configModels: [id: string, name: string, type?: string, baseUrl?: string]
   delete: [id: string]
   enable: [id: string]
 }>()
@@ -113,7 +113,7 @@ function handleMenuClick({ key }: { key: string }) {
       emit('enable', props.data.id as string)
       break
     case 'config':
-      emit('configModels', props.data.id as string, props.data.name, props.data.type)
+      emit('configModels', props.data.id as string, props.data.name, props.data.type, props.data.baseUrl)
       break
     case 'delete':
       emit('delete', props.data.id as string)
@@ -125,7 +125,7 @@ function handleMenuClick({ key }: { key: string }) {
  * 处理配置模型按钮点击
  */
 function handleConfigClick() {
-  emit('configModels', props.data.id as string, props.data.name, props.data.type)
+  emit('configModels', props.data.id as string, props.data.name, props.data.type, props.data.baseUrl)
 }
 </script>
 

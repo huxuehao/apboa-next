@@ -6,6 +6,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { BugOutlined, SearchOutlined, ToolOutlined } from '@ant-design/icons-vue'
+import SimpleSwitch from '@/components/common/SimpleSwitch.vue'
 import type { McpServerVO, McpToolVO } from '@/types'
 
 const props = defineProps<{
@@ -137,12 +138,10 @@ function handleClose() {
                   <ATag v-else-if="tool.enabled" color="success" :bordered="false">全局可用</ATag>
                   <ATag v-else color="default" :bordered="false">全局禁用</ATag>
                 </div>
-                <ASwitch
+                <SimpleSwitch
                   :checked="tool.enabled"
                   :loading="togglingMap.has(tool.id)"
                   :disabled="loading || readonly || togglingMap.has(tool.id)"
-                  checked-children="开"
-                  un-checked-children="关"
                   @change="(checked: boolean) => handleToggleEnabled(tool, checked)"
                 />
               </div>

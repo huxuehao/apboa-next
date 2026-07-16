@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import {SearchOutlined, CloseCircleFilled, AppstoreOutlined} from '@ant-design/icons-vue'
+import {SearchOutlined, CloseCircleFilled} from '@ant-design/icons-vue'
+import skillAvatar from '@/assets/avatar/skill.png'
 import type { SkillPackageVO } from '@/types'
 
 const props = defineProps<{
@@ -85,7 +86,7 @@ watch(popoverOpen, (open) => {
       <span v-if="selectedCount === 0" class="trigger-placeholder">选择技能包...</span>
       <span v-else class="trigger-content">
         <span class="trigger-name">
-          <AppstoreOutlined style="color: #AB47BC;" />
+          <img :src="skillAvatar" class="select-icon" />
           {{ selectedLabel }}
         </span>
         <span v-if="selectedCount > 1" class="trigger-count">+{{ selectedCount - 1 }}</span>
@@ -181,10 +182,20 @@ watch(popoverOpen, (open) => {
 }
 
 .trigger-name {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: #262626;
+
+  .select-icon {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    object-fit: contain;
+  }
 }
 
 .trigger-count {

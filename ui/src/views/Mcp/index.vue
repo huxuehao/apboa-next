@@ -6,11 +6,11 @@
 <script setup lang="ts">
 /* eslint-disable vue/multi-word-component-names */
 import { computed, h, onActivated, onBeforeMount, ref, watch } from 'vue'
-import { message, Modal } from 'ant-design-vue'
+import { useRouter } from 'vue-router'
+import { Modal } from 'ant-design-vue'
 import { CloudServerOutlined, SearchOutlined } from '@ant-design/icons-vue'
 import { storeToRefs } from 'pinia'
-import type { McpProtocol, McpServerVO, McpToolVO } from '@/types'
-import { McpActivationStatus, McpFailureSource } from '@/types'
+import type { McpProtocol, McpServerVO } from '@/types'
 import * as mcpApi from '@/api/mcp'
 import { useMcpStore } from '@/stores'
 import { ApboaModalApi } from '@/components/common/ApboaModalApi.ts'
@@ -18,11 +18,10 @@ import ApboaInfiniteLoading from '@/components/common/ApboaInfiniteLoading.vue'
 import CreateCard from '@/components/mcp/CreateCard.vue'
 import McpCard from '@/components/mcp/McpCard.vue'
 import McpForm from '@/components/mcp/McpForm.vue'
-import McpToolGovernance from '@/components/mcp/McpToolGovernance.vue'
-import McpDebugView from '@/components/mcp/McpDebugView.vue'
 import { getMcpConnectionStatusText } from '@/composables/useMcpPresentation'
 
 const store = useMcpStore()
+const router = useRouter()
 const { list, selectedProtocol, keyword, loading, hasMore } = storeToRefs(store)
 
 const formVisible = ref(false)
@@ -31,14 +30,6 @@ const initialProtocol = ref<McpProtocol | undefined>(undefined)
 const infiniteLoadingKey = ref(0)
 const isFirstLoad = ref(true)
 const hasActivatedOnce = ref(false)
-const toolModalVisible = ref(false)
-const toolLoading = ref(false)
-const currentToolServer = ref<McpServerVO | undefined>(undefined)
-const currentTools = ref<McpToolVO[]>([])
-
-// 调试视图状态
-const debugVisible = ref(false)
-const debugTool = ref<McpToolVO | null>(null)
 
 const currentProtocol = computed<McpProtocol | null>(() => selectedProtocol.value as McpProtocol | null)
 
@@ -48,11 +39,6 @@ const protocolOptions = [
   { label: 'SSE', value: 'SSE' },
   { label: 'STDIO', value: 'STDIO' }
 ]
-
-const toolGovernanceReadonly = computed(() => {
-  return currentToolServer.value?.activationStatus === McpActivationStatus.FAILED
-    && currentToolServer.value?.failureSource === McpFailureSource.RUNTIME_AUTO_DEGRADE
-})
 
 function connectionText(data: McpServerVO) {
   return getMcpConnectionStatusText(data)
@@ -187,63 +173,11 @@ async function handleSync(id: string) {
   await store.syncServerTools(id, '刷新工具')
 }
 
-async function loadToolGovernance(id: string) {
-  toolLoading.value = true
-  try {
-    const [detailRes, toolsRes] = await Promise.all([
-      mcpApi.detail(id),
-      mcpApi.listTools(id)
-    ])
-    currentToolServer.value = detailRes.data.data
-    currentTools.value = toolsRes.data.data || []
-    patchMcpItem(detailRes.data.data)
-    toolModalVisible.value = true
-  } finally {
-    toolLoading.value = false
-  }
-}
-
-async function handleToolGovernance(id: string) {
-  await loadToolGovernance(id)
-}
-
-async function handleToolEnabledChange(tool: McpToolVO, enabled: boolean) {
-  if (!currentToolServer.value) {
-    return
-  }
-  const response = await mcpApi.updateToolsGlobalEnabled(
-    currentToolServer.value.id as string,
-    [tool.id as string],
-    enabled
-  )
-  patchMcpItem(response.data.data)
-  // 直接更新本地工具状态，避免全局刷新
-  const target = currentTools.value.find(t => t.id === tool.id)
-  if (target) {
-    target.enabled = enabled
-  }
-  message.success('工具全局可用状态已更新')
-}
-
-/** 进入工具调试 */
-function handleDebugTool(tool: McpToolVO) {
-  debugTool.value = tool
-  toolModalVisible.value = false
-  debugVisible.value = true
-}
-
-/** 退出调试，恢复工具治理弹窗 */
-function handleDebugExit() {
-  debugVisible.value = false
-  debugTool.value = null
-  toolModalVisible.value = true
-}
-
-function patchMcpItem(next: McpServerVO) {
-  const index = list.value.findIndex(item => item.id === next.id)
-  if (index >= 0) {
-    list.value[index] = next
-  }
+/**
+ * 处理工具治理 - 跳转到工具治理页面
+ */
+function handleToolGovernance(id: string) {
+  router.push(`/mcp/${id}/tools`)
 }
 
 async function handleInfiniteLoading($state: {
@@ -367,25 +301,6 @@ onActivated(() => {
       :data="currentData"
       :initial-protocol="initialProtocol"
       @success="handleFormSuccess"
-    />
-
-    <McpToolGovernance
-      v-model:open="toolModalVisible"
-      :server="currentToolServer"
-      :tools="currentTools"
-      :loading="toolLoading"
-      :readonly="toolGovernanceReadonly"
-      @tool-enabled-change="handleToolEnabledChange"
-      @debug-tool="handleDebugTool"
-    />
-
-    <McpDebugView
-      :visible="debugVisible"
-      :tool="debugTool"
-      :server="currentToolServer ?? null"
-      :tools="currentTools"
-      @update:visible="(v: boolean) => { debugVisible = v }"
-      @exit="handleDebugExit"
     />
   </div>
 </template>

@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import InputBindingEditor from '@/components/workflow/bindings/InputBindingEditor.vue'
-import PanelSection from './PanelSection.vue'
 import type { WorkflowFlowEdge, WorkflowFlowNode, WorkflowInputConfig } from '@/types/workflow'
 
 defineProps<{
@@ -18,8 +17,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <PanelSection title="输入绑定">
-    <InputBindingEditor
+  <InputBindingEditor
       :model-value="modelValue"
       :nodes="nodes"
       :edges="edges || []"
@@ -28,5 +26,4 @@ const emit = defineEmits<{
       :readonly-name="readonlyName"
       @update:model-value="(value) => emit('update:modelValue', value)"
     />
-  </PanelSection>
 </template>

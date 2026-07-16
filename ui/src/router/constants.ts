@@ -29,6 +29,7 @@ export const RouteNames = {
 
   // 模型管理
   MODEL: 'Model',
+  MODEL_PROVIDER_CONFIG: 'ModelProviderConfig',
 
   // 提示词管理
   PROMPT: 'Prompt',
@@ -49,6 +50,7 @@ export const RouteNames = {
 
   // MCP管理
   MCP: 'Mcp',
+  MCP_TOOL_GOVERNANCE: 'McpToolGovernance',
 
   // 敏感词管理
   SENSITIVE: 'Sensitive',
@@ -107,6 +109,7 @@ export const RoutePaths = {
 
   // 模型管理
   MODEL: 'model',
+  MODEL_PROVIDER_CONFIG: '/model/:providerId/config',
 
   // 提示词管理
   PROMPT: 'prompt',
@@ -130,6 +133,7 @@ export const RoutePaths = {
 
   // MCP管理
   MCP: 'mcp',
+  MCP_TOOL_GOVERNANCE: '/mcp/:serverId/tools',
 
   // 敏感词管理
   SENSITIVE: 'sensitive',

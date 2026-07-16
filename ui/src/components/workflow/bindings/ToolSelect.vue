@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import {SearchOutlined, CloseCircleFilled, ToolOutlined} from '@ant-design/icons-vue'
+import {SearchOutlined, CloseCircleFilled} from '@ant-design/icons-vue'
+import toolAvatar from '@/assets/avatar/tool.png'
 import type { ToolVO } from '@/types'
 
 const props = withDefaults(defineProps<{
@@ -114,7 +115,7 @@ watch(popoverOpen, (open) => {
       <span v-if="selectedCount === 0" class="trigger-placeholder">选择工具...</span>
       <span v-else class="trigger-content">
         <span class="trigger-name">
-          <ToolOutlined style="color: #399DF2;" />
+          <img :src="toolAvatar" class="select-icon" />
           {{ selectedLabel }}
         </span>
         <span v-if="multiple && selectedCount > 1" class="trigger-count">+{{ selectedCount - 1 }}</span>
@@ -211,10 +212,20 @@ watch(popoverOpen, (open) => {
 }
 
 .trigger-name {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: #262626;
+
+  .select-icon {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    object-fit: contain;
+  }
 }
 
 .trigger-count {
