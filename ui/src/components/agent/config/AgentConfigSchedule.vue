@@ -153,7 +153,7 @@ async function handleSubmit() {
       type: 'AGENT',
       bizId: props.agentId,
       cron: formData.value.cron,
-      jobClass: 'com.hxh.apboa.job.scheduler.AgentScheduler',
+      jobClass: 'com.hxh.apboa.scheduler.scheduler.AgentScheduler',
       dataMap,
       enabled: formData.value.enabled
     }

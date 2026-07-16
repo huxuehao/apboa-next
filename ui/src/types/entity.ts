@@ -496,7 +496,7 @@ export interface JobInfo {
   type: string
   bizId: string
   cron: string
-  jobClass: string // com.hxh.apboa.job.scheduler.AgentScheduler
+  jobClass: string // com.hxh.apboa.scheduler.scheduler.AgentScheduler
   dataMap: string // {"agentId":"xxxx", "input":"xxxx"}
   enabled: boolean // 0表示未启动，1表示启动
 }
