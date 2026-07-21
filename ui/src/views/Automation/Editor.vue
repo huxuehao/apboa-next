@@ -31,6 +31,7 @@ const pageTitle = computed(() => isEdit.value ? '编辑-自动化任务' : '新�
 
 const loading = ref(false)
 const saving = ref(false)
+const loadingJobData = ref(false)
 const targetType = ref<'AGENT' | 'WORKFLOW'>('AGENT')
 const selectedTarget = ref<TargetItem | null>(null)
 const cron = ref('0 0 * * * ?')
@@ -112,6 +113,7 @@ function getDefaultValue(type: string): unknown {
 async function loadJobData() {
   if (!jobId.value) return
 
+  loadingJobData.value = true
   loading.value = true
   try {
     // 通过ID获取最新数据（包括enabled等字段）
@@ -161,6 +163,7 @@ async function loadJobData() {
     console.error('加载任务数据失败:', e)
   } finally {
     loading.value = false
+    loadingJobData.value = false
   }
 }
 
@@ -179,6 +182,7 @@ watch(targetType, () => {
  * 目标选择变化
  */
 watch(selectedTarget, (newTarget) => {
+  if (loadingJobData.value) return
   if (newTarget && targetType.value === 'WORKFLOW') {
     loadWorkflowConfig(newTarget.id)
   } else if (!newTarget) {

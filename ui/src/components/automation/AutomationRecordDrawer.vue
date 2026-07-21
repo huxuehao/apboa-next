@@ -45,7 +45,7 @@ async function loadRecords() {
   loading.value = true
   try {
     const res = await automationApi.getRecords(String(job.value.id))
-    records.value = res.data.data || []
+    records.value = res.data.data?.records || []
   } catch (e) {
     console.error('加载运行记录失败:', e)
   } finally {

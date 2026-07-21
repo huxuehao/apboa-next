@@ -54,7 +54,8 @@ async function fetchPage(page: number) {
       const res = await agentApi.page({
         page,
         size: 20,
-        name: keyword.value || undefined
+        name: keyword.value || undefined,
+        enabled: true
       })
       const data = res.data.data
       const items = (data.records || []).map((item: { id: string | number; name: string; description?: string }) => ({
@@ -72,7 +73,8 @@ async function fetchPage(page: number) {
       const res = await workflowApi.workflowPage({
         page,
         size: 20,
-        name: keyword.value || undefined
+        name: keyword.value || undefined,
+        status: 'PUBLISHED'
       })
       const data = res.data.data
       const items = (data.records || []).map((item: { id?: string; name?: string; remark?: string }) => ({

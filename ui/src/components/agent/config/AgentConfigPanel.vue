@@ -22,6 +22,7 @@ import AgentConfigArchitecture from './AgentConfigArchitecture.vue'
 import AgentConfigHistory from './AgentConfigHistory.vue'
 import AgentConfigApiDoc from './AgentConfigApiDoc.vue'
 import AgentConfigStatistics from './AgentConfigStatistics.vue'
+import AgentConfigSchedule from './AgentConfigSchedule.vue'
 
 const props = defineProps<{
   visible: boolean

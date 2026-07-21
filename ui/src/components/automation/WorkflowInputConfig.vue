@@ -43,11 +43,21 @@ function getInputType(type: string): string {
 }
 
 /**
- * 格式化变量名用于显示
+ * 更新指定索引的参数值
+ * 通过替换数组元素触发 defineModel 的响应式更新
  */
-function formatVariableName(name: string): string {
-  return name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+function setParamValue(idx: number, val: unknown) {
+  params.value = params.value.map((p, i) =>
+    i === idx ? { ...p, value: val } : p
+  )
 }
+
+// /**
+//  * 格式化变量名用于显示
+//  */
+// function formatVariableName(name: string): string {
+//   return name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+// }
 </script>
 
 <template>
@@ -71,7 +81,7 @@ function formatVariableName(name: string): string {
           <AInput
             v-if="getInputType(param.type) === 'input'"
             :value="String(param.value ?? '')"
-            @update:value="params[idx].value = $event"
+            @update:value="(v: any) => setParamValue(idx, v)"
             :placeholder="`请输入 ${param.name}`"
           />
 
@@ -79,7 +89,7 @@ function formatVariableName(name: string): string {
           <AInputNumber
             v-else-if="getInputType(param.type) === 'number'"
             :value="Number(param.value ?? 0)"
-            @update:value="params[idx].value = $event"
+            @update:value="(v: any) => setParamValue(idx, v)"
             :placeholder="`请输入 ${param.name}`"
             style="width: 100%"
           />
@@ -88,14 +98,14 @@ function formatVariableName(name: string): string {
           <ASwitch
             v-else-if="getInputType(param.type) === 'switch'"
             :checked="Boolean(param.value ?? false)"
-            @update:checked="params[idx].value = $event"
+            @update:checked="(v: any) => setParamValue(idx, v)"
           />
 
           <!-- Array/Object 类型 -->
           <ATextarea
             v-else
             :value="String(param.value ?? '')"
-            @update:value="params[idx].value = $event"
+            @update:value="(v: any) => setParamValue(idx, v)"
             :placeholder="`请输入 ${param.name} (JSON格式)`"
             :rows="3"
           />
