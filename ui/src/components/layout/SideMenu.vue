@@ -46,13 +46,13 @@ const menuConfig: MenuItem[] = [
     path: '/dashboard',
     type: 'menu'
   },
-  {
-    key: 'chat-cluster',
-    label: '对话',
-    avatar: '/src/assets/avatar/chat-bot.png',
-    path: '/chat-cluster',
-    type: 'menu'
-  },
+  // {
+  //   key: 'chat-cluster',
+  //   label: '对话',
+  //   avatar: '/src/assets/avatar/chat-bot.png',
+  //   path: '/chat-cluster',
+  //   type: 'menu'
+  // },
   // 开发分类
   {
     key: 'dev-category',

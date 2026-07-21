@@ -9,7 +9,6 @@ import { ref, computed } from 'vue'
 import { Modal } from 'ant-design-vue'
 import {
   SettingOutlined,
-  ClockCircleOutlined,
   ApartmentOutlined,
   HistoryOutlined,
   ApiOutlined,
@@ -19,7 +18,6 @@ import {
 import type { AgentDefinitionVO } from '@/types'
 import AgentConfigEdit from './AgentConfigEdit.vue'
 import AgentConfigEditA2a from './AgentConfigEditA2a.vue'
-import AgentConfigSchedule from './AgentConfigSchedule.vue'
 import AgentConfigArchitecture from './AgentConfigArchitecture.vue'
 import AgentConfigHistory from './AgentConfigHistory.vue'
 import AgentConfigApiDoc from './AgentConfigApiDoc.vue'
@@ -42,8 +40,7 @@ const emit = defineEmits<{
  */
 const navItems = computed(() => {
   const items = [
-    { key: 'edit', label: '配置', icon: SettingOutlined },
-    { key: 'schedule', label: '定时', icon: ClockCircleOutlined }
+    { key: 'edit', label: '配置', icon: SettingOutlined }
   ]
 
   // 架构图仅对自定义智能体显示
@@ -192,13 +189,6 @@ const agentCode = computed(() => props.agentData?.agentCode || '')
           ref="editA2aRef"
           :agent-data="agentData"
           :tags="tags"
-          @success="handleSuccess"
-        />
-
-        <AgentConfigSchedule
-          v-if="activeKey === 'schedule' && agentId"
-          ref="scheduleRef"
-          :agent-id="agentId"
           @success="handleSuccess"
         />
 

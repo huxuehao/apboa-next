@@ -172,6 +172,17 @@ public class WorkspaceController {
         return R.data(capacity);
     }
 
+    /**
+     * 检查工作空间是否存在（仅检查目录存在性，不会自动创建）
+     */
+    @SkAccess
+    @ChatKeyAccess
+    @GetMapping("/exists")
+    public R<Boolean> exists(@RequestParam("sessionId") String sessionId) {
+        boolean exists = workspaceService.workspaceExists(sessionId);
+        return R.data(exists);
+    }
+
     // ==================== 私有辅助方法 ====================
 
     /**

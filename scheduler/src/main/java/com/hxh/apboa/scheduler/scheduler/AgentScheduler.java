@@ -38,6 +38,7 @@ public class AgentScheduler extends QuartzJob {
     @Override
     public Object doJob(JobExecutionContext context) {
         Long tenantId = getDataMap(JobConst.TENANT_ID_KEY, Long.class);
+        String tenantCode = getDataMap(JobConst.TENANT_CODE_KEY, String.class);
         AgentJobWrapper wrapper = getDataMap(JobConst.DATA_MAP_KEY, AgentJobWrapper.class);
         AccountVO userInfo = getDataMap(JobConst.USER_INFO_KEY, AccountVO.class);
 
@@ -71,14 +72,9 @@ public class AgentScheduler extends QuartzJob {
                 return false;
             }
 
-
-
             // 3. 构建并执行智能体
-            Agent agent = buildAgent(agentBuilder, tenantId, session, userInfo);
-            executeAgent(agent, wrapper.getInputs(), session.getId(), tenantId);
-
-            // 4. 记录关联关系
-            setRecordRelation(session.getId());
+            Agent agent = buildAgent(agentBuilder);
+            executeAgent(agent, wrapper.getInputs(), session.getId(), tenantId, tenantCode);
 
             log.info("Agent job executed successfully, agentId: {}, sessionId: {}", agentId, session.getId());
             return true;
@@ -179,7 +175,7 @@ public class AgentScheduler extends QuartzJob {
     /**
      * 构建智能体
      */
-    private Agent buildAgent(AgentBuilderWrapper builder, Long tenantId, ChatSessionVO session, AccountVO userInfo) {
+    private Agent buildAgent(AgentBuilderWrapper builder) {
         if (builder.getDefinition().getAgentType() == AgentType.A2A) {
             return builder.getA2aAgentBuilder().build();
         }
@@ -202,13 +198,14 @@ public class AgentScheduler extends QuartzJob {
     /**
      * 执行智能体
      */
-    private void executeAgent(Agent agent, Map<String, Object> inputs, Long sessionId, Long tenantId) {
+    private void executeAgent(Agent agent, Map<String, Object> inputs, Long sessionId, Long tenantId, String tenantCode) {
         String agentId = agent.getAgentId();
         String userPrompt = inputs.get("userPrompt").toString();
 
         // 设置元数据
         try {
             AgentMetadataStore.put(agentId, "tenantId", tenantId);
+            AgentMetadataStore.put(agentId, "tenantCode", tenantCode);
             AgentMetadataStore.put(agentId, "threadId", String.valueOf(sessionId));
             AgentMetadataStore.put(agentId, "toolProcessActive", false);
             AgentMetadataStore.put(agentId, "cleanUpOnOwn", true);
@@ -217,6 +214,8 @@ public class AgentScheduler extends QuartzJob {
             agent.call(Msg.builder().textContent(userPrompt).build())
                     .block();
         } finally {
+            // 4. 记录关联关系
+            setRecordRelation(sessionId);
             // 确保清理元数据
             AgentMetadataStore.removeOnOwn(agentId);
         }

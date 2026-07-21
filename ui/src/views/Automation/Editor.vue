@@ -136,17 +136,20 @@ async function loadJobData() {
       }
 
       if (job.type === 'AGENT') {
-        agentUserPrompt.value = dataMap.userPrompt || ''
+        // 优先读新格式 userPrompt，兼容旧格式 inputs.userPrompt
+        agentUserPrompt.value = dataMap.userPrompt || dataMap.inputs?.userPrompt || ''
       } else if (job.type === 'WORKFLOW') {
         // 加载工作流配置
         await loadWorkflowConfig(job.bizId)
-        // 恢复之前保存的参数值
-        if (dataMap.params) {
+        // 恢复之前保存的参数值（优先读新格式 params，兼容旧格式 inputs）
+        const savedParams = dataMap.params || dataMap.inputs
+        if (savedParams) {
           workflowParams.value = workflowParams.value.map(p => ({
             ...p,
-            value: dataMap.params[p.name] ?? p.value
+            value: savedParams[p.name] ?? p.value
           }))
         }
+        // 恢复之前保存的变量值
         if (dataMap.variables) {
           workflowVariables.value = { ...workflowVariables.value, ...dataMap.variables }
         }
@@ -204,19 +207,15 @@ async function handleSave() {
     }
 
     if (targetType.value === 'AGENT') {
-      dataMap.inputs = {
-        userPrompt: agentUserPrompt.value
-      }
+      dataMap.userPrompt = agentUserPrompt.value
     } else {
       // Workflow: 保存参数值和变量值
       const params: Record<string, unknown> = {}
       workflowParams.value.forEach(p => {
         params[p.name] = p.value
       })
-      dataMap.inputs = {
-        ...params
-      }
-      // dataMap.variables = workflowVariables.value
+      dataMap.params = params
+      dataMap.variables = workflowVariables.value
     }
     dataMap.bizId = selectedTarget.value.id
     dataMap.type =  targetType.value

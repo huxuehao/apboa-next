@@ -5,7 +5,7 @@
  * @author huxuehao
  */
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import dayjs from 'dayjs'
 import {
@@ -16,11 +16,13 @@ import {
   ExclamationCircleFilled,
   HistoryOutlined,
 } from '@ant-design/icons-vue'
-import { Collapse as ACollapse, CollapsePanel as ACollapsePanel } from 'ant-design-vue'
+import { Collapse as ACollapse, CollapsePanel as ACollapsePanel, Spin as ASpin } from 'ant-design-vue'
 import * as automationApi from '@/api/automation'
 import { workflowRunNodes } from '@/api/workflow'
 import * as chatSessionApi from '@/api/chatSession'
+import { workspaceExists } from '@/api/workspace'
 import MessageList from '@/components/chatHistory/MessageList.vue'
+import WorkspacePanel from '@/components/workspace/WorkspacePanel.vue'
 import agentAvatar from '@/assets/avatar/agent.png'
 import workflowAvatar from '@/assets/avatar/workflow.png'
 import type { JobInfo } from '@/types'
@@ -31,11 +33,19 @@ import type { ChatMessageVO, DisplayMessage } from '@/types'
 const route = useRoute()
 const router = useRouter()
 
+const PAGE_SIZE = 50
+
 const job = ref<JobInfo | null>(null)
 const jobLoading = ref(false)
 
 const records = ref<JobRecordVO[]>([])
 const recordsLoading = ref(false)
+const recordsCurrentPage = ref(0)
+const recordsTotal = ref(0)
+const recordsHasMore = computed(() => records.value.length < recordsTotal.value)
+const loadingMore = ref(false)
+const recordsListRef = ref<HTMLElement | null>(null)
+
 const selectedRecord = ref<JobRecordVO | null>(null)
 
 const nodesLoading = ref(false)
@@ -43,6 +53,12 @@ const nodeExecutions = ref<WorkflowNodeExecution[]>([])
 
 const agentMessagesLoading = ref(false)
 const agentMessages = ref<ChatMessageVO[]>([])
+
+/** 智能体快照是否有工作空间文件夹 */
+const workspaceFolderExists = ref(false)
+
+/** 工作空间面板开关状态（快照中默认打开） */
+const workspacePanelOpen = ref(true)
 
 /** 从 dataMap 中解析任务名称 */
 const jobDisplayName = computed(() => {
@@ -84,18 +100,51 @@ async function loadJob() {
   }
 }
 
-/** 加载记录列表 */
+/** 加载记录列表（初始加载第一页） */
 async function loadRecords() {
   const id = route.params.id as string
   if (!id) return
   recordsLoading.value = true
+  recordsCurrentPage.value = 0
   try {
-    const res = await automationApi.getRecords(id)
-    records.value = res.data.data || []
+    const res = await automationApi.getRecords(id, 1, PAGE_SIZE)
+    const data = res.data.data
+    records.value = data.records || []
+    recordsTotal.value = data.total || 0
+    recordsCurrentPage.value = 1
   } catch (e) {
     console.error('加载运行记录失败:', e)
   } finally {
     recordsLoading.value = false
+  }
+}
+
+/** 加载更多记录（触底追加） */
+async function loadMoreRecords() {
+  const id = route.params.id as string
+  if (!id || loadingMore.value || !recordsHasMore.value) return
+  loadingMore.value = true
+  const nextPage = recordsCurrentPage.value + 1
+  try {
+    const res = await automationApi.getRecords(id, nextPage, PAGE_SIZE)
+    const data = res.data.data
+    records.value = [...records.value, ...(data.records || [])]
+    recordsTotal.value = data.total || 0
+    recordsCurrentPage.value = nextPage
+  } catch (e) {
+    console.error('加载更多运行记录失败:', e)
+  } finally {
+    loadingMore.value = false
+  }
+}
+
+/** 监听滚动触底事件 */
+function onRecordsScroll(event: Event) {
+  const el = event.target as HTMLElement
+  if (!el) return
+  // 距离底部 40px 时触发加载
+  if (el.scrollHeight - el.scrollTop - el.clientHeight < 40) {
+    loadMoreRecords()
   }
 }
 
@@ -127,13 +176,26 @@ async function loadAgentMessages(recordId: number) {
   }
 }
 
-function handleSelect(record: JobRecordVO) {
+async function handleSelect(record: JobRecordVO) {
   selectedRecord.value = record
+  workspaceFolderExists.value = false
   if (!record.recordId) return
   if (job.value?.type === 'WORKFLOW') {
     loadNodeExecutions(record.recordId)
   } else if (job.value?.type === 'AGENT') {
     loadAgentMessages(record.recordId)
+    // 检查工作空间文件夹是否存在
+    checkWorkspaceExists(record.recordId)
+  }
+}
+
+/** 检查智能体会话是否有工作空间 */
+async function checkWorkspaceExists(sessionId: number) {
+  try {
+    const res = await workspaceExists(String(sessionId))
+    workspaceFolderExists.value = res.data.data === true
+  } catch {
+    workspaceFolderExists.value = false
   }
 }
 
@@ -211,6 +273,11 @@ onMounted(async () => {
   await loadJob()
   loadRecords()
 })
+
+onBeforeUnmount(() => {
+  // 清理组件状态，避免内存泄漏
+  records.value = []
+})
 </script>
 
 <template>
@@ -231,7 +298,7 @@ onMounted(async () => {
           <AEmpty description="暂无运行记录" />
         </div>
 
-        <div v-else class="records-list">
+        <div v-else ref="recordsListRef" class="records-list" @scroll="onRecordsScroll">
           <div
             v-for="(item, index) in records"
             :key="`${item.jobId}-${item.createTime}-${index}`"
@@ -239,9 +306,20 @@ onMounted(async () => {
             :class="{ active: selectedRecord === item }"
             @click="handleSelect(item)"
           >
-            <span class="record-index">{{ index + 1 }}</span>
+            <span class="record-index">{{ recordsTotal > 0 ? recordsTotal - index : index + 1 }}</span>
             <img :src="avatarSrc" class="sidebar-header-avatar" />
             <span class="record-time">{{ formatTime(item.createTime) }}</span>
+          </div>
+
+          <!-- 加载更多提示 -->
+          <div v-if="loadingMore" class="records-loading-hint">
+            <ASpin size="small" />
+            <span class="records-loading-text">正在加载...</span>
+          </div>
+
+          <!-- 没有更多数据 -->
+          <div v-else-if="!recordsHasMore && records.length > 0" class="records-end-hint">
+            没有更多数据了
           </div>
         </div>
       </ApboaSpin>
@@ -301,13 +379,25 @@ onMounted(async () => {
 
         <!-- 智能体对话详情 -->
         <template v-else-if="detailType === 'agent'">
-          <ApboaSpin :spinning="agentMessagesLoading">
-            <div v-if="visibleAgentMessages.length === 0 && !agentMessagesLoading" class="detail-empty">
-              <AEmpty description="暂无对话内容" />
+          <div class="agent-detail-layout">
+            <div class="agent-messages-area">
+              <ApboaSpin :spinning="agentMessagesLoading">
+                <div v-if="visibleAgentMessages.length === 0 && !agentMessagesLoading" class="detail-empty">
+                  <AEmpty description="暂无对话内容" />
+                </div>
+
+                <MessageList v-else :messages="visibleAgentMessages" />
+              </ApboaSpin>
             </div>
 
-            <MessageList v-else :messages="visibleAgentMessages" />
-          </ApboaSpin>
+            <!-- 工作空间面板（仅当工作空间文件夹存在时才渲染） -->
+            <WorkspacePanel
+              v-if="workspaceFolderExists && selectedRecord"
+              :session-id="String(selectedRecord.recordId)"
+              :class="{ open: workspacePanelOpen }"
+              @close="workspacePanelOpen = false"
+            />
+          </div>
         </template>
     </main>
   </div>
@@ -328,7 +418,7 @@ export default {
 
 /* ---- 左侧列表 ---- */
 .records-sidebar {
-  width: 340px;
+  width: 280px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -530,6 +620,47 @@ export default {
   min-height: auto;
   max-height: 220px;
   background: #fcfcfc;
+}
+
+/* ---- 渐进式加载提示 ---- */
+.records-loading-hint,
+.records-end-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px 0;
+  flex-shrink: 0;
+}
+
+.records-loading-text {
+  font-size: 12px;
+  color: #999;
+}
+
+.records-end-hint {
+  font-size: 12px;
+  color: #bfbfbf;
+}
+
+/* ---- 智能体详情左右布局 ---- */
+.agent-detail-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.agent-messages-area {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+}
+
+/* ---- 工作空间面板在快照中的适配 ---- */
+.agent-detail-layout :deep(.workspace-panel) {
+  border-left: 1px solid #e8e8e8;
+  background-color: #FFFFFF;
 }
 
 :deep(.ant-collapse-header) {

@@ -2,6 +2,7 @@ package com.hxh.apboa.scheduler.init;
 
 import com.hxh.apboa.common.consts.TableConst;
 import com.hxh.apboa.common.entity.JobInfo;
+import com.hxh.apboa.common.entity.Tenant;
 import com.hxh.apboa.common.util.JsonUtils;
 import com.hxh.apboa.common.vo.AccountVO;
 import com.hxh.apboa.common.wrapper.AgentJobWrapper;
@@ -77,6 +78,14 @@ public class JobInit implements SmartInitializingSingleton {
                 accountVO.setRememberLastTenant(rs.getBoolean("remember_last_tenant"));
             }, createdBy);
 
+            // 查询租户信息
+            Tenant tenant = new Tenant();
+            String tenantSql = "SELECT id, code FROM " + TableConst.TENANT + " WHERE id = ?";
+            staticJdbcTemplate.query(tenantSql, (rs) -> {
+                tenant.setId(rs.getLong("id"));
+                tenant.setCode(rs.getString("code"));
+            }, jobInfo.getTenantId());
+
             return new QuartzConfigFactory()
                     // 设置唯一标识，一般是ID
                     .identity(jobInfo.getId())
@@ -87,7 +96,8 @@ public class JobInit implements SmartInitializingSingleton {
                             JobConst.DATA_MAP_KEY,
                             JsonUtils.parse(jobInfo.getDataMap(), AgentJobWrapper.class))
                     // 传递租户ID，用于Job执行时恢复租户上下文
-                    .putDataMap(JobConst.TENANT_ID_KEY, jobInfo.getTenantId())
+                    .putDataMap(JobConst.TENANT_ID_KEY, tenant.getId())
+                    .putDataMap(JobConst.TENANT_CODE_KEY, tenant.getCode())
                     // 用户信息
                     .putDataMap(JobConst.USER_INFO_KEY, accountVO)
                     // 设置cron表达式

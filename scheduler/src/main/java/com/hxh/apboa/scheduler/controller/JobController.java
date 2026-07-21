@@ -1,6 +1,7 @@
 package com.hxh.apboa.scheduler.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hxh.apboa.common.UserDetail;
 import com.hxh.apboa.common.config.auth.RoleNeed;
 import com.hxh.apboa.common.entity.JobInfo;
@@ -164,23 +165,32 @@ public class JobController {
     }
 
     /**
-     * 查询任务运行记录
+     * 查询任务运行记录（分页）
      * GET /job/records
+     *
+     * @param jobId 任务ID
+     * @param page  页码（默认1）
+     * @param size  每页数量（默认50）
      */
     @GetMapping("/records")
-    public R<List<JobRecordVO>> records(@RequestParam("jobId") Long jobId) {
-        List<JobRecord> records = quartzRecordService.lambdaQuery()
+    public R<IPage<JobRecordVO>> records(
+            @RequestParam("jobId") Long jobId,
+            @RequestParam(name = "page", defaultValue = "1") int page,
+            @RequestParam(name = "size", defaultValue = "50") int size) {
+        IPage<JobRecord> recordPage = quartzRecordService.lambdaQuery()
                 .eq(JobRecord::getJobId, jobId)
                 .orderByDesc(JobRecord::getCreateTime)
-                .list();
-        List<JobRecordVO> result = records.stream()
+                .page(new Page<>(page, size));
+        IPage<JobRecordVO> resultPage = new Page<>(page, size, recordPage.getTotal());
+        List<JobRecordVO> voList = recordPage.getRecords().stream()
                 .map(r -> JobRecordVO.builder()
                         .jobId(r.getJobId())
                         .recordId(r.getRecordId())
                         .createTime(r.getCreateTime())
                         .build())
                 .collect(Collectors.toList());
-        return R.data(result);
+        resultPage.setRecords(voList);
+        return R.data(resultPage);
     }
 
     /**

@@ -9,7 +9,9 @@ import org.springframework.stereotype.Component;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 /**
  * 描述：任务分布式锁
@@ -212,6 +214,7 @@ public class JobDistributedLock {
 
     /**
      * 判断是否应放弃竞争（负载均衡）
+     * 基于活跃节点的心跳状态，只统计当前在线的节点
      *
      * @param jobId 任务ID
      * @return 是否应放弃
@@ -225,34 +228,75 @@ public class JobDistributedLock {
                 return false;
             }
 
-            // 统计历史中的唯一节点数
-            long uniqueNodes = history.stream().distinct().count();
-            // 如果历史记录中只有当前节点，说明可能是单节点或新任务，不启用负载均衡
-            if (uniqueNodes <= 1) {
+            // 获取当前活跃节点（有心跳的节点）
+            Set<String> activeNodes = getActiveNodeIds();
+
+            // 极端降级：无活跃节点时放行（可能是Redis故障）
+            if (activeNodes.isEmpty()) {
+                log.warn("未发现活跃节点，放行负载均衡 - jobId: {}", jobId);
                 return false;
             }
 
-            // 统计当前节点执行次数
+            // 只保留来自活跃节点的执行记录
+            List<String> activeHistory = history.stream()
+                    .filter(activeNodes::contains)
+                    .collect(Collectors.toList());
+
+            // 过滤后历史记录不足，不启用负载均衡
+            if (activeHistory.size() < MIN_HISTORY_SIZE) {
+                return false;
+            }
+
+            // 过滤后只有唯一活跃节点，不启用负载均衡（单节点保护）
+            long uniqueActiveNodes = activeHistory.stream().distinct().count();
+            if (uniqueActiveNodes <= 1) {
+                return false;
+            }
+
+            // 统计当前节点在活跃历史中的执行次数
             String currentNodeId = nodeConfig.getNodeId();
-            long currentNodeCount = history.stream()
+            long currentNodeCount = activeHistory.stream()
                     .filter(nodeId -> nodeId.equals(currentNodeId))
                     .count();
 
             // 计算占比
-            double ratio = (double) currentNodeCount / history.size();
+            double ratio = (double) currentNodeCount / activeHistory.size();
 
             // 超过阈值则放弃
             boolean shouldSkip = ratio > BALANCE_THRESHOLD;
 
             if (shouldSkip) {
-                log.info("负载均衡触发 - jobId: {}, 当前节点执行占比: {}/{} = {:.0%}",
-                        jobId, currentNodeCount, history.size(), ratio);
+                log.info("负载均衡触发 - jobId: {}, 当前节点执行占比: {}/{} = {}",
+                        jobId, currentNodeCount, activeHistory.size(), String.format("%.0f%%", ratio * 100));
             }
 
             return shouldSkip;
         } catch (Exception e) {
             log.error("负载均衡判断异常 - jobId: {}", jobId, e);
             return false;
+        }
+    }
+
+    /**
+     * 获取当前活跃节点集合
+     * 通过扫描Redis中的心跳Key识别在线节点
+     *
+     * @return 活跃节点ID集合
+     */
+    private Set<String> getActiveNodeIds() {
+        try {
+            String pattern = JobRedisKey.getNodeHeartbeatPattern();
+            Set<String> keys = stringRedisTemplate.keys(pattern);
+            if (keys == null || keys.isEmpty()) {
+                return Collections.emptySet();
+            }
+            String prefix = JobRedisKey.getNodeHeartbeatPrefix();
+            return keys.stream()
+                    .map(key -> key.substring(prefix.length()))
+                    .collect(Collectors.toSet());
+        } catch (Exception e) {
+            log.error("获取活跃节点列表异常", e);
+            return Collections.emptySet();
         }
     }
 

@@ -91,12 +91,18 @@ export function triggerJob(id: string) {
 }
 
 /**
- * 获取运行记录
+ * 获取运行记录（分页）
  * GET /runtime/job/records
  */
-export function getRecords(jobId: string) {
-  return request.get<ApiResponse<JobRecordVO[]>>('/api/runtime/job/records', {
-    params: { jobId }
+export function getRecords(jobId: string, page: number = 1, size: number = 50) {
+  return request.get<ApiResponse<{
+    records: JobRecordVO[]
+    total: number
+    size: number
+    current: number
+    pages: number
+  }>>('/api/runtime/job/records', {
+    params: { jobId, page, size }
   })
 }
 

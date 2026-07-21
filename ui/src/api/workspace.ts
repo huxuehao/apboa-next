@@ -115,3 +115,13 @@ export function getCapacity(sessionId: string) {
     params: { sessionId }
   })
 }
+
+/**
+ * 检查工作空间是否存在（仅检查目录存在性，不会自动创建）
+ * GET /runtime/workspace/exists
+ */
+export function workspaceExists(sessionId: string) {
+  return request.get<ApiResponse<boolean>>(`${BASE}/exists`, {
+    params: { sessionId }
+  })
+}
