@@ -1,6 +1,6 @@
 package com.hxh.apboa.scheduler.core.cluster;
 
-import com.hxh.apboa.common.consts.SysConst;
+import com.hxh.apboa.common.util.CryptoUtils;
 import jakarta.annotation.PostConstruct;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -45,11 +45,22 @@ public class NodeConfig {
 
     @PostConstruct
     public void init() {
-        this.nodeId = SysConst.CURRENT_NODE_ID;
-        this.nodeName = generateNodeName();
         this.nodeIp = getLocalIp();
+        this.nodeId = generateNodeId();
+        this.nodeName = generateNodeName();
         this.startTime = System.currentTimeMillis();
         log.info("集群节点初始化完成 - nodeId: {}, nodeName: {}, nodeIp: {}", nodeId, nodeName, nodeIp);
+    }
+
+    /**
+     * 生成稳定的节点ID
+     * 基于IP地址生成确定性标识，确保同一机器重启后nodeId不变，
+     * 避免Redis执行历史中出现同一物理节点的多条不同记录导致负载均衡误判
+     *
+     * @return 节点ID
+     */
+    private String generateNodeId() {
+        return CryptoUtils.md5("node:" + nodeIp);
     }
 
     /**

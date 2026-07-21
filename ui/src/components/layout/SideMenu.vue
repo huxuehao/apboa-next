@@ -32,21 +32,27 @@ interface MenuItem {
  * 菜单配置
  */
 const menuConfig: MenuItem[] = [
-  // 开发分类
+// 空间分类
   {
-    key: 'dev-category',
-    label: '首页',
+    key: 'space-category',
+    label: '空间',
     path: '',
     type: 'category'
   },
-  // 工作台
   {
     key: 'dashboard',
-    label: '工作台',
+    label: '总览',
     avatar: '/src/assets/avatar/home.png',
     path: '/dashboard',
     type: 'menu'
   },
+  // {
+  //   key: 'chat-cluster',
+  //   label: '对话',
+  //   avatar: '/src/assets/avatar/chat-bot.png',
+  //   path: '/chat-cluster',
+  //   type: 'menu'
+  // },
   // 开发分类
   {
     key: 'dev-category',
@@ -66,6 +72,13 @@ const menuConfig: MenuItem[] = [
     label: '工作流',
     avatar: '/src/assets/avatar/workflow.png',
     path: '/workflow',
+    type: 'menu'
+  },
+  {
+    key: 'automation',
+    label: '自动化',
+    avatar: '/src/assets/avatar/automation.png',
+    path: '/automation',
     type: 'menu'
   },
   {

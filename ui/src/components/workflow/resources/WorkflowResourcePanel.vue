@@ -51,7 +51,7 @@ const meta = computed(() => {
   }
   if (props.kind === 'cache') {
     return {
-      title: '缓存',
+      title: 'Redis 缓存',
       addText: '新增缓存',
       searchPlaceholder: '搜索名称、主机、备注',
       emptyText: '暂无缓存',
@@ -59,7 +59,7 @@ const meta = computed(() => {
     }
   }
   return {
-    title: '消息',
+    title: '消息队列',
     addText: '新增消息',
     searchPlaceholder: '搜索名称、地址、备注',
     emptyText: '暂无消息资源',

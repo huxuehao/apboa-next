@@ -35,4 +35,37 @@ public class JobRedisKey {
     public static String getJobExecHistoryKey(String jobId) {
         return RedisKeyBuilder.tenantKey("job:exec:history:" + jobId);
     }
+
+    /**
+     * 节点心跳Key前缀，用于 SCAN 查找所有活跃节点
+     */
+    private static final String NODE_HEARTBEAT_PREFIX = RedisKeyBuilder.globalKey("job:heartbeat:");
+
+    /**
+     * 获取节点心跳Key
+     *
+     * @param nodeId 节点ID
+     * @return 心跳key
+     */
+    public static String getNodeHeartbeatKey(String nodeId) {
+        return NODE_HEARTBEAT_PREFIX + nodeId;
+    }
+
+    /**
+     * 获取心跳Key匹配模式，用于 redisTemplate.keys() 查找所有活跃节点
+     *
+     * @return 匹配模式
+     */
+    public static String getNodeHeartbeatPattern() {
+        return NODE_HEARTBEAT_PREFIX + "*";
+    }
+
+    /**
+     * 获取心跳Key前缀，用于从完整Key中提取nodeId
+     *
+     * @return 心跳Key前缀
+     */
+    public static String getNodeHeartbeatPrefix() {
+        return NODE_HEARTBEAT_PREFIX;
+    }
 }

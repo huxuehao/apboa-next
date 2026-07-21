@@ -6,6 +6,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.Map;
+
 /**
  * 描述：智能体任务包装类
  *
@@ -16,6 +18,12 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @NoArgsConstructor
 public class AgentJobWrapper implements SerializableEnable {
-    private String agentId;
-    private String input;
+    private String jobName;
+    private String bizName;
+    // 类型(AGENT、WORKFLOW、SIMPLE)
+    private String type;
+    // 关联业务ID
+    private String bizId;
+    // 输入配置
+    private Map<String, Object> inputs;
 }

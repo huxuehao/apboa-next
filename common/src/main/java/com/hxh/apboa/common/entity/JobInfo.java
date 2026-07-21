@@ -1,25 +1,20 @@
 package com.hxh.apboa.common.entity;
 
-import com.baomidou.mybatisplus.annotation.FieldFill;
-import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
-import com.hxh.apboa.common.config.SerializableEnable;
 import com.hxh.apboa.common.consts.TableConst;
 import com.hxh.apboa.common.mp.annotation.QueryDefine;
 import com.hxh.apboa.common.mp.support.QueryCondition;
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
 
 /**
  * 描述：quartz执行状态实体类
  * @author huxuehao
  **/
-@Data
+@Getter
+@Setter
 @TableName(TableConst.JOB_INFO)
-public class JobInfo implements SerializableEnable {
-	/**定时任务标识*/
-    private String id;
-    @TableField(fill = FieldFill.INSERT)
-    private Long tenantId;
+public class JobInfo extends BaseTenantEntity {
     /*关联业务ID*/
     @QueryDefine(value = "类型", condition = QueryCondition.EQ)
     private String type;
@@ -31,6 +26,4 @@ public class JobInfo implements SerializableEnable {
     private String jobClass;
     /*执行参数*/
     private String dataMap;
-	/**是否启用*/
-    private boolean enabled;
 }

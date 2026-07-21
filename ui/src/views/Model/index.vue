@@ -245,9 +245,9 @@ watch([selectedProviderType, keyword], () => {
 <template>
   <div class="model-provider-page">
     <section class="intro-section">
-      <h3 class="intro-title">模型供应商管理</h3>
+      <h3 class="intro-title">模型</h3>
       <p class="intro-desc text-secondary">
-        模型供应商管理是企业级智能体平台的核心基础设施模块，负责统一接入、配置和调度多家AI模型供应商的服务。通过标准化的供应商与模型管理体系，为上层智能体提供稳定、可比较、可切换的推理能力支持。
+        模型是企业级智能体平台的核心基础设施模块，负责统一接入、配置和调度多家AI模型供应商的服务。通过标准化的供应商与模型管理体系，为上层智能体提供稳定、可比较、可切换的推理能力支持。
       </p>
     </section>
 

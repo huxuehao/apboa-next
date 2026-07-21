@@ -521,4 +521,15 @@ public class WorkspaceServiceImpl implements WorkspaceService {
         vo.setPercent(Math.round(percent * 100.0) / 100.0);
         return vo;
     }
+
+    @Override
+    public boolean workspaceExists(String sessionId) {
+        validateSessionId(sessionId);
+        String tenantCode = TenantUtils.getCurrentTenantCode();
+        // 使用带租户的路径，且不调用 getWorkspaceDir（它会自动创建目录）
+        Path workspaceDir = Paths.get(
+                String.format("%s/%s", SysConst.getWorkspacePath(tenantCode), sessionId)
+        ).toAbsolutePath().normalize();
+        return Files.exists(workspaceDir) && Files.isDirectory(workspaceDir);
+    }
 }

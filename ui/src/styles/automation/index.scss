@@ -1,0 +1,89 @@
+/**
+ * 自动化任务页面样式
+ *
+ * @author huxuehao
+ */
+
+.automation-page {
+  padding: var(--spacing-lg);
+  min-height: 100%;
+
+  .intro-section {
+    margin-bottom: var(--spacing-lg);
+
+    .intro-title {
+      font-size: var(--font-size-2xl);
+      font-weight: 600;
+      color: var(--color-text-primary);
+      margin-bottom: var(--spacing-sm);
+    }
+
+    .intro-desc {
+      font-size: var(--font-size-base);
+      line-height: 1.6;
+      max-width: 900px;
+    }
+  }
+
+  .filter-section {
+    margin-bottom: var(--spacing-lg);
+    gap: var(--spacing-md);
+    position: sticky;
+    top: 0;
+    background-color: var(--color-bg);
+    padding: var(--spacing-base) 0;
+    z-index: 10;
+
+    .filter-left {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .filter-right {
+      flex-shrink: 0;
+    }
+
+    @media (max-width: 768px) {
+      flex-direction: column;
+      align-items: stretch;
+
+      .filter-left {
+        width: 100%;
+      }
+
+      .filter-right {
+        width: 100%;
+        flex-direction: column;
+        align-items: stretch;
+
+        :deep(.ant-select),
+        :deep(.ant-input),
+        :deep(.ant-btn) {
+          width: 100% !important;
+        }
+      }
+    }
+  }
+
+  .list-section {
+    min-height: 400px;
+  }
+
+  .list-empty {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 400px;
+  }
+
+  .list-container {
+    background-color: #ffffff;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+}
+
+/* 通用工具类 */
+.text-secondary {
+  color: var(--color-text-secondary);
+}

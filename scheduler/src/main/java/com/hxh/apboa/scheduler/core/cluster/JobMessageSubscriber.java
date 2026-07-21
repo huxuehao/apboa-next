@@ -98,12 +98,12 @@ public class JobMessageSubscriber implements ChannelSubscriber {
      * 处理添加任务
      */
     private void handleAdd(JobControlMessage message) throws ClassNotFoundException {
-        JobInfo jobInfo = message.getJobInfo();
+        JobInfo jobInfo = quartzInfoService.getById(message.getJobId());
         if (jobInfo == null) {
-            log.warn("添加任务消息中任务信息为空");
+            log.warn("添加任务时任务不存在: {}", message.getJobId());
             return;
         }
-        if (jobInfo.isEnabled()) {
+        if (jobInfo.getEnabled()) {
             quartzClient.create(JobInit.buildConfig(jobInfo));
             log.info("集群同步 - 添加并启动任务: {}", message.getJobId());
         } else {
@@ -115,14 +115,14 @@ public class JobMessageSubscriber implements ChannelSubscriber {
      * 处理更新任务
      */
     private void handleUpdate(JobControlMessage message) throws ClassNotFoundException {
-        JobInfo jobInfo = message.getJobInfo();
+        JobInfo jobInfo = quartzInfoService.getById(message.getJobId());
         if (jobInfo == null) {
-            log.warn("更新任务消息中任务信息为空");
+            log.warn("更新任务时任务不存在: {}", message.getJobId());
             return;
         }
         // 先移除再创建（相当于更新）
         quartzClient.remove(JobInit.buildConfig(jobInfo));
-        if (jobInfo.isEnabled()) {
+        if (jobInfo.getEnabled()) {
             quartzClient.create(JobInit.buildConfig(jobInfo));
         }
         log.info("集群同步 - 更新任务: {}", message.getJobId());
@@ -149,7 +149,7 @@ public class JobMessageSubscriber implements ChannelSubscriber {
             return;
         }
         jobInfo.setCron(message.getCron());
-        if (jobInfo.isEnabled()) {
+        if (jobInfo.getEnabled()) {
             quartzClient.remove(JobInit.buildConfig(jobInfo));
             quartzClient.create(JobInit.buildConfig(jobInfo));
         }

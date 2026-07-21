@@ -1,15 +1,26 @@
 package com.hxh.apboa.scheduler.controller;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.hxh.apboa.common.UserDetail;
 import com.hxh.apboa.common.config.auth.RoleNeed;
+import com.hxh.apboa.common.entity.JobInfo;
+import com.hxh.apboa.common.entity.JobRecord;
 import com.hxh.apboa.common.enums.TenantRole;
 import com.hxh.apboa.common.r.R;
-import com.hxh.apboa.common.entity.JobInfo;
+import com.hxh.apboa.common.util.TenantUtils;
+import com.hxh.apboa.common.util.UserUtils;
 import com.hxh.apboa.scheduler.core.cluster.JobMessagePublisher;
+import com.hxh.apboa.scheduler.core.client.QuartzClient;
+import com.hxh.apboa.scheduler.init.JobInit;
 import com.hxh.apboa.scheduler.service.QuartzInfoService;
+import com.hxh.apboa.scheduler.service.QuartzRecordService;
+import com.hxh.apboa.scheduler.vo.JobRecordVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * 描述：web api
@@ -23,6 +34,8 @@ import java.util.List;
 public class JobController {
     private final QuartzInfoService quartzInfoService;
     private final JobMessagePublisher jobMessagePublisher;
+    private final QuartzRecordService quartzRecordService;
+    private final QuartzClient quartzClient;
 
     @GetMapping("list")
     public R<List<JobInfo>> list() {
@@ -42,8 +55,9 @@ public class JobController {
     @RoleNeed({TenantRole.TENANT_ADMIN, TenantRole.TENANT_EDITOR})
     public R<Boolean> update(@RequestBody JobInfo jobInfo) throws ClassNotFoundException {
         quartzInfoService.updateJob(jobInfo);
-        // 广播消息通知其他节点
-        jobMessagePublisher.publishUpdate(jobInfo);
+        // 从DB获取完整对象（含createdBy），确保集群同步消息携带完整信息
+        JobInfo dbJob = quartzInfoService.getById(jobInfo.getId());
+        jobMessagePublisher.publishUpdate(dbJob);
         return R.data(true);
     }
 
@@ -99,6 +113,15 @@ public class JobController {
     }
 
     /**
+     * 根据任务ID查询详情
+     * GET /job/{id}
+     */
+    @GetMapping("/{id}")
+    public R<JobInfo> detail(@PathVariable("id") String id) {
+        return R.data(quartzInfoService.getById(id));
+    }
+
+    /**
      * 根据业务ID删除定时任务（用于解绑）
      * GET /job/deleteByBizId
      *
@@ -113,15 +136,114 @@ public class JobController {
                 .eq(JobInfo::getType, "AGENT")
                 .one();
         if (jobInfo != null) {
-            String jobId = jobInfo.getId();
+            String jobId = String.valueOf(jobInfo.getId());
             // 如果任务正在运行，先停止
-            if (jobInfo.isEnabled()) {
+            if (jobInfo.getEnabled()) {
                 quartzInfoService.stopJob(jobId);
             }
             boolean result = quartzInfoService.deleteJob(jobId);
             // 广播消息通知其他节点
             jobMessagePublisher.publishDelete(jobId);
             return R.data(result);
+        }
+        return R.data(true);
+    }
+
+    /**
+     * 手动触发一次执行
+     * GET /job/trigger
+     */
+    @GetMapping("/trigger")
+    @RoleNeed({TenantRole.TENANT_ADMIN, TenantRole.TENANT_EDITOR, TenantRole.TENANT_OWNER})
+    public R<Boolean> trigger(@RequestParam("id") String id) throws ClassNotFoundException {
+        JobInfo jobInfo = quartzInfoService.getById(id);
+        if (jobInfo == null) {
+            throw new RuntimeException("任务实例不存在");
+        }
+        quartzClient.createOnce(JobInit.buildConfig(jobInfo), true);
+        return R.data(true);
+    }
+
+    /**
+     * 查询任务运行记录（分页）
+     * GET /job/records
+     *
+     * @param jobId 任务ID
+     * @param page  页码（默认1）
+     * @param size  每页数量（默认50）
+     */
+    @GetMapping("/records")
+    public R<IPage<JobRecordVO>> records(
+            @RequestParam("jobId") Long jobId,
+            @RequestParam(name = "page", defaultValue = "1") int page,
+            @RequestParam(name = "size", defaultValue = "50") int size) {
+        IPage<JobRecord> recordPage = quartzRecordService.lambdaQuery()
+                .eq(JobRecord::getJobId, jobId)
+                .orderByDesc(JobRecord::getCreateTime)
+                .page(new Page<>(page, size));
+        IPage<JobRecordVO> resultPage = new Page<>(page, size, recordPage.getTotal());
+        List<JobRecordVO> voList = recordPage.getRecords().stream()
+                .map(r -> JobRecordVO.builder()
+                        .jobId(r.getJobId())
+                        .recordId(r.getRecordId())
+                        .createTime(r.getCreateTime())
+                        .build())
+                .collect(Collectors.toList());
+        resultPage.setRecords(voList);
+        return R.data(resultPage);
+    }
+
+    /**
+     * 分页查询自动化任务
+     * GET /job/page
+     *
+     * @param page     页码
+     * @param size     每页数量
+     * @param type     任务类型（可选）
+     * @param keyword  关键字搜索（可选）
+     * @return 分页结果
+     */
+    @GetMapping("/page")
+    public R<IPage<JobInfo>> page(
+            @RequestParam(name = "page", defaultValue = "1") int page,
+            @RequestParam(name = "size", defaultValue = "50") int size,
+            @RequestParam(name = "type", required = false) String type,
+            @RequestParam(name = "keyword", required = false) String keyword) {
+        UserDetail userDetail = UserUtils.getUserDetail();
+        Long currentTenantId = TenantUtils.getCurrentTenantId();
+        IPage<JobInfo> result = quartzInfoService.pageJobs(
+                page, size, type, keyword,
+                currentTenantId, userDetail.getId(), TenantRole.valueOf(userDetail.getTenantRole()));
+        return R.data(result);
+    }
+
+    /**
+     * 启用/禁用切换
+     * GET /job/toggle
+     *
+     * @param id 任务ID
+     * @return 操作结果
+     */
+    @GetMapping("/toggle")
+    @RoleNeed({TenantRole.TENANT_ADMIN, TenantRole.TENANT_EDITOR, TenantRole.TENANT_OWNER})
+    public R<Boolean> toggle(@RequestParam("id") String id) throws ClassNotFoundException {
+        JobInfo jobInfo = quartzInfoService.getById(id);
+        if (jobInfo == null) {
+            throw new RuntimeException("任务实例不存在");
+        }
+        boolean newEnabled = !jobInfo.getEnabled();
+        jobInfo.setEnabled(newEnabled);
+        quartzInfoService.updateStatus(jobInfo);
+        if (newEnabled) {
+            quartzInfoService.startJob(id);
+        } else {
+            quartzInfoService.stopJob(id);
+        }
+        // 广播消息通知其他节点
+        if (newEnabled) {
+            jobMessagePublisher.publishStart(id);
+        } else {
+            jobMessagePublisher.publishStop(id);
         }
         return R.data(true);
     }

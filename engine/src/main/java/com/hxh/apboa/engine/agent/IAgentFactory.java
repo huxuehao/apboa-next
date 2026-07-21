@@ -76,6 +76,64 @@ public class IAgentFactory {
         }
     }
 
+
+    /**
+     * 根据Agent定义ID获取Agent Builder
+     *
+     * @param agentId Agent定义ID
+     * @param tenantId 租户ID
+     */
+    public AgentBuilderWrapper getAgentBuilder(Long agentId, Long tenantId) {
+        try {
+            setTenantInfo(tenantId);
+            AgentDefinition definition = agentDefinitionService.getById(agentId);
+            validAgentDefinition(definition);
+
+            return switch (definition.getAgentType()) {
+                case CUSTOM -> AgentBuilderWrapper.builder()
+                        .definition(definition)
+                        .reactAgentBuilder(getReActAgentBuilder(definition))
+                        .build();
+                case A2A -> AgentBuilderWrapper.builder()
+                        .definition(definition)
+                        .a2aAgentBuilder(getA2aAgentBuilder(definition))
+                        .build();
+                default -> throw new IllegalArgumentException("未知的智能体类型");
+            };
+        } catch (Exception e) {
+            AgentContext.clean();
+            throw new RuntimeException(e);
+        } finally {
+            TenantUtils.clear();
+        }
+    }
+
+    /**
+     * 根据Agent定义获取A2aAgent
+     * @param definition Agent 定义
+     */
+    private A2aAgent.Builder getA2aAgentBuilder(AgentDefinition definition) {
+        try {
+            return a2aAgentHelper.getA2aAgentBuilder(definition);
+        } catch (Exception e) {
+            AgentContext.clean();
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * 根据Agent定义获取ReActAgent
+     * @param definition Agent 定义
+     */
+    private ReActAgent.Builder getReActAgentBuilder(AgentDefinition definition) {
+        try {
+            return reActAgentHelper.getReactAgentBuilder(definition);
+        } catch (Exception e) {
+            AgentContext.clean();
+            throw new RuntimeException(e);
+        }
+    }
+
     /**
      * 验证Agent定义
      * @param definition Agent定义

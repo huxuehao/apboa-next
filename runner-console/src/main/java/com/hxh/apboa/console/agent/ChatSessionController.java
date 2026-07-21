@@ -9,6 +9,7 @@ import com.hxh.apboa.common.dto.ChatSessionCreateDTO;
 import com.hxh.apboa.common.dto.ChatSessionQueryDTO;
 import com.hxh.apboa.common.mp.support.PageParams;
 import com.hxh.apboa.common.r.R;
+import com.hxh.apboa.common.util.UserUtils;
 import com.hxh.apboa.common.vo.ChatMessageVO;
 import com.hxh.apboa.common.vo.ChatMessagePageVO;
 import com.hxh.apboa.common.vo.ChatSessionVO;
@@ -40,7 +41,7 @@ public class ChatSessionController {
     @ChatKeyAccess
     @PostMapping
     public R<ChatSessionVO> create(@RequestBody ChatSessionCreateDTO dto) {
-        return R.data(chatSessionService.createSession(dto));
+        return R.data(chatSessionService.createSession(dto, UserUtils.getId()));
     }
 
     /**

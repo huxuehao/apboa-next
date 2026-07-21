@@ -97,4 +97,12 @@ public interface WorkspaceService {
      * @return 容量信息
      */
     WorkspaceCapacityVO getCapacity(String sessionId);
+
+    /**
+     * 检查工作空间是否存在（仅检查目录是否存在，不会创建）
+     *
+     * @param sessionId 会话ID
+     * @return 是否存在
+     */
+    boolean workspaceExists(String sessionId);
 }

@@ -51,8 +51,7 @@ public class ChatSessionServiceImpl extends ServiceImpl<ChatSessionMapper, ChatS
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public ChatSessionVO createSession(ChatSessionCreateDTO dto) {
-        Long userId = UserUtils.getId();
+    public ChatSessionVO createSession(ChatSessionCreateDTO dto, Long userId) {
         if (userId == null || userId == 0L) {
             throw new RuntimeException("用户未登录");
         }

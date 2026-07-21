@@ -1,10 +1,4 @@
 <script setup lang="ts">
-import type { Component } from 'vue'
-import {
-  DatabaseOutlined,
-  HddOutlined,
-  MessageOutlined
-} from '@ant-design/icons-vue'
 import type { WorkflowResourceKind, WorkflowResourceSummary } from '@/types/workflowResources'
 
 defineProps<{
@@ -16,10 +10,10 @@ const emit = defineEmits<{
   (e: 'update:modelValue', value: WorkflowResourceKind): void
 }>()
 
-const menuItems: Array<{ key: WorkflowResourceKind; label: string; icon: Component; countKey: keyof WorkflowResourceSummary }> = [
-  { key: 'datasource', label: '数据源', icon: DatabaseOutlined, countKey: 'datasourceTotal' },
-  { key: 'cache', label: '缓存', icon: HddOutlined, countKey: 'cacheTotal' },
-  { key: 'mq', label: '消息', icon: MessageOutlined, countKey: 'mqTotal' }
+const menuItems: Array<{ key: WorkflowResourceKind; label: string; countKey: keyof WorkflowResourceSummary }> = [
+  { key: 'datasource', label: '数据源', countKey: 'datasourceTotal' },
+  { key: 'cache', label: 'Redis缓存', countKey: 'cacheTotal' },
+  { key: 'mq', label: '消息队列', countKey: 'mqTotal' }
 ]
 </script>
 
@@ -34,7 +28,6 @@ const menuItems: Array<{ key: WorkflowResourceKind; label: string; icon: Compone
         :class="{ active: modelValue === item.key }"
         @click="emit('update:modelValue', item.key)"
       >
-        <component :is="item.icon" class="settings-menu-icon" />
         <span class="settings-menu-label">{{ item.label }}</span>
         <span class="workflow-resource-menu-count">{{ summary[item.countKey] || 0 }}</span>
       </div>

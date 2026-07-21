@@ -1,7 +1,5 @@
 package com.hxh.apboa.console.agent;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.hxh.apboa.agent.mapper.IJobInfoMapper;
 import com.hxh.apboa.agent.service.AgentDefinitionService;
 import com.hxh.apboa.common.cluster.core.MessagePublisher;
 import com.hxh.apboa.common.config.auth.ChatKeyAccess;
@@ -37,7 +35,6 @@ import java.util.stream.Collectors;
 public class AgentDefinitionController {
 
     private final AgentDefinitionService agentDefinitionService;
-    private final IJobInfoMapper iJobInfoMapper;
     private final AgentStudioMapper agentStudioMapper;
     private final AgentLongTermMemoryMapper agentLongTermMemoryMapper;
     private final MessagePublisher messagePublisher;
@@ -49,14 +46,9 @@ public class AgentDefinitionController {
     public R<IPage<AgentDefinitionVO>> page(PageParams pageParams, AgentDefinitionDTO query) {
         IPage<AgentDefinition> page = agentDefinitionService.page(MP.getPage(pageParams), MP.getQueryWrapper(query));
         IPage<AgentDefinitionVO> pageVo = BeanUtils.copyPage(page, AgentDefinitionVO.class);
-        List<JobInfo> agent = iJobInfoMapper.selectList(new LambdaQueryWrapper<JobInfo>().eq(JobInfo::getType, "AGENT"));
         List<AgentStudio> agentStudios = agentStudioMapper.selectList(null);
         List<AgentLongTermMemory> agentLongTermMemories = agentLongTermMemoryMapper.selectList(null);
-        if (!agent.isEmpty() || !agentStudios.isEmpty() || !agentLongTermMemories.isEmpty()) {
-            Map<String, JobInfo> collectMap = agent.stream().collect(Collectors.toMap(
-                    JobInfo::getBizId,
-                    item -> item,
-                    (existing, replacement) -> existing));
+        if (!agentStudios.isEmpty() || !agentLongTermMemories.isEmpty()) {
             Map<Long, Long> agentStudioMap = agentStudios.stream().collect(Collectors.toMap(
                     AgentStudio::getAgentDefinitionId,
                     AgentStudio::getStudioId,
@@ -66,9 +58,6 @@ public class AgentDefinitionController {
                     AgentLongTermMemory::getLongTermMemoryConfigId,
                     (existing, replacement) -> existing));
             pageVo.getRecords().forEach(agentVo -> {
-                if (collectMap.containsKey(String.valueOf(agentVo.getId()))) {
-                    agentVo.setJobInfo(collectMap.get(String.valueOf(agentVo.getId())));
-                }
                 if (agentStudioMap.containsKey(agentVo.getId())) {
                     agentVo.setStudioConfigId(agentStudioMap.get(agentVo.getId()));
                 }
@@ -90,13 +79,6 @@ public class AgentDefinitionController {
     public R<AgentDefinitionVO> detail(@PathVariable("id") Long id) {
         AgentDefinitionVO vo = agentDefinitionService.agentDefinitionDetail(id);
         vo.setUsed(agentDefinitionService.usedWithAgent(List.of(id)));
-        List<JobInfo> agent = iJobInfoMapper.selectList(
-                new LambdaQueryWrapper<JobInfo>()
-                        .eq(JobInfo::getType, "AGENT")
-                        .eq(JobInfo::getBizId, String.valueOf(id)));
-        if (agent.size() == 1) {
-            vo.setJobInfo(agent.getFirst());
-        }
 
         return R.data(vo);
     }

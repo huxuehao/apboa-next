@@ -3,7 +3,6 @@ package com.hxh.apboa.engine.agent;
 import com.alibaba.nacos.api.ai.AiFactory;
 import com.alibaba.nacos.api.ai.AiService;
 import com.alibaba.nacos.api.exception.NacosException;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.hxh.apboa.a2a.config.NacosAgentConfig;
 import com.hxh.apboa.a2a.config.WellKnownAgentConfig;
 import com.hxh.apboa.a2a.service.AgentA2aService;
@@ -44,13 +43,44 @@ public class A2aAgentHelper {
             throw new RuntimeException("Agent A2A config not found, agentId: " + definition.getId());
 
         return switch (agentA2A.getA2aType()) {
-            case NACOS -> createNacosA2aAgent(agentA2A.getA2aConfig(), definition);
-            case WELLKNOWN ->createWellknownA2aAgent(agentA2A.getA2aConfig(), definition);
+            case NACOS -> {
+                NacosAgentConfig config = JsonUtils.parse(agentA2A.getA2aConfig().toString(), NacosAgentConfig.class);
+                yield createNacosA2aAgentBuilder(config, definition).build();
+            }
+            case WELLKNOWN -> {
+                WellKnownAgentConfig config = JsonUtils.parse(agentA2A.getA2aConfig().toString(), WellKnownAgentConfig.class);
+                yield createWellknownA2aAgentBuilder(config, definition).build();
+            }
         };
     }
 
-    public A2aAgent createWellknownA2aAgent(JsonNode a2aConfig, AgentDefinition definition) {
-        WellKnownAgentConfig config = JsonUtils.parse(a2aConfig.toString(), WellKnownAgentConfig.class);
+    /**
+     * 获取 A2aAgent Builder
+     * @param definition agent 定义
+     */
+    public A2aAgent.Builder getA2aAgentBuilder(AgentDefinition definition) {
+        AgentA2A agentA2A = agentA2aService.getA2aConfigByAgentId(definition.getId());
+        if (agentA2A == null)
+            throw new RuntimeException("Agent A2A config not found, agentId: " + definition.getId());
+
+        return switch (agentA2A.getA2aType()) {
+            case NACOS -> {
+                NacosAgentConfig config = JsonUtils.parse(agentA2A.getA2aConfig().toString(), NacosAgentConfig.class);
+                yield createNacosA2aAgentBuilder(config, definition);
+            }
+            case WELLKNOWN -> {
+                WellKnownAgentConfig config = JsonUtils.parse(agentA2A.getA2aConfig().toString(), WellKnownAgentConfig.class);
+                yield createWellknownA2aAgentBuilder(config, definition);
+            }
+        };
+    }
+
+    /**
+     * 获取 A2aAgent.Builder
+     * @param config WellKnown Agent 配置
+     * @param definition 智能体定义
+     */
+    public A2aAgent.Builder createWellknownA2aAgentBuilder(WellKnownAgentConfig config, AgentDefinition definition) {
         A2aAgent.Builder builder = A2aAgent.builder()
                 .name(config.getAgentName())
                 .agentCardResolver(WellKnownAgentCardResolver.builder()
@@ -62,9 +92,14 @@ public class A2aAgentHelper {
         return fillA2aAgentExpand(definition, builder);
     }
 
-    public A2aAgent createNacosA2aAgent(JsonNode a2aConfig, AgentDefinition definition) {
-        NacosAgentConfig nacosAgentConfig = JsonUtils.parse(a2aConfig.toString(), NacosAgentConfig.class);
-        Properties nacosProperties = nacosAgentConfig.getNacosProperties();
+    /**
+     * 获取 A2aAgent.Builder
+     * @param config Nacos Agent 配置
+     * @param definition 智能体定义
+     */
+    public A2aAgent.Builder createNacosA2aAgentBuilder(NacosAgentConfig config, AgentDefinition definition) {
+
+        Properties nacosProperties = config.getNacosProperties();
 
         AiService aiService;
         try {
@@ -75,13 +110,13 @@ public class A2aAgentHelper {
 
         NacosAgentCardResolver nacosAgentCardResolver = new NacosAgentCardResolver(aiService);
         A2aAgent.Builder builder = A2aAgent.builder()
-                .name(nacosAgentConfig.getAgentName())
+                .name(config.getAgentName())
                 .agentCardResolver(nacosAgentCardResolver);
 
         return fillA2aAgentExpand(definition, builder);
     }
 
-    private A2aAgent fillA2aAgentExpand(AgentDefinition definition, A2aAgent.Builder builder) {
+    private A2aAgent.Builder fillA2aAgentExpand(AgentDefinition definition, A2aAgent.Builder builder) {
         // 使用可变列表，避免 getHooks 返回 List.of() 时 add 抛 UnsupportedOperationException
         List<Hook> hooks = hooksFactory.getHooks(definition);
         if (hooks != null && !hooks.isEmpty()) {
@@ -94,6 +129,6 @@ public class A2aAgentHelper {
             builder.memory(new InMemoryMemory());
         }
 
-        return builder.build();
+        return builder;
     }
 }

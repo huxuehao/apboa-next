@@ -1,0 +1,151 @@
+/**
+ * 自动化任务编辑器样式
+ *
+ * @author huxuehao
+ */
+
+.automation-editor {
+  min-height: 100%;
+  background-color: #ffffff;
+}
+
+/* 顶部导航栏 */
+.editor-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background-color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.header-divider {
+  width: 1px;
+  height: 24px;
+  background-color: #e8e8e8;
+}
+
+.header-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin: 0;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* 内容区 */
+.editor-content {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+/* 配置卡片 */
+.config-card {
+  padding-bottom: 16px;
+
+  &:last-child {
+    padding-bottom: 0;
+  }
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.card-icon {
+  width: 20px;
+  height: 20px;
+  color: #666;
+}
+
+.card-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1a1a1a;
+
+  &::before {
+    content: '';
+    display: inline-block;
+    width: 3px;
+    height: 16px;
+    margin-right: 4px;
+    background: #333;
+    border-radius: 2px;
+    vertical-align: middle;
+  }
+}
+
+.card-desc {
+  font-size: 13px;
+  color: #999;
+  margin-left: 8px;
+}
+
+.card-body {
+  padding-left: 6px;
+}
+
+/* 表单行 */
+.form-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 24px;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
+.form-label {
+  font-size: var(--font-size-sm, 12px);
+  color: var(--color-text-secondary, #999);
+}
+
+.form-control {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 选择类控件统一背景色 */
+.form-control .ant-segmented {
+  background-color: #F2F4F7;
+}
+
+.form-control .target-selector .target-display {
+  background-color: #F2F4F7;
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+  .editor-content {
+    padding: 16px;
+  }
+
+  .form-row {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .form-label {
+    width: auto;
+  }
+}

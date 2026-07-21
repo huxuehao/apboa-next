@@ -14,6 +14,7 @@ public class TableConst {
     public static final String SENSITIVE_WORD = "sensitive_word_config";
     public static final String JOB_LOG = "quartz_job_log";
     public static final String JOB_INFO = "quartz_job_info";
+    public static final String JOB_RECORD = "quartz_job_records";
     public static final String PARAMS = "params";
     public static final String PROVIDER = "model_provider";
     public static final String MODEL = "model_config";

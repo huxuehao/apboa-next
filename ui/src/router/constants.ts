@@ -20,6 +20,8 @@ export const RouteNames = {
   // 主页
   HOME: 'Home',
   DASHBOARD: 'Dashboard',
+  AUTOMATION: 'Automation',
+  CHAT_CLUSTER: 'ChatCluster',
 
   // Agent管理
   AGENT: 'Agent',
@@ -100,6 +102,8 @@ export const RoutePaths = {
   ROOT: '/',
   HOME: '/home',
   DASHBOARD: '/dashboard',
+  AUTOMATION: '/automation',
+  CHAT_CLUSTER: '/chat-cluster',
 
   // Agent管理
   AGENT: 'agent',
