@@ -146,12 +146,57 @@ const bizRoutes: AppRouteRecordRaw[] = [
       },
       // 工作台
       {
-        path: 'dashboard',
+        path: RoutePaths.DASHBOARD,
         name: RouteNames.DASHBOARD,
         component: () => import('@/views/Dashboard/index.vue'),
         meta: {
           title: '工作台',
           hidden: false
+        },
+      },
+      {
+        path: RoutePaths.CHAT_CLUSTER,
+        name: RouteNames.CHAT_CLUSTER,
+        component: () => import('@/views/ChatCluster/index.vue'),
+        meta: {
+          title: '对话广场',
+          hidden: false
+        },
+      },
+      {
+        path: RoutePaths.AUTOMATION,
+        name: RouteNames.AUTOMATION,
+        component: () => import('@/views/Automation/index.vue'),
+        meta: {
+          title: '自动化',
+          hidden: false
+        },
+      },
+      {
+        path: '/automation/new',
+        name: 'AutomationNew',
+        component: () => import('@/views/Automation/Editor.vue'),
+        meta: {
+          title: '新增自动化任务',
+          hidden: true
+        },
+      },
+      {
+        path: '/automation/:id/edit',
+        name: 'AutomationEdit',
+        component: () => import('@/views/Automation/Editor.vue'),
+        meta: {
+          title: '编辑自动化任务',
+          hidden: true
+        },
+      },
+      {
+        path: '/automation/:id/records',
+        name: 'AutomationRecords',
+        component: () => import('@/views/Automation/Records.vue'),
+        meta: {
+          title: '执行记录',
+          hidden: true
         },
       },
       // 设置管理

@@ -231,7 +231,7 @@ onMounted(() => {
 <template>
   <div class="prompt-page">
     <section class="intro-section">
-      <h3 class="intro-title">系统提示词模板管理</h3>
+      <h3 class="intro-title">系统提示词</h3>
       <p class="intro-desc text-secondary">
         系统提示词是智能体的“角色定义与行为准则”，通过结构化指令为大模型设定明确的角色定位、能力边界和交互范式。精心设计的提示词模板能够显著提升智能体在特定领域的表现一致性、专业性及安全性。
       </p>

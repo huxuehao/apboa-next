@@ -1,7 +1,9 @@
 package com.hxh.apboa.scheduler.service;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.hxh.apboa.common.entity.JobInfo;
+import com.hxh.apboa.common.enums.TenantRole;
 
 /**
  * 描述：定时任务管理服务接口
@@ -60,4 +62,19 @@ public interface QuartzInfoService extends IService<JobInfo> {
      * @param id 任务ID
      */
     void stopJob(String id) throws ClassNotFoundException;
+
+    /**
+     * 分页查询自动化任务
+     *
+     * @param page     页码
+     * @param size     每页数量
+     * @param type     任务类型（可选）
+     * @param keyword  关键字搜索（可选）
+     * @param tenantId 租户ID
+     * @param userId   当前用户ID
+     * @param userRole 当前用户角色
+     * @return 分页结果
+     */
+    IPage<JobInfo> pageJobs(int page, int size, String type, String keyword,
+                            Long tenantId, Long userId, TenantRole userRole);
 }

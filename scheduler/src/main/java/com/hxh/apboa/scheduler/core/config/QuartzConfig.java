@@ -15,7 +15,7 @@ import org.quartz.JobDataMap;
  * @author huxuehao
  **/
 public class QuartzConfig {
-    private String identity;
+    private Long identity;
 
     /**
      * cron定时策略
@@ -35,12 +35,12 @@ public class QuartzConfig {
     @Setter
     private Class<? extends QuartzJob> jobClass;
 
-    public String getIdentity() {
+    public Long getIdentity() {
         checkIdentity();
         return identity;
     }
 
-    public void setIdentity(String identity) {
+    public void setIdentity(Long identity) {
         if (FuncUtils.isEmpty(identity)) {
             throw new RuntimeException("identity 不可为空");
         }

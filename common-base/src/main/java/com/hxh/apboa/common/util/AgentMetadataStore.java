@@ -54,6 +54,18 @@ public final class AgentMetadataStore {
      * @param agentId Agent ID
      */
     public static void remove(String agentId) {
+        // 清除非被标记为主动清除的元数据信息
+        Object o = get(agentId, "cleanUpOnOwn");
+        if (o == null || !(Boolean) o) {
+            STORE.remove(agentId);
+        }
+    }
+
+    /**
+     * 自己主动清除元数据
+     * @param agentId Agent ID
+     */
+    public static void removeOnOwn(String agentId) {
         STORE.remove(agentId);
     }
 }

@@ -24,9 +24,10 @@ public interface ChatSessionService extends IService<ChatSession> {
      * 创建新会话：插入根消息并设置 current_message_id
      *
      * @param dto 创建参数（agentId、title）
+     * @param userId 用户ID
      * @return 会话 VO
      */
-    ChatSessionVO createSession(ChatSessionCreateDTO dto);
+    ChatSessionVO createSession(ChatSessionCreateDTO dto, Long userId);
 
     /**
      * 正常对话追加：在 current_message_id 后插入新消息并更新 current_message_id

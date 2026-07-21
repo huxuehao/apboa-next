@@ -1,5 +1,7 @@
 package com.hxh.apboa.scheduler.core.job;
 
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
+import com.hxh.apboa.common.entity.JobRecord;
 import com.hxh.apboa.common.util.BeanUtils;
 import com.hxh.apboa.common.util.FuncUtils;
 import com.hxh.apboa.common.util.TenantUtils;
@@ -9,11 +11,13 @@ import com.hxh.apboa.scheduler.core.enums.QuartzResult;
 import com.hxh.apboa.common.entity.JobLog;
 import com.hxh.apboa.scheduler.core.cluster.JobDistributedLock;
 import com.hxh.apboa.scheduler.service.QuartzLogService;
+import com.hxh.apboa.scheduler.service.QuartzRecordService;
 import lombok.extern.slf4j.Slf4j;
 import org.quartz.*;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
+import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
@@ -42,7 +46,7 @@ public abstract class QuartzJob implements Job {
         this.context = context;
 
         // 任务身份ID
-        String identity = getDataMap(QuartzEnum.IDENTITY_KEY.value(), String.class);
+        String identity = String.valueOf(getDataMap(QuartzEnum.IDENTITY_KEY.value(), Long.class));
 
         // 恢复租户上下文（Quartz工作线程无HTTP请求，需从JobDataMap恢复）
         Long tenantId = getDataMap(JobConst.TENANT_ID_KEY, Long.class);
@@ -203,6 +207,20 @@ public abstract class QuartzJob implements Job {
     protected static <T> T getBean(Class<T> clazz) {
         return BeanUtils.getBean(clazz);
     }
+
+
+    protected void setRecordRelation(Long recordId) {
+        Long jobId = getDataMap(QuartzEnum.IDENTITY_KEY.value(), Long.class);
+        QuartzRecordService bean = getBean(QuartzRecordService.class);
+
+        UpdateWrapper<JobRecord> wrapper = new UpdateWrapper<>();
+        wrapper.eq("job_id", jobId);
+        wrapper.eq("record_id", recordId);
+        bean.remove(wrapper);
+
+        bean.save(new JobRecord(jobId, recordId, LocalDateTime.now()));
+    }
+
     /**
      * 获取异常信息
      */

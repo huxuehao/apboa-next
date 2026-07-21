@@ -63,6 +63,15 @@ public class ReActAgentHelper {
      * @param definition agent 定义
      */
     public ReActAgent getReActAgent(AgentDefinition definition) {
+        // 构建reActAgent
+        return getReactAgentBuilder(definition).build();
+    }
+
+    /**
+     * 获取 ReActAgent.Builder
+     * @param definition  agent 定义
+     */
+    public ReActAgent.Builder getReactAgentBuilder(AgentDefinition definition) {
         Model model = chatModelFactory.getModel(definition);
         Toolkit toolkit = toolkitFactory.getToolkit(definition);
         CodeExecutionConfig codeExecutionConfig = getCodeExecutionConfig(definition.getId());
@@ -170,8 +179,7 @@ public class ReActAgentHelper {
                 .build();
         builder.toolExecutionContext(context);
 
-        // 构建reActAgent
-        return builder.build();
+        return builder;
     }
 
     /**

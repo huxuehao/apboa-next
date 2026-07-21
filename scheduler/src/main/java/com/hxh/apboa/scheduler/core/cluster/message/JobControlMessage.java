@@ -91,7 +91,7 @@ public class JobControlMessage implements Serializable {
         return JobControlMessage.builder()
                 .sourceNodeId(sourceNodeId)
                 .action(Action.ADD)
-                .jobId(jobInfo.getId())
+                .jobId(String.valueOf(jobInfo.getId()))
                 .jobInfo(jobInfo)
                 .timestamp(System.currentTimeMillis())
                 .build();
@@ -104,7 +104,7 @@ public class JobControlMessage implements Serializable {
         return JobControlMessage.builder()
                 .sourceNodeId(sourceNodeId)
                 .action(Action.UPDATE)
-                .jobId(jobInfo.getId())
+                .jobId(String.valueOf(jobInfo.getId()))
                 .jobInfo(jobInfo)
                 .timestamp(System.currentTimeMillis())
                 .build();

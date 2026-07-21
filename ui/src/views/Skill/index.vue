@@ -280,9 +280,9 @@ onMounted(() => {
 <template>
   <div class="skill-page">
     <section class="intro-section">
-      <h3 class="intro-title">技能包管理</h3>
+      <h3 class="intro-title">技能包</h3>
       <p class="intro-desc text-secondary">
-        技能管理是智能体的“专业能力装配中心”，通过模块化、可插拔的技能包体系，让智能体能够根据不同场景需求动态加载专业知识库与处理逻辑，实现从通用助手到领域专家的能力跃迁。
+        技能是智能体的“专业能力装配中心”，通过模块化、可插拔的技能包体系，让智能体能够根据不同场景需求动态加载专业知识库与处理逻辑，实现从通用助手到领域专家的能力跃迁。
       </p>
     </section>
 

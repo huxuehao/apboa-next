@@ -254,7 +254,7 @@ watch([selectedHookType, keyword], () => {
 <template>
   <div class="hook-page">
     <section class="intro-section">
-      <h3 class="intro-title">扩展管理</h3>
+      <h3 class="intro-title">扩展</h3>
       <p class="intro-desc text-secondary">
         扩展（Hook）是智能体执行流程中的切面扩展点，用于在关键节点插入自定义逻辑。行业实践通常在「调用前后、推理前后、工具调用前后、发生错误时」等时机挂载扩展，实现日志、鉴权、限流、审计或业务定制，而不侵入主流程代码。本模块展示已配置的扩展，便于查看与启用状态管理。
       </p>

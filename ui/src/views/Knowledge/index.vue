@@ -352,9 +352,9 @@ watch([selectedKbType, keyword], () => {
 <template>
   <div class="knowledge-page">
     <section class="intro-section">
-      <h3 class="intro-title">知识库管理</h3>
+      <h3 class="intro-title">知识库</h3>
       <p class="intro-desc text-secondary">
-        知识库管理是智能体的“私有记忆与专业智库”，通过先进的RAG（检索增强生成）技术，将企业的私有文档、数据库、业务知识统一构建为可检索、可推理的结构化知识体系，让智能体在通用能力基础上具备企业级专业知识。
+        知识库是智能体的“私有记忆与专业智库”，通过先进的RAG（检索增强生成）技术，将企业的私有文档、数据库、业务知识统一构建为可检索、可推理的结构化知识体系，让智能体在通用能力基础上具备企业级专业知识。
       </p>
     </section>
 

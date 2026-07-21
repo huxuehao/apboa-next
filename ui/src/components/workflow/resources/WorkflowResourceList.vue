@@ -12,6 +12,15 @@ import {
 } from '@ant-design/icons-vue'
 import type { WorkflowManagedResource, WorkflowResourceKind } from '@/types/workflowResources'
 
+// 品牌图标导入 - 按资源类型匹配
+import mysqlLogo from '@/assets/brand/mysql.png'
+import oracleLogo from '@/assets/brand/oracle.png'
+import postgresqlLogo from '@/assets/brand/postgresql.png'
+import redisLogo from '@/assets/brand/redis.png'
+import kafkaLogo from '@/assets/brand/kafka.png'
+import rabbitmqLogo from '@/assets/brand/rabbitmq.png'
+import rocketmqLogo from '@/assets/brand/rocketmq.png'
+
 const props = defineProps<{
   kind: WorkflowResourceKind
   records: WorkflowManagedResource[]
@@ -25,7 +34,8 @@ const emit = defineEmits<{
   (e: 'check', record: WorkflowManagedResource): void
 }>()
 
-const iconMap: Record<WorkflowResourceKind, Component> = {
+/** 通用回退图标：按资源大类映射 */
+const kindIconMap: Record<WorkflowResourceKind, Component> = {
   datasource: DatabaseOutlined,
   cache: HddOutlined,
   mq: MessageOutlined
@@ -35,6 +45,25 @@ const colorMap: Record<WorkflowResourceKind, string> = {
   datasource: '#2f54eb',
   cache: '#13a8a8',
   mq: '#722ed1'
+}
+
+/** 品牌图标映射：资源类型 → 品牌 PNG 图片 */
+const brandIconMap: Record<string, string> = {
+  MYSQL: mysqlLogo,
+  ORACLE: oracleLogo,
+  POSTGRESQL: postgresqlLogo,
+  REDIS: redisLogo,
+  KAFKA: kafkaLogo,
+  RABBITMQ: rabbitmqLogo,
+  ROCKETMQ: rocketmqLogo
+}
+
+/** 根据记录获取对应的品牌图标，无匹配则返回 null */
+function getBrandIcon(record: WorkflowManagedResource): string | null {
+  if (record.type && brandIconMap[record.type]) {
+    return brandIconMap[record.type] ?? null
+  }
+  return null
 }
 
 function resourceAddress(record: WorkflowManagedResource) {
@@ -67,8 +96,13 @@ function resourceDescription(record: WorkflowManagedResource) {
       :key="record.id"
       class="workflow-resource-list-item"
     >
-      <div class="workflow-resource-avatar" :style="{ backgroundColor: `${colorMap[kind]}14`, color: colorMap[kind] }">
-        <component :is="iconMap[kind]" />
+      <div
+        class="workflow-resource-avatar"
+        :class="{ 'has-brand-icon': getBrandIcon(record) }"
+        :style="getBrandIcon(record) ? {} : { backgroundColor: `${colorMap[kind]}14`, color: colorMap[kind] }"
+      >
+        <img v-if="getBrandIcon(record)" :src="getBrandIcon(record)!" class="workflow-resource-brand-icon" alt="" />
+        <component :is="kindIconMap[kind]" v-else />
       </div>
 
       <div class="workflow-resource-info">
@@ -160,6 +194,17 @@ function resourceDescription(record: WorkflowManagedResource) {
   border-radius: var(--border-radius-lg);
   font-size: 18px;
   flex-shrink: 0;
+  overflow: hidden;
+
+  &.has-brand-icon {
+    background: transparent;
+  }
+}
+
+.workflow-resource-brand-icon {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .workflow-resource-info {

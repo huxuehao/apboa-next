@@ -11,7 +11,7 @@ import com.hxh.apboa.scheduler.core.job.QuartzJob;
  **/
 public class QuartzConfigFactory {
     private final QuartzConfig config = new QuartzConfig();
-    public QuartzConfigFactory identity(String identity) {
+    public QuartzConfigFactory identity(Long identity) {
         config.setIdentity(identity);
         config.putDataMap(QuartzEnum.IDENTITY_KEY.value(), identity);
         return this;
