@@ -20,6 +20,10 @@ import redisLogo from '@/assets/brand/redis.png'
 import kafkaLogo from '@/assets/brand/kafka.png'
 import rabbitmqLogo from '@/assets/brand/rabbitmq.png'
 import rocketmqLogo from '@/assets/brand/rocketmq.png'
+import dingdingLogo from '@/assets/brand/dingding.png'
+import emailLogo from '@/assets/brand/email.png'
+import feishuLogo from '@/assets/brand/feishu.png'
+import wecomLogo from '@/assets/brand/wecom.png'
 
 const props = defineProps<{
   kind: WorkflowResourceKind
@@ -38,13 +42,15 @@ const emit = defineEmits<{
 const kindIconMap: Record<WorkflowResourceKind, Component> = {
   datasource: DatabaseOutlined,
   cache: HddOutlined,
-  mq: MessageOutlined
+  mq: MessageOutlined,
+  channel: DatabaseOutlined,
 }
 
 const colorMap: Record<WorkflowResourceKind, string> = {
   datasource: '#2f54eb',
   cache: '#13a8a8',
-  mq: '#722ed1'
+  mq: '#722ed1',
+  channel: '#13a8a8',
 }
 
 /** 品牌图标映射：资源类型 → 品牌 PNG 图片 */
@@ -55,7 +61,12 @@ const brandIconMap: Record<string, string> = {
   REDIS: redisLogo,
   KAFKA: kafkaLogo,
   RABBITMQ: rabbitmqLogo,
-  ROCKETMQ: rocketmqLogo
+  ROCKETMQ: rocketmqLogo,
+  DINGTALK: dingdingLogo,
+  EMAIL: emailLogo,
+  FEISHU: feishuLogo,
+  WECOM: wecomLogo
+
 }
 
 /** 根据记录获取对应的品牌图标，无匹配则返回 null */
