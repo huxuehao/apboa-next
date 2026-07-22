@@ -320,6 +320,43 @@ public class CodeExecute implements CodeExecutor {
     summaryComponent: 'VariableAggNodeSummary',
     showSummary: true,
   }),
+  // ========== 渠道 ==========
+  schema({
+    type: 'EMAIL_SEND', title: '发送邮件', group: 'integration',
+    description: '通过已配置的邮箱渠道（SMTP）发送邮件，支持收件人、抄送、主题及内容的模板变量渲染。',
+    icon: 'message', color: '#13a8a8', panelComponent: 'EmailSendNodePanel',
+    defaultConfig: { formatterType: 'STRING' },
+    inputConfigs: input(), outputConfigs: output('Boolean'),
+    summaryComponent: 'EmailSendNodeSummary',
+    showSummary: true,
+  }),
+  schema({
+    type: 'WECOM_SEND', title: '企业微信消息', group: 'integration',
+    description: '通过已配置的企业微信机器人 Webhook 发送消息，支持 @用户和模板变量渲染。',
+    icon: 'message', color: '#13a8a8', panelComponent: 'WecomSendNodePanel',
+    defaultConfig: { formatterType: 'STRING', isAtAll: false },
+    inputConfigs: input(), outputConfigs: output('Boolean'),
+    summaryComponent: 'WecomSendNodeSummary',
+    showSummary: true,
+  }),
+  schema({
+    type: 'DINGTALK_SEND', title: '钉钉消息', group: 'integration',
+    description: '通过已配置的钉钉机器人 Webhook 发送消息，支持 @用户、@所有人及模板变量渲染。',
+    icon: 'message', color: '#13a8a8', panelComponent: 'DingTalkSendNodePanel',
+    defaultConfig: { formatterType: 'STRING', isAtAll: false },
+    inputConfigs: input(), outputConfigs: output('Boolean'),
+    summaryComponent: 'DingTalkSendNodeSummary',
+    showSummary: true,
+  }),
+  schema({
+    type: 'FEISHU_SEND', title: '飞书消息', group: 'integration',
+    description: '通过已配置的飞书机器人 Webhook 发送消息卡片，支持标题、内容及模板变量渲染。',
+    icon: 'message', color: '#13a8a8', panelComponent: 'FeishuSendNodePanel',
+    defaultConfig: { formatterType: 'STRING' },
+    inputConfigs: input(), outputConfigs: output('Boolean'),
+    summaryComponent: 'FeishuSendNodeSummary',
+    showSummary: true,
+  }),
 ]
 
 export const workflowNodeSchemaMap = workflowNodeSchemas.reduce<Record<string, WorkflowNodeSchema>>((acc, item) => {

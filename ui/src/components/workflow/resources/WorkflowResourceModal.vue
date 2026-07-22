@@ -15,9 +15,11 @@ const summary = ref<WorkflowResourceSummary>({
   datasourceTotal: 0,
   cacheTotal: 0,
   mqTotal: 0,
+  channelTotal: 0,
   datasourceEnabled: 0,
   cacheEnabled: 0,
-  mqEnabled: 0
+  mqEnabled: 0,
+  channelEnabled: 0
 })
 
 async function loadSummary() {

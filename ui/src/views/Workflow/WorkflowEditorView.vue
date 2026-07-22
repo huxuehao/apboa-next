@@ -77,7 +77,7 @@ const leaveConfirmOpen = ref(false)
 const leavingAfterSave = ref(false)
 const runInput = ref('{\n  "params": [],\n  "variables": {}\n}')
 const canvasRef = ref<CanvasRef | null>(null)
-const resources = ref<WorkflowResourceMaps>({ caches: [], datasources: [], mqs: [] })
+const resources = ref<WorkflowResourceMaps>({ caches: [], datasources: [], mqs: [], channels: [] })
 const history = ref<WorkflowDefinition[]>([])
 const future = ref<WorkflowDefinition[]>([])
 const contextMenu = ref({ open: false, nodeId: '', x: 0, y: 0 })
@@ -205,15 +205,17 @@ watch(draftSignature, (signature) => {
 })
 
 async function loadResources() {
-  const [caches, datasources, mqs] = await Promise.all([
+  const [caches, datasources, mqs, channels] = await Promise.all([
     workflowApi.enabledCaches(),
     workflowApi.enabledDatasources(),
     workflowApi.enabledMqs(),
+    workflowApi.enabledChannels(),
   ])
   resources.value = {
     caches: caches.data.data || [],
     datasources: datasources.data.data || [],
     mqs: mqs.data.data || [],
+    channels: channels.data.data || [],
   }
 }
 

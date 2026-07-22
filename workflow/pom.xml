@@ -27,6 +27,10 @@
         </dependency>
         <dependency>
             <groupId>com.hxh.apboa.next</groupId>
+            <artifactId>biz-channel</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.hxh.apboa.next</groupId>
             <artifactId>biz-datasource</artifactId>
         </dependency>
         <!-- Velocity 引擎 -->

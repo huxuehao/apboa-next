@@ -1,6 +1,8 @@
 package com.hxh.apboa.console.workflow;
 
 import com.hxh.apboa.cache.service.CacheService;
+import com.hxh.apboa.channel.entity.Channel;
+import com.hxh.apboa.channel.service.ChannelService;
 import com.hxh.apboa.common.entity.Cache;
 import com.hxh.apboa.common.entity.Datasource;
 import com.hxh.apboa.common.r.R;
@@ -22,6 +24,7 @@ public class WorkflowResourceController {
     private final DatasourceService datasourceService;
     private final CacheService cacheService;
     private final MqService mqService;
+    private final ChannelService channelService;
 
     @GetMapping("/summary")
     public R<Map<String, Long>> summary() {
@@ -31,15 +34,19 @@ public class WorkflowResourceController {
         long datasourceEnabled = datasourceService.lambdaQuery().eq(Datasource::getEnabled, true).count();
         long cacheEnabled = cacheService.lambdaQuery().eq(Cache::getEnabled, true).count();
         long mqEnabled = mqService.lambdaQuery().eq(Mq::getEnabled, true).count();
+        long channelTotal = channelService.count();
+        long channelEnabled = channelService.lambdaQuery().eq(Channel::getEnabled, true).count();
 
         Map<String, Long> summary = new LinkedHashMap<>();
-        summary.put("total", datasourceTotal + cacheTotal + mqTotal);
+        summary.put("total", datasourceTotal + cacheTotal + mqTotal + channelTotal);
         summary.put("datasourceTotal", datasourceTotal);
         summary.put("cacheTotal", cacheTotal);
         summary.put("mqTotal", mqTotal);
+        summary.put("channelTotal", channelTotal);
         summary.put("datasourceEnabled", datasourceEnabled);
         summary.put("cacheEnabled", cacheEnabled);
         summary.put("mqEnabled", mqEnabled);
+        summary.put("channelEnabled", channelEnabled);
         return R.data(summary);
     }
 }
