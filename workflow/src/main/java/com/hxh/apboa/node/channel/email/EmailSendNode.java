@@ -20,6 +20,7 @@ import lombok.Getter;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * 发送邮件节点
@@ -70,15 +71,30 @@ public class EmailSendNode extends EnhancedNode {
         extras.put("toRecipients", resolvedTo);
         extras.put("ccRecipients", resolvedCc);
         MessageParams params = new MessageParams(resolvedSubject, finalContent, extras);
-        sender.send(channel, params);
 
-        // 记录执行上下文
-        output.addExecutionContext("channelName", channel.getName());
-        output.addExecutionContext("channelType", channel.getType().name());
-        output.addExecutionContext("toRecipients", resolvedTo);
-        output.addExecutionContext("subject", resolvedSubject);
+        if (config.isSyncExecute()) {
+            // 同步执行
+            sender.send(channel, params);
 
-        output.addOutput(NodeConst.DEFAULT_OUTPUT_NAME, true);
+            // 记录执行上下文
+            output.addExecutionContext("channelName", channel.getName());
+            output.addExecutionContext("channelType", channel.getType().name());
+            output.addExecutionContext("toRecipients", resolvedTo);
+            output.addExecutionContext("subject", resolvedSubject);
+
+            output.addOutput(NodeConst.DEFAULT_OUTPUT_NAME, true);
+        } else {
+            // 异步执行
+            CompletableFuture.runAsync(() -> {
+                try {
+                    sender.send(channel, params);
+                } catch (Exception e) {
+                    System.out.println(getName() + "异步执行失败: " + e.getMessage());
+                }
+            });
+            output.addOutput(NodeConst.DEFAULT_OUTPUT_NAME, "ASYNC_EXECUTE");
+        }
+
         output.markComplete();
         return output;
     }

@@ -33,6 +33,10 @@
             <groupId>com.hxh.apboa.next</groupId>
             <artifactId>biz-datasource</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.hxh.apboa.next</groupId>
+            <artifactId>biz-channel</artifactId>
+        </dependency>
         <!-- Velocity 引擎 -->
         <dependency>
             <groupId>org.apache.velocity</groupId>
@@ -48,6 +52,11 @@
             <groupId>com.fasterxml.jackson.dataformat</groupId>
             <artifactId>jackson-dataformat-yaml</artifactId>
             <version>2.15.2</version>
+        </dependency>
+        <dependency>
+            <groupId>com.sun.mail</groupId>
+            <artifactId>jakarta.mail</artifactId>
+            <version>2.0.1</version>
         </dependency>
     </dependencies>
 </project>

@@ -45,4 +45,8 @@ public class Config implements NodeConfig {
      * 是否@所有人
      */
     private Boolean isAtAll = false;
+    /**
+     * 是否同步执行，默认 true
+     */
+    private boolean syncExecute = true;
 }

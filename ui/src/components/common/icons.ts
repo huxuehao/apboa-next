@@ -49,10 +49,12 @@ export const ICON_DEFS: IconDef[] = [
   { name: 'nodetool', label: '工具执行', unicode: '\\e679' },
   { name: 'nodemcp', label: 'MCP调用', unicode: '\\e9d8' },
   { name: 'nodevariable', label: '变量', unicode: '\\e61f' },
-  { name: 'nodeemail', label: '发送邮件', unicode: '\\e729' },
-  { name: 'nodewecom', label: '企业微信', unicode: '\\e729' },
-  { name: 'nodedingtalk', label: '钉钉', unicode: '\\e729' },
-  { name: 'nodefeishu', label: '飞书', unicode: '\\e729' },
+  { name: 'nodeemail', label: '发送邮件', unicode: '\\e60a' },
+  { name: 'nodeqiyeweixin', label: '企业微信', unicode: '\\e986' },
+  { name: 'nodedingding', label: '钉钉', unicode: '\\e648' },
+  { name: 'nodefeishu', label: '飞书', unicode: '\\e802' },
+  { name: 'nodeprocessOutput', label: '过程输出', unicode: '\\e633' },
+  { name: 'nodeintentRecognition', label: '意图识别', unicode: '\\e604' },
 ]
 
 /**

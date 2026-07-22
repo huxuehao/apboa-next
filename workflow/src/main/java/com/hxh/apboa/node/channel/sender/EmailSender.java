@@ -5,12 +5,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hxh.apboa.channel.entity.Channel;
 import com.hxh.apboa.common.util.FuncUtils;
 
-import javax.mail.Authenticator;
-import javax.mail.PasswordAuthentication;
-import javax.mail.Session;
-import javax.mail.Transport;
-import javax.mail.internet.InternetAddress;
-import javax.mail.internet.MimeMessage;
+import jakarta.mail.*;
+import jakarta.mail.internet.InternetAddress;
+import jakarta.mail.internet.MimeMessage;
 import java.util.Properties;
 
 /**
@@ -77,14 +74,14 @@ public class EmailSender implements ChannelSender {
         for (String to : toRecipients.split("[,;]")) {
             String trimmed = to.trim();
             if (!trimmed.isEmpty()) {
-                message.addRecipient(javax.mail.Message.RecipientType.TO, new InternetAddress(trimmed));
+                message.addRecipient(Message.RecipientType.TO, new InternetAddress(trimmed));
             }
         }
         if (!FuncUtils.isEmpty(ccRecipients)) {
             for (String cc : ccRecipients.split("[,;]")) {
                 String trimmed = cc.trim();
                 if (!trimmed.isEmpty()) {
-                    message.addRecipient(javax.mail.Message.RecipientType.CC, new InternetAddress(trimmed));
+                    message.addRecipient(Message.RecipientType.CC, new InternetAddress(trimmed));
                 }
             }
         }

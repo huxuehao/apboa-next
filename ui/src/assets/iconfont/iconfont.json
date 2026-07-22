@@ -6,6 +6,48 @@
   "description": "",
   "glyphs": [
     {
+      "icon_id": "46270614",
+      "name": "过程输出",
+      "font_class": "processOutput",
+      "unicode": "e633",
+      "unicode_decimal": 58931
+    },
+    {
+      "icon_id": "9985504",
+      "name": "意图识别",
+      "font_class": "intentRecognition",
+      "unicode": "e604",
+      "unicode_decimal": 58884
+    },
+    {
+      "icon_id": "6027502",
+      "name": "邮箱",
+      "font_class": "email",
+      "unicode": "e60a",
+      "unicode_decimal": 58890
+    },
+    {
+      "icon_id": "34272980",
+      "name": "钉钉",
+      "font_class": "dingding",
+      "unicode": "e648",
+      "unicode_decimal": 58952
+    },
+    {
+      "icon_id": "45748800",
+      "name": "飞书",
+      "font_class": "feishu",
+      "unicode": "e802",
+      "unicode_decimal": 59394
+    },
+    {
+      "icon_id": "47596007",
+      "name": "企业微信",
+      "font_class": "qiyeweixin",
+      "unicode": "e986",
+      "unicode_decimal": 59782
+    },
+    {
       "icon_id": "4734164",
       "name": "联网",
       "font_class": "online_search",

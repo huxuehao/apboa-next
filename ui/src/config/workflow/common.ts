@@ -33,8 +33,8 @@ export const nodeIconMap: Record<string, IconName> = {
   TOOL_EXECUTE: 'nodetool',
   MCP_CALL: 'nodemcp',
   EMAIL_SEND: 'nodeemail',
-  WECOM_SEND: 'nodewecom',
-  DINGTALK_SEND: 'nodedingtalk',
+  WECOM_SEND: 'nodeqiyeweixin',
+  DINGTALK_SEND: 'nodedingding',
   FEISHU_SEND: 'nodefeishu',
 }
 

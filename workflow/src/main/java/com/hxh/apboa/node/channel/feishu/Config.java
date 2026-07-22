@@ -33,4 +33,8 @@ public class Config implements NodeConfig {
      * 消息内容模板（优先级高于 content，支持变量替换）
      */
     private String contentTemplate;
+    /**
+     * 是否同步执行，默认 true
+     */
+    private boolean syncExecute = true;
 }

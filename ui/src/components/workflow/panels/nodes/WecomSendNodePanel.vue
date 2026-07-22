@@ -168,6 +168,19 @@ const messageContent = computed({
           />
 
           <span class="field-help">选择「模板渲染」后，内容经所选模板格式渲染再发送。</span>
+
+          <div class="switch-row">
+            <span class="switch-label">
+              同步执行
+              <ATooltip title="开启后同步等待发送结果；关闭后异步发送，直接返回固定字符串">
+                <QuestionCircleOutlined class="help-icon" />
+              </ATooltip>
+            </span>
+            <ASwitch
+              :checked="Boolean(node.data.config?.syncExecute ?? true)"
+              @update:checked="(v: any) => updateConfig('syncExecute', v)"
+            />
+          </div>
         </div>
       </PanelSection>
 
@@ -191,4 +204,21 @@ const messageContent = computed({
 .formatter-selector { display: flex; align-items: center; gap: 6px; }
 .message-mode-toggle { margin-bottom: 8px; :deep(.ant-radio-wrapper) { font-size: 13px; } }
 .field-help { display: block; margin-top: 4px; color: #8c8c8c; font-size: 12px; line-height: 1.6; }
+
+.switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 32px;
+  margin-bottom: 12px;
+}
+
+.switch-label {
+  flex-shrink: 0;
+  font-size: 14px;
+  color: rgba(0, 0, 0, 0.88);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
 </style>

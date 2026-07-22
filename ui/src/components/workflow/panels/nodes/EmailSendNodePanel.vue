@@ -190,6 +190,19 @@ const messagePlaceholder = computed(() =>
           <span class="field-help">
             选择「模板渲染」后，内容经所选模板格式渲染再发送；收件人、抄送、主题同样使用该格式渲染。
           </span>
+
+          <div class="switch-row">
+            <span class="switch-label">
+              同步执行
+              <ATooltip title="开启后同步等待发送结果；关闭后异步发送，直接返回固定字符串">
+                <QuestionCircleOutlined class="help-icon" />
+              </ATooltip>
+            </span>
+            <ASwitch
+              :checked="Boolean(node.data.config?.syncExecute ?? true)"
+              @update:checked="(v: any) => updateConfig('syncExecute', v)"
+            />
+          </div>
         </div>
       </PanelSection>
 
@@ -274,5 +287,22 @@ const messagePlaceholder = computed(() =>
     font-family: 'JetBrains Mono', 'Consolas', monospace;
     color: #d4380d;
   }
+}
+
+.switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 32px;
+  margin-bottom: 12px;
+}
+
+.switch-label {
+  flex-shrink: 0;
+  font-size: 14px;
+  color: rgba(0, 0, 0, 0.88);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 </style>

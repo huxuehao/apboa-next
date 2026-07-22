@@ -20,6 +20,7 @@ import lombok.Getter;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * 钉钉发送节点
@@ -68,13 +69,26 @@ public class DingTalkSendNode extends EnhancedNode {
         extras.put("atUserIds", resolvedAtUserIds);
         extras.put("isAtAll", config.getIsAtAll());
         MessageParams params = new MessageParams(resolvedSubject, finalContent, extras);
-        sender.send(channel, params);
 
-        output.addExecutionContext("channelName", channel.getName());
-        output.addExecutionContext("channelType", channel.getType().name());
-        output.addExecutionContext("subject", resolvedSubject);
+        if (config.isSyncExecute()) {
+            sender.send(channel, params);
 
-        output.addOutput(NodeConst.DEFAULT_OUTPUT_NAME, true);
+            output.addExecutionContext("channelName", channel.getName());
+            output.addExecutionContext("channelType", channel.getType().name());
+            output.addExecutionContext("subject", resolvedSubject);
+
+            output.addOutput(NodeConst.DEFAULT_OUTPUT_NAME, true);
+        } else {
+            CompletableFuture.runAsync(() -> {
+                try {
+                    sender.send(channel, params);
+                } catch (Exception e) {
+                    System.out.println(getName() + "异步执行失败: " + e.getMessage());
+                }
+            });
+            output.addOutput(NodeConst.DEFAULT_OUTPUT_NAME, "ASYNC_EXECUTE");
+        }
+
         output.markComplete();
         return output;
     }

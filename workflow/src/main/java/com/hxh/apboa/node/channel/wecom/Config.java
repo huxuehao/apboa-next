@@ -37,4 +37,8 @@ public class Config implements NodeConfig {
      * @用户的手机号（多个用逗号分隔，支持变量模板）
      */
     private String mentionMobiles;
+    /**
+     * 是否同步执行，默认 true
+     */
+    private boolean syncExecute = true;
 }

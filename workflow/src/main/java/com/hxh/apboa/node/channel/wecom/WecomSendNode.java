@@ -20,6 +20,7 @@ import lombok.Getter;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * 企业微信发送节点
@@ -66,12 +67,25 @@ public class WecomSendNode extends EnhancedNode {
         extras.put("mentionUsers", resolvedMentionUsers);
         extras.put("mentionMobiles", resolvedMentionMobiles);
         MessageParams params = new MessageParams(null, finalContent, extras);
-        sender.send(channel, params);
 
-        output.addExecutionContext("channelName", channel.getName());
-        output.addExecutionContext("channelType", channel.getType().name());
+        if (config.isSyncExecute()) {
+            sender.send(channel, params);
 
-        output.addOutput(NodeConst.DEFAULT_OUTPUT_NAME, true);
+            output.addExecutionContext("channelName", channel.getName());
+            output.addExecutionContext("channelType", channel.getType().name());
+
+            output.addOutput(NodeConst.DEFAULT_OUTPUT_NAME, true);
+        } else {
+            CompletableFuture.runAsync(() -> {
+                try {
+                    sender.send(channel, params);
+                } catch (Exception e) {
+                    System.out.println(getName() + "异步执行失败: " + e.getMessage());
+                }
+            });
+            output.addOutput(NodeConst.DEFAULT_OUTPUT_NAME, "ASYNC_EXECUTE");
+        }
+
         output.markComplete();
         return output;
     }
