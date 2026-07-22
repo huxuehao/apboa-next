@@ -1,10 +1,10 @@
 package com.hxh.apboa.node.channel.sender;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hxh.apboa.channel.entity.Channel;
 import com.hxh.apboa.common.util.FuncUtils;
 
+import com.hxh.apboa.common.util.JsonUtils;
 import jakarta.mail.*;
 import jakarta.mail.internet.InternetAddress;
 import jakarta.mail.internet.MimeMessage;
@@ -17,15 +17,13 @@ import java.util.Properties;
  */
 public class EmailSender implements ChannelSender {
 
-    private static final ObjectMapper MAPPER = new ObjectMapper();
-
     @Override
     public void send(Channel channel, MessageParams params) throws Exception {
         String configJson = channel.getConfig();
         if (FuncUtils.isEmpty(configJson)) {
             throw new RuntimeException("邮箱配置不能为空");
         }
-        JsonNode config = MAPPER.readTree(configJson);
+        JsonNode config = JsonUtils.parse(configJson);
 
         String host = getString(config, "serverHost", true);
         int port = config.has("serverPort") ? config.get("serverPort").asInt(25) : 25;

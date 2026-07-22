@@ -112,6 +112,7 @@ const messagePlaceholder = computed(() =>
           <WorkflowResourceSelect
             :model-value="String(node.data.config?.channelId || '')"
             resource-type="channel"
+            channel-type="EMAIL"
             :resources="resources"
             @update:model-value="(v: any) => updateConfig('channelId', v)"
           />

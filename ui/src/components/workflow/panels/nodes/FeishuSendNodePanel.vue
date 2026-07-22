@@ -106,6 +106,7 @@ const messageContent = computed({
           <WorkflowResourceSelect
             :model-value="String(node.data.config?.channelId || '')"
             resource-type="channel"
+            channel-type="FEISHU"
             :resources="resources"
             @update:model-value="(v: any) => updateConfig('channelId', v)"
           />

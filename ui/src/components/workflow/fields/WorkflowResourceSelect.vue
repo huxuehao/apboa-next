@@ -8,6 +8,7 @@ import type { WorkflowResourceMaps } from '@/types/workflow'
 const props = defineProps<{
   modelValue?: string
   resourceType: 'cache' | 'datasource' | 'mq' | 'channel'
+  channelType?: string
   resources: WorkflowResourceMaps
 }>()
 
@@ -30,7 +31,13 @@ function handleChange(value: string) {
 const list = computed(() => {
   if (props.resourceType === 'cache') return props.resources.caches
   if (props.resourceType === 'datasource') return props.resources.datasources
-  if (props.resourceType === 'channel') return props.resources.channels
+  if (props.resourceType === 'channel') {
+    const channels = props.resources.channels
+    if (props.channelType) {
+      return channels.filter((item) => item.type === props.channelType)
+    }
+    return channels
+  }
   return props.resources.mqs
 })
 

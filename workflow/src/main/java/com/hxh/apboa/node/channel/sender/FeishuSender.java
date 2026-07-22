@@ -1,9 +1,9 @@
 package com.hxh.apboa.node.channel.sender;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hxh.apboa.channel.entity.Channel;
 import com.hxh.apboa.common.util.FuncUtils;
+import com.hxh.apboa.common.util.JsonUtils;
 
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
@@ -11,6 +11,7 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * 飞书机器人消息发送器
@@ -19,15 +20,13 @@ import java.util.Map;
  */
 public class FeishuSender implements ChannelSender {
 
-    private static final ObjectMapper MAPPER = new ObjectMapper();
-
     @Override
     public void send(Channel channel, MessageParams params) throws Exception {
         String configJson = channel.getConfig();
         if (FuncUtils.isEmpty(configJson)) {
             throw new RuntimeException("飞书配置不能为空");
         }
-        JsonNode config = MAPPER.readTree(configJson);
+        JsonNode config = JsonUtils.parse(configJson);
         String webhook = getString(config, "webhook", true);
 
         String content = params.getContent();
@@ -52,7 +51,7 @@ public class FeishuSender implements ChannelSender {
         card.put("elements", new Object[]{element});
         body.put("card", card);
 
-        sendHttpPost(webhook, MAPPER.writeValueAsString(body));
+        sendHttpPost(webhook, Objects.requireNonNull(JsonUtils.toJsonStr(body)));
     }
 
     private String getString(JsonNode node, String key, boolean required) {

@@ -1,5 +1,8 @@
 package com.hxh.apboa.node.channel.sender;
 
+import lombok.Getter;
+import lombok.Setter;
+
 import java.util.Map;
 
 /**
@@ -7,6 +10,8 @@ import java.util.Map;
  *
  * @author huxuehao
  */
+@Setter
+@Getter
 public class MessageParams {
     /**
      * 消息标题
@@ -28,13 +33,6 @@ public class MessageParams {
         this.content = content;
         this.extras = extras;
     }
-
-    public String getSubject() { return subject; }
-    public void setSubject(String subject) { this.subject = subject; }
-    public String getContent() { return content; }
-    public void setContent(String content) { this.content = content; }
-    public Map<String, Object> getExtras() { return extras; }
-    public void setExtras(Map<String, Object> extras) { this.extras = extras; }
 
     public String getExtraString(String key) {
         if (extras == null) return null;
