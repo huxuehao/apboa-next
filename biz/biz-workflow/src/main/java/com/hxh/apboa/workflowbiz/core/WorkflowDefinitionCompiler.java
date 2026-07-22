@@ -53,6 +53,10 @@ public class WorkflowDefinitionCompiler {
         bind(NodeType.VARIABLE_AGG, com.hxh.apboa.node.variable.agg.VariableAggNode.class, com.hxh.apboa.node.variable.agg.Config.class);
         bind(NodeType.TOOL_EXECUTE, com.hxh.apboa.node.toolexecute.ToolExecuteNode.class, com.hxh.apboa.node.toolexecute.Config.class);
         bind(NodeType.MCP_CALL, com.hxh.apboa.node.mcp.McpNode.class, com.hxh.apboa.node.mcp.Config.class);
+        bind(NodeType.EMAIL_SEND, com.hxh.apboa.node.channel.email.EmailSendNode.class, com.hxh.apboa.node.channel.email.Config.class);
+        bind(NodeType.WECOM_SEND, com.hxh.apboa.node.channel.wecom.WecomSendNode.class, com.hxh.apboa.node.channel.wecom.Config.class);
+        bind(NodeType.DINGTALK_SEND, com.hxh.apboa.node.channel.dingtalk.DingTalkSendNode.class, com.hxh.apboa.node.channel.dingtalk.Config.class);
+        bind(NodeType.FEISHU_SEND, com.hxh.apboa.node.channel.feishu.FeishuSendNode.class, com.hxh.apboa.node.channel.feishu.Config.class);
     }
 
     public static Set<NodeType> supportedTypes() {

@@ -7,7 +7,8 @@ import type { WorkflowResourceMaps } from '@/types/workflow'
 
 const props = defineProps<{
   modelValue?: string
-  resourceType: 'cache' | 'datasource' | 'mq'
+  resourceType: 'cache' | 'datasource' | 'mq' | 'channel'
+  channelType?: string
   resources: WorkflowResourceMaps
 }>()
 
@@ -30,6 +31,13 @@ function handleChange(value: string) {
 const list = computed(() => {
   if (props.resourceType === 'cache') return props.resources.caches
   if (props.resourceType === 'datasource') return props.resources.datasources
+  if (props.resourceType === 'channel') {
+    const channels = props.resources.channels
+    if (props.channelType) {
+      return channels.filter((item) => item.type === props.channelType)
+    }
+    return channels
+  }
   return props.resources.mqs
 })
 
@@ -45,6 +53,7 @@ async function checkConnect() {
     if (props.resourceType === 'cache') await workflowApi.checkCacheConnect(selected.value)
     if (props.resourceType === 'datasource') await workflowApi.checkDatasourceConnect(selected.value)
     if (props.resourceType === 'mq') await workflowApi.checkMqConnect(selected.value)
+    if (props.resourceType === 'channel') await workflowApi.checkChannelConnect(selected.value)
     message.success('连接检测通过')
   } finally {
     checking.value = false

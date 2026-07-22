@@ -13,7 +13,8 @@ const emit = defineEmits<{
 const menuItems: Array<{ key: WorkflowResourceKind; label: string; countKey: keyof WorkflowResourceSummary }> = [
   { key: 'datasource', label: '数据源', countKey: 'datasourceTotal' },
   { key: 'cache', label: 'Redis缓存', countKey: 'cacheTotal' },
-  { key: 'mq', label: '消息队列', countKey: 'mqTotal' }
+  { key: 'mq', label: '消息队列', countKey: 'mqTotal' },
+  { key: 'channel', label: '通知渠道', countKey: 'channelTotal' }
 ]
 </script>
 

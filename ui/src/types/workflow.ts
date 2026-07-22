@@ -155,6 +155,7 @@ export interface WorkflowResourceRefs {
   cacheIds?: string[]
   datasourceIds?: string[]
   mqIds?: string[]
+  channelIds?: string[]
   pluginIds?: string[]
 }
 
@@ -214,6 +215,7 @@ export interface WorkflowResourceMaps {
   caches: WorkflowResource[]
   datasources: WorkflowResource[]
   mqs: WorkflowResource[]
+  channels: WorkflowResource[]
 }
 
 export type VariableType = 'String' | 'Long' | 'Integer' | 'Float' | 'Double' | 'Boolean' | 'Array' | 'Object'

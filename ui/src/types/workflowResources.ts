@@ -1,7 +1,7 @@
 import type { PageParams } from './common'
 import type { CacheType, DatasourceType, HealthStatus, MqType } from './enums'
 
-export type WorkflowResourceKind = 'datasource' | 'cache' | 'mq'
+export type WorkflowResourceKind = 'datasource' | 'cache' | 'mq' | 'channel'
 export type DatasourceTypeValue = `${DatasourceType}`
 export type CacheTypeValue = `${CacheType}`
 export type MqTypeValue = `${MqType}`
@@ -11,9 +11,11 @@ export interface WorkflowResourceSummary {
   datasourceTotal: number
   cacheTotal: number
   mqTotal: number
+  channelTotal: number
   datasourceEnabled: number
   cacheEnabled: number
   mqEnabled: number
+  channelEnabled: number
 }
 
 export interface WorkflowResourceBase {
@@ -53,7 +55,11 @@ export interface MqResource extends WorkflowResourceBase {
   port?: number
 }
 
-export type WorkflowManagedResource = DatasourceResource | CacheResource | MqResource
+export interface ChannelResource extends WorkflowResourceBase {
+  type?: string
+}
+
+export type WorkflowManagedResource = DatasourceResource | CacheResource | MqResource | ChannelResource
 
 export interface WorkflowResourceQuery extends PageParams {
   name?: string

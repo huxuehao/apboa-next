@@ -134,5 +134,21 @@ public enum NodeType {
     /**
      * mcp调用节点
      */
-    MCP_CALL
+    MCP_CALL,
+    /**
+     * 发送邮件节点
+     */
+    EMAIL_SEND,
+    /**
+     * 企业微信消息节点
+     */
+    WECOM_SEND,
+    /**
+     * 钉钉消息节点
+     */
+    DINGTALK_SEND,
+    /**
+     * 飞书消息节点
+     */
+    FEISHU_SEND
 }

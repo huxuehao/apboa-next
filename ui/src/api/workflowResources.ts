@@ -2,6 +2,7 @@ import request from '@/utils/request'
 import type { ApiResponse, PageResult } from '@/types/common'
 import type {
   CacheResource,
+  ChannelResource,
   DatasourceResource,
   MqResource,
   WorkflowManagedResource,
@@ -13,14 +14,17 @@ import type {
 const endpointMap: Record<WorkflowResourceKind, string> = {
   datasource: '/api/datasource',
   cache: '/api/cache',
-  mq: '/api/mq'
+  mq: '/api/mq',
+  channel: '/api/channel'
 }
 
 export type ResourceByKind<T extends WorkflowResourceKind> = T extends 'datasource'
   ? DatasourceResource
   : T extends 'cache'
     ? CacheResource
-    : MqResource
+    : T extends 'channel'
+      ? ChannelResource
+      : MqResource
 
 export function summary() {
   return request.get<ApiResponse<WorkflowResourceSummary>>('/api/workflow/resources/summary')

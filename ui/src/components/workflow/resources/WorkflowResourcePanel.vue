@@ -9,6 +9,7 @@ import WorkflowResourceList from './WorkflowResourceList.vue'
 import DatasourceForm from './forms/DatasourceForm.vue'
 import CacheForm from './forms/CacheForm.vue'
 import MqForm from './forms/MqForm.vue'
+import ChannelForm from './forms/ChannelForm.vue'
 import type {
   WorkflowManagedResource,
   WorkflowResourceKind,
@@ -32,7 +33,8 @@ type ResourceFormExpose = {
 const formComponents = shallowReactive<Record<WorkflowResourceKind, Component>>({
   datasource: DatasourceForm,
   cache: CacheForm,
-  mq: MqForm
+  mq: MqForm,
+  channel: ChannelForm
 })
 
 const meta = computed(() => {
@@ -56,6 +58,20 @@ const meta = computed(() => {
       searchPlaceholder: '搜索名称、主机、备注',
       emptyText: '暂无缓存',
       typeOptions: [{ label: 'Redis', value: 'REDIS' }]
+    }
+  }
+  if (props.kind === 'channel') {
+    return {
+      title: '通知渠道',
+      addText: '新增渠道',
+      searchPlaceholder: '搜索名称、备注',
+      emptyText: '暂无渠道',
+      typeOptions: [
+        { label: '邮箱（SMTP）', value: 'EMAIL' },
+        { label: '企业微信机器人', value: 'WECOM' },
+        { label: '钉钉机器人', value: 'DINGTALK' },
+        { label: '飞书机器人', value: 'FEISHU' }
+      ]
     }
   }
   return {

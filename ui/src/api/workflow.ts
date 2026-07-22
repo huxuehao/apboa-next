@@ -105,6 +105,10 @@ export function enabledMqs() {
   return request.get<ApiResponse<WorkflowResource[]>>('/api/mq', { params: { enabled: 1 } })
 }
 
+export function enabledChannels() {
+  return request.get<ApiResponse<WorkflowResource[]>>('/api/channel', { params: { enabled: 1 } })
+}
+
 export function checkCacheConnect(resource: WorkflowResource) {
   return request.post<ApiResponse<boolean>>('/api/cache/check/connect', resource)
 }
@@ -115,4 +119,8 @@ export function checkDatasourceConnect(resource: WorkflowResource) {
 
 export function checkMqConnect(resource: WorkflowResource) {
   return request.post<ApiResponse<boolean>>('/api/mq/check/connect', resource)
+}
+
+export function checkChannelConnect(resource: WorkflowResource) {
+  return request.post<ApiResponse<boolean>>('/api/channel/check/connect', resource)
 }

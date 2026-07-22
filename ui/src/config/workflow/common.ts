@@ -32,6 +32,10 @@ export const nodeIconMap: Record<string, IconName> = {
   AGENT: 'nodellm',
   TOOL_EXECUTE: 'nodetool',
   MCP_CALL: 'nodemcp',
+  EMAIL_SEND: 'nodeemail',
+  WECOM_SEND: 'nodeqiyeweixin',
+  DINGTALK_SEND: 'nodedingding',
+  FEISHU_SEND: 'nodefeishu',
 }
 
 /**
