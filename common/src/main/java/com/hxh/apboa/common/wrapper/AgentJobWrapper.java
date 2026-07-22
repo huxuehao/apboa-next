@@ -24,6 +24,9 @@ public class AgentJobWrapper implements SerializableEnable {
     private String type;
     // 关联业务ID
     private String bizId;
-    // 输入配置
-    private Map<String, Object> inputs;
+    // 智能体用户提示词
+    private String userPrompt;
+    // 流程输入配置
+    private Map<String, Object> params;
+    private Map<String, Object> variables;
 }

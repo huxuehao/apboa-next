@@ -22,7 +22,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.quartz.JobExecutionContext;
 
-import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -51,7 +50,7 @@ public class AgentScheduler extends QuartzJob {
         try {
             TenantUtils.setCurrentTenant(tenantId, null);
             // 2. 创建会话
-            ChatSessionVO session = createChatSession(agentId, wrapper.getInputs(), userInfo);
+            ChatSessionVO session = createChatSession(agentId, wrapper.getUserPrompt(), userInfo);
             if (session == null) {
                 log.error("Failed to create chat session for agent: {}", agentId);
                 return false;
@@ -74,7 +73,7 @@ public class AgentScheduler extends QuartzJob {
 
             // 3. 构建并执行智能体
             Agent agent = buildAgent(agentBuilder);
-            executeAgent(agent, wrapper.getInputs(), session.getId(), tenantId, tenantCode);
+            executeAgent(agent, wrapper.getUserPrompt(), session.getId(), tenantId, tenantCode);
 
             log.info("Agent job executed successfully, agentId: {}, sessionId: {}", agentId, session.getId());
             return true;
@@ -107,7 +106,7 @@ public class AgentScheduler extends QuartzJob {
             log.warn("AgentId is blank");
             return false;
         }
-        if (wrapper.getInputs() == null || !wrapper.getInputs().containsKey("userPrompt")) {
+        if (wrapper.getUserPrompt() == null || StringUtils.isBlank(wrapper.getUserPrompt())) {
             log.warn("UserPrompt is missing in inputs");
             return false;
         }
@@ -142,13 +141,13 @@ public class AgentScheduler extends QuartzJob {
     /**
      * 创建聊天会话
      */
-    private ChatSessionVO createChatSession(String agentId, Map<String, Object> inputs, AccountVO userInfo) {
+    private ChatSessionVO createChatSession(String agentId, String userPrompt, AccountVO userInfo) {
         try {
             ChatSessionService chatSessionService = getBean(ChatSessionService.class);
 
             ChatSessionCreateDTO createDTO = new ChatSessionCreateDTO();
             createDTO.setAgentId(Long.valueOf(agentId));
-            createDTO.setTitle(generateSessionTitle(inputs));
+            createDTO.setTitle(generateSessionTitle(userPrompt));
 
             return chatSessionService.createSession(createDTO, userInfo.getId());
         } catch (NumberFormatException e) {
@@ -163,9 +162,8 @@ public class AgentScheduler extends QuartzJob {
     /**
      * 生成会话标题
      */
-    private String generateSessionTitle(Map<String, Object> inputs) {
-        return Optional.ofNullable(inputs.get("userPrompt"))
-                .map(Object::toString)
+    private String generateSessionTitle(String userPrompt) {
+        return Optional.ofNullable(userPrompt)
                 .map(prompt -> prompt.length() > MAX_TITLE_LENGTH
                         ? prompt.substring(0, MAX_TITLE_LENGTH) + "..."
                         : prompt)
@@ -198,9 +196,8 @@ public class AgentScheduler extends QuartzJob {
     /**
      * 执行智能体
      */
-    private void executeAgent(Agent agent, Map<String, Object> inputs, Long sessionId, Long tenantId, String tenantCode) {
+    private void executeAgent(Agent agent, String userPrompt, Long sessionId, Long tenantId, String tenantCode) {
         String agentId = agent.getAgentId();
-        String userPrompt = inputs.get("userPrompt").toString();
 
         // 设置元数据
         try {
