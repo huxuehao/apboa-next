@@ -5,6 +5,7 @@ import com.hxh.apboa.common.entity.SkillPackage;
 import com.hxh.apboa.common.entity.ToolConfig;
 import com.hxh.apboa.common.entity.Workflow;
 import com.hxh.apboa.common.vo.AgentDefinitionVO;
+import com.hxh.apboa.common.vo.McpServerToolsVO;
 import com.baomidou.mybatisplus.extension.service.IService;
 
 import java.util.List;
@@ -30,6 +31,7 @@ public interface AgentDefinitionService extends IService<AgentDefinition> {
     List<ToolConfig> getEnabledToolsOfAgent(Long agentId);
     List<SkillPackage> getEnabledSkillsOfAgent(Long agentId);
     List<Workflow> getEnabledWorkflowsOfAgent(Long agentId);
+    List<McpServerToolsVO> getEnabledMcpOfAgent(Long agentId);
 
     /**
      * 获取智能体头像（base64 data URL，未设置返回 null）。

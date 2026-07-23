@@ -13,6 +13,9 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     AAlert: typeof import('ant-design-vue/es')['Alert']
+    AAnchor: typeof import('ant-design-vue/es')['Anchor']
+    AAnchorLink: typeof import('ant-design-vue/es')['AnchorLink']
+    AAutoComplete: typeof import('ant-design-vue/es')['AutoComplete']
     AAvatar: typeof import('ant-design-vue/es')['Avatar']
     ABadge: typeof import('ant-design-vue/es')['Badge']
     AButton: typeof import('ant-design-vue/es')['Button']
@@ -60,6 +63,7 @@ declare module 'vue' {
     AgentFormTools: typeof import('./src/components/agent/AgentFormTools.vue')['default']
     AgentItemNode: typeof import('./src/components/agent/architecture/nodes/AgentItemNode.vue')['default']
     AgentJobForm: typeof import('./src/components/agent/AgentJobForm.vue')['default']
+    AgentMcpTag: typeof import('./src/components/chat/AgentMcpTag.vue')['default']
     AgentNodePanel: typeof import('./src/components/workflow/panels/nodes/AgentNodePanel.vue')['default']
     AgentNodeSummary: typeof import('./src/components/workflow/node/summaries/AgentNodeSummary.vue')['default']
     AgentSkillTag: typeof import('./src/components/chat/AgentSkillTag.vue')['default']
@@ -329,6 +333,7 @@ declare module 'vue' {
     ToolForm: typeof import('./src/components/tool/ToolForm.vue')['default']
     ToolItemNode: typeof import('./src/components/agent/architecture/nodes/ToolItemNode.vue')['default']
     ToolSelect: typeof import('./src/components/workflow/bindings/ToolSelect.vue')['default']
+    TtsVoiceSelect: typeof import('./src/components/model/TtsVoiceSelect.vue')['default']
     UIPRenderer: typeof import('./src/components/markdown/uip/UIPRenderer.vue')['default']
     UIPSkeleton: typeof import('./src/components/markdown/uip/UIPSkeleton.vue')['default']
     UnserializeNodePanel: typeof import('./src/components/workflow/panels/nodes/UnserializeNodePanel.vue')['default']
@@ -383,6 +388,9 @@ declare module 'vue' {
 // For TSX support
 declare global {
   const AAlert: typeof import('ant-design-vue/es')['Alert']
+  const AAnchor: typeof import('ant-design-vue/es')['Anchor']
+  const AAnchorLink: typeof import('ant-design-vue/es')['AnchorLink']
+  const AAutoComplete: typeof import('ant-design-vue/es')['AutoComplete']
   const AAvatar: typeof import('ant-design-vue/es')['Avatar']
   const ABadge: typeof import('ant-design-vue/es')['Badge']
   const AButton: typeof import('ant-design-vue/es')['Button']
@@ -430,6 +438,7 @@ declare global {
   const AgentFormTools: typeof import('./src/components/agent/AgentFormTools.vue')['default']
   const AgentItemNode: typeof import('./src/components/agent/architecture/nodes/AgentItemNode.vue')['default']
   const AgentJobForm: typeof import('./src/components/agent/AgentJobForm.vue')['default']
+  const AgentMcpTag: typeof import('./src/components/chat/AgentMcpTag.vue')['default']
   const AgentNodePanel: typeof import('./src/components/workflow/panels/nodes/AgentNodePanel.vue')['default']
   const AgentNodeSummary: typeof import('./src/components/workflow/node/summaries/AgentNodeSummary.vue')['default']
   const AgentSkillTag: typeof import('./src/components/chat/AgentSkillTag.vue')['default']
@@ -699,6 +708,7 @@ declare global {
   const ToolForm: typeof import('./src/components/tool/ToolForm.vue')['default']
   const ToolItemNode: typeof import('./src/components/agent/architecture/nodes/ToolItemNode.vue')['default']
   const ToolSelect: typeof import('./src/components/workflow/bindings/ToolSelect.vue')['default']
+  const TtsVoiceSelect: typeof import('./src/components/model/TtsVoiceSelect.vue')['default']
   const UIPRenderer: typeof import('./src/components/markdown/uip/UIPRenderer.vue')['default']
   const UIPSkeleton: typeof import('./src/components/markdown/uip/UIPSkeleton.vue')['default']
   const UnserializeNodePanel: typeof import('./src/components/workflow/panels/nodes/UnserializeNodePanel.vue')['default']

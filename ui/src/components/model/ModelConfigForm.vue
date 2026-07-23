@@ -6,13 +6,15 @@
 <script setup lang="ts">
 import { ref, watch, computed, h } from 'vue'
 import { message, Modal } from 'ant-design-vue'
-import { EyeOutlined } from '@ant-design/icons-vue'
+import { EyeOutlined, InfoCircleOutlined } from '@ant-design/icons-vue'
 import type { ModelConfigVO, ModelConfig, ModelProviderVO } from '@/types'
 import { ModelCategory, ModelType, ModelProviderType } from '@/types'
 import * as modelApi from '@/api/model'
 import ExtendConfigEditor, { type ExtendConfigData } from './ExtendConfigEditor.vue'
+import TtsVoiceSelect from './TtsVoiceSelect.vue'
 import ParamSlider from './ParamSlider.vue'
 import ParamLabel from './ParamLabel.vue'
+import { DEFAULT_TTS_VOICE } from '@/constants/ttsVoices'
 
 /**
  * Props定义
@@ -52,6 +54,7 @@ const formData = ref<{
   repeatPenalty: number
   seed: string
   extendConfig: ExtendConfigData | null
+  ttsVoice: string
 }>({
   category: ModelCategory.LLM,
   name: '',
@@ -67,7 +70,8 @@ const formData = ref<{
   topK: 50,
   repeatPenalty: 1.0,
   seed: '',
-  extendConfig: null
+  extendConfig: null,
+  ttsVoice: DEFAULT_TTS_VOICE
 })
 
 const isEdit = computed(() => !!props.data?.id)
@@ -77,6 +81,34 @@ const isAsr = computed(() => formData.value.category === ModelCategory.ASR)
 
 /** 是否语音合成用途（同样无 LLM 参数，但保留扩展配置区块：音色 instruct/voice 靠 bodyParams 下发） */
 const isTts = computed(() => formData.value.category === ModelCategory.TTS)
+
+/** DASH_SCOPE 的 TTS：音色用结构化下拉直选（取代自由 KV），写入 extendConfig.bodyParams.voice */
+const isDashScopeTts = computed(() => isTts.value && props.providerType === ModelProviderType.DASH_SCOPE)
+
+/** OPEN_AI 的 TTS（本地 mlx 克隆）：音色从 TTS 服务 /voices 动态拉，存音色名到 bodyParams.voice */
+const isOpenAiTts = computed(() => isTts.value && props.providerType === ModelProviderType.OPEN_AI)
+
+/** 两类 TTS 都用音色下拉（LLM 不用） */
+const isTtsVoiceDropdown = computed(() => isDashScopeTts.value || isOpenAiTts.value)
+
+/** OPEN_AI TTS 拉 /voices 需要 TTS 服务地址（异步查提供商 baseUrl 传给音色下拉） */
+const providerBaseUrl = ref('')
+watch(
+  [isOpenAiTts, () => props.providerId],
+  async ([openai, pid]) => {
+    if (!openai || !pid) {
+      providerBaseUrl.value = ''
+      return
+    }
+    try {
+      const res = await modelApi.providerDetail(pid as string)
+      providerBaseUrl.value = res.data.data.baseUrl || ''
+    } catch {
+      providerBaseUrl.value = ''
+    }
+  },
+  { immediate: true }
+)
 
 /** 是否对话生成用途（LLM 专属参数区块的显隐依据） */
 const isLlm = computed(() => formData.value.category === ModelCategory.LLM)
@@ -130,7 +162,9 @@ watch(
           topK: props.data.topK,
           repeatPenalty: props.data.repeatPenalty,
           seed: props.data.seed || '',
-          extendConfig: ec && typeof ec === 'object' ? { headers: ec.headers || {}, queryParams: ec.queryParams || {}, bodyParams: ec.bodyParams || {}, fixedSystemMessage: ec.fixedSystemMessage ?? false, thinkingParams: ec.thinkingParams } : null
+          extendConfig: ec && typeof ec === 'object' ? { headers: ec.headers || {}, queryParams: ec.queryParams || {}, bodyParams: ec.bodyParams || {}, fixedSystemMessage: ec.fixedSystemMessage ?? false, thinkingParams: ec.thinkingParams } : null,
+          // DASH_SCOPE TTS 的音色从 bodyParams.voice 回填到结构化下拉
+          ttsVoice: (ec && typeof ec === 'object' && ec.bodyParams && typeof (ec.bodyParams as Record<string, unknown>).voice === 'string') ? String((ec.bodyParams as Record<string, unknown>).voice) : DEFAULT_TTS_VOICE
         }
       } else {
         resetForm()
@@ -202,9 +236,22 @@ function resetForm() {
     topK: 50,
     repeatPenalty: 1.0,
     seed: '',
-    extendConfig: null
+    extendConfig: null,
+    ttsVoice: DEFAULT_TTS_VOICE
   }
   formRef.value?.resetFields()
+}
+
+/**
+ * TTS 提交时的扩展配置：DASH_SCOPE 用音色下拉的值组装 bodyParams.voice；
+ * 其余（OPEN_AI 本地等）沿用自由 KV 编辑器的 extendConfig。
+ */
+function buildTtsExtendConfig(): ExtendConfigData | undefined {
+  if (isTtsVoiceDropdown.value) {
+    const voice = formData.value.ttsVoice.trim()
+    return voice ? { headers: {}, queryParams: {}, bodyParams: { voice } } : undefined
+  }
+  return formData.value.extendConfig || undefined
 }
 
 /**
@@ -225,7 +272,7 @@ async function handleSubmit() {
           modelId: formData.value.modelId,
           modelType: null,
           description: formData.value.description,
-          ...(isTts.value ? { extendConfig: formData.value.extendConfig || undefined } : {})
+          ...(isTts.value ? { extendConfig: buildTtsExtendConfig() } : {})
         }
       : {
           providerId: props.providerId,
@@ -318,6 +365,35 @@ async function handleViewProvider() {
       h('p', {}, [h('strong', '是否启用: '), data.enabled ? '是' : '否']),
       h('p', {}, [h('strong', '创建时间: '), data.createdAt]),
       h('p', {}, [h('strong', '更新时间: '), data.updatedAt])
+    ])
+  })
+}
+
+/**
+ * 本地克隆 TTS 音色协议文档（i 按钮）：告诉接入方 /voices 接口契约 + 音色文件夹规范，
+ * 免得私有协议只有开发者自己知道。
+ */
+function showVoiceProtocol() {
+  const preStyle = {
+    background: 'var(--color-bg-light)', padding: '8px 12px', borderRadius: '4px',
+    whiteSpace: 'pre-wrap', margin: '4px 0 12px'
+  }
+  Modal.info({
+    title: '本地克隆 TTS 音色协议（私有）',
+    width: 680,
+    okText: '知道了',
+    content: h('div', { style: { maxHeight: '60vh', overflowY: 'auto', fontSize: '13px', lineHeight: '1.7' } }, [
+      h('p', {}, [h('strong', 'TTS 服务实现以下两条约定，apboa-next 即可下拉选音色：')]),
+      h('p', {}, [h('strong', '① 音色列表接口')]),
+      h('pre', { style: preStyle }, 'GET  {baseUrl}/voices\n\n响应 JSON:\n[\n  {\n    "name": "音色名",\n    "refAudio": "参考音频绝对路径",\n    "refText": "参考音频的准确转写"\n  }\n]'),
+      h('p', {}, [h('strong', '② 音色文件夹规范（TTS 服务扫它自己的目录）')]),
+      h('pre', { style: preStyle }, '{音色名}/\n  audio.wav     参考音频\n  ref.txt       音频对应的准确转写（克隆用）\n  design.txt    可选，音色设计提示词（仅存档，不参与合成）'),
+      h('p', {}, [h('strong', '说明')]),
+      h('ul', { style: { paddingLeft: '20px', margin: '0' } }, [
+        h('li', {}, 'refAudio 是「跑合成的 TTS 服务」本地能读到的绝对路径'),
+        h('li', {}, 'apboa-next 库里只存音色名，合成时后端调 /voices 解析成 ref_audio + ref_text'),
+        h('li', {}, 'lang_code 固定 Chinese；此协议只属于 TTS，与 ASR 无关')
+      ])
     ])
   })
 }
@@ -452,11 +528,36 @@ async function handleViewProvider() {
         </AFormItem>
       </div>
 
-      <div v-if="isLlm || isTts" class="form-section">
-        <div class="section-title">扩展配置</div>
-        <div v-if="isTts" class="text-placeholder text-xs" style="margin-bottom: var(--spacing-xs)">
-          语音合成的音色等参数在 Body 参数中配置（如 OpenAI 兼容的 voice、Qwen3-TTS 的 instruct / lang_code / response_format）
+      <!-- DASH_SCOPE 语音合成：内置固定音色下拉 -->
+      <div v-if="isDashScopeTts" class="form-section">
+        <div class="section-title">音色</div>
+        <AFormItem label="">
+          <TtsVoiceSelect v-model="formData.ttsVoice" placeholder="请选择音色，默认 Cherry（芊悦·女）" />
+          <div class="text-placeholder text-xs mt-xs">
+            默认女声 Cherry；此为模型默认音色，可在智能体处按需覆盖。
+          </div>
+        </AFormItem>
+      </div>
+
+      <!-- OPEN_AI 本地克隆 TTS：从 TTS 服务 /voices 动态拉音色 + 协议文档按钮 -->
+      <div v-if="isOpenAiTts" class="form-section">
+        <div class="section-title" style="display: flex; align-items: center; justify-content: space-between;">
+          <span>音色</span>
+          <AButton type="text" size="small" @click="showVoiceProtocol">
+            <InfoCircleOutlined /> 接入协议
+          </AButton>
         </div>
+        <AFormItem label="">
+          <TtsVoiceSelect v-model="formData.ttsVoice" :remote-base-url="providerBaseUrl" placeholder="从 TTS 服务的音色库选择" />
+          <div class="text-placeholder text-xs mt-xs">
+            音色来自 TTS 服务的 /voices（本地克隆音色）；库里只存音色名，合成时后端解析成参考音频。点「接入协议」看规范。
+          </div>
+        </AFormItem>
+      </div>
+
+      <!-- LLM：通用扩展配置（自由 KV） -->
+      <div v-if="isLlm" class="form-section">
+        <div class="section-title">扩展配置</div>
         <AFormItem label="">
           <ExtendConfigEditor
             v-model="formData.extendConfig"

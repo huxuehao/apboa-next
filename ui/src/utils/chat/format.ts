@@ -167,7 +167,7 @@ export function formatSessionTitle(input: string | null): string {
   let t = (input || '').trim()
   if (!t) return '新对话'
 
-  t = t.replace(/<\/?(?:workspace-file|agent-tool|agent-skill)>/g, '')
+  t = t.replace(/<\/?(?:workspace-file|agent-tool|agent-skill|agent-mcp)>/g, '')
 
   return t.length > 50 ? t.slice(0, 50) + '...' : t
 }

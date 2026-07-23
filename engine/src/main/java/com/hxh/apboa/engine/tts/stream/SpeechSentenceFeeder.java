@@ -53,6 +53,22 @@ public class SpeechSentenceFeeder {
     private static final Pattern SPACES = Pattern.compile("[ \\t]+");
     private static final Pattern MULTI_NEWLINE = Pattern.compile("\\n{2,}");
 
+    /** 裸链接（非 markdown 语法的 http(s) URL）：朗读成「链接」二字，避免念一长串字母 */
+    private static final Pattern BARE_URL = Pattern.compile("https?://[A-Za-z0-9\\-._~:/?#\\[\\]@!$&'()*+,;=%]+");
+
+    /**
+     * emoji 与装饰性图形符号（云端 400、本地读成英文名，一律剥离）：
+     * 1F000-1FAFF 全 emoji 平面(表情/交通/图形/旗帜/麻将扑克等)、2600-27BF 杂项符号+Dingbats(☀★♥✓✗)、
+     * 2B00-2BFF 符号与箭头(⭐)、2190-21FF 箭头(→←)、2300-23FF 技术符号(⌚⏰)、
+     * FE00-FE0F 变体选择符、200D 零宽连接符(emoji 组合)。
+     * 刻意不含 2200-22FF 数学、20A0-20CF 货币、2100-214F 单位(℃℉№)、CJK/全角标点——按需保留。
+     */
+    private static final Pattern EMOJI = Pattern.compile(
+            "[\\x{1F000}-\\x{1FAFF}\\x{2600}-\\x{27BF}\\x{2B00}-\\x{2BFF}\\x{2190}-\\x{21FF}\\x{2300}-\\x{23FF}\\x{FE00}-\\x{FE0F}\\x{200D}]");
+
+    /** 至少含一个可读字符（各语言文字或数字）；纯标点/emoji/符号/空白 DashScope 会 400 回绝 */
+    private static final Pattern READABLE = Pattern.compile("[\\p{L}\\p{N}]");
+
     private final StringBuilder markdown = new StringBuilder();
     private int consumed = 0;
     private int emittedCount = 0;
@@ -97,7 +113,8 @@ public class SpeechSentenceFeeder {
             boolean boundary = boundarySet.indexOf(ch) >= 0 && buf.toString().trim().length() >= minLen;
             if (boundary || buf.length() >= MAX_SEGMENT_LENGTH) {
                 String seg = buf.toString().trim();
-                if (!seg.isEmpty()) {
+                // 纯标点/emoji/符号句 DashScope 会以 InvalidParameter 400 回绝并拖垮整段播报，源头跳过
+                if (hasReadable(seg)) {
                     out.add(seg);
                     emittedCount++;
                 }
@@ -105,10 +122,13 @@ public class SpeechSentenceFeeder {
                 buf.setLength(0);
             }
         }
-        if (isFinal && !buf.toString().trim().isEmpty()) {
-            out.add(buf.toString().trim());
+        if (isFinal) {
+            String tail = buf.toString().trim();
+            if (hasReadable(tail)) {
+                out.add(tail);
+                emittedCount++;
+            }
             consumed = pendingBase + pending.length();
-            emittedCount++;
         }
         return out;
     }
@@ -116,7 +136,7 @@ public class SpeechSentenceFeeder {
     /**
      * markdown → 朗读文本（与前端旧版 toSpeechText 同构）
      */
-    static String toSpeechText(String markdown) {
+    public static String toSpeechText(String markdown) {
         if (markdown == null || markdown.isEmpty()) {
             return "";
         }
@@ -128,6 +148,7 @@ public class SpeechSentenceFeeder {
         }
         text = IMAGE.matcher(text).replaceAll("");
         text = LINK.matcher(text).replaceAll("$1");
+        text = BARE_URL.matcher(text).replaceAll("链接");
         // 表格行与分隔行整行略过
         StringBuilder kept = new StringBuilder();
         for (String line : text.split("\n", -1)) {
@@ -147,8 +168,14 @@ public class SpeechSentenceFeeder {
         text = STRIKE.matcher(text).replaceAll("$1");
         text = HR.matcher(text).replaceAll("");
         text = HTML_TAG.matcher(text).replaceAll("");
+        text = EMOJI.matcher(text).replaceAll("");
         text = SPACES.matcher(text).replaceAll(" ");
         text = MULTI_NEWLINE.matcher(text).replaceAll("\n");
         return text.trim();
+    }
+
+    /** 是否含至少一个可读字符（有它 DashScope 才能合成；纯标点/emoji/空白会 400） */
+    private static boolean hasReadable(String s) {
+        return s != null && READABLE.matcher(s).find();
     }
 }

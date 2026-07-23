@@ -95,6 +95,7 @@ export interface AgentDefinition extends BaseEntity {
   description: string
   modelConfigId: string
   modelParamsOverride: Record<string, any> | null
+  ttsParamsOverride: Record<string, any> | null
   toolChoiceStrategy: ToolChoiceStrategy
   specificToolName: string
   systemPromptTemplateId: string

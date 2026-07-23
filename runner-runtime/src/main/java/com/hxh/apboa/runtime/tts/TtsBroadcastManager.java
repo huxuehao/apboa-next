@@ -46,6 +46,7 @@ public class TtsBroadcastManager implements BinaryChannelSubscriber {
     private final TtsService ttsService;
     private final TtsStreamProviderHolder ttsStreamProviderHolder;
     private final MessagePublisher messagePublisher;
+    private final TtsAudioCache ttsAudioCache;
 
     /** 播报目标（agent + 租户上下文，DB 访问发生在无请求上下文的线程，需随身携带） */
     private record BroadcastTarget(Long agentId, Long tenantId) {
@@ -280,12 +281,100 @@ public class TtsBroadcastManager implements BinaryChannelSubscriber {
             stale.abort();
         }
         whitelist.putIfAbsent(threadId, new BroadcastTarget(agentId, TenantUtils.getCurrentTenantId()));
+
+        // 缓存命中：直接把缓存音频推回该 thread，不建会话、不调 TTS 引擎（省 GPU/RAM，
+        // 后端全局共享——两台设备/同会话反复点同一条都命中）
+        Long cfgId = ttsService.getTtsModelConfigId(agentId);
+        // key 按 agentId 隔离（cfgId 仅用于判断是否绑定 TTS）：同一模型被不同 agent 覆盖不同音色时不串味
+        String cacheKey = cfgId == null ? null : ttsAudioCache.buildKey(agentId, markdown);
+        if (cacheKey != null) {
+            TtsAudioCache.Entry hit = ttsAudioCache.get(cacheKey);
+            if (hit != null) {
+                replayCached(threadId, hit);
+                log.info("TTS 手动朗读命中缓存：threadId={}, {} 字", threadId, markdown.length());
+                return;
+            }
+        }
+
+        // 未命中：现有逐句合成链路一字不改，仅把音频出口换成带缓存写入的装饰器
         ModelConfigWrapper config = ttsService.resolveConfigWrapper(agentId);
+        TtsAudioListener listener = cacheKey == null
+                ? new RedisAudioListener(threadId)
+                : new CachingAudioListener(new RedisAudioListener(threadId), cacheKey);
         TtsStreamSession session = ttsStreamProviderHolder.get(config.getProvider())
-                .openSession(config, new RedisAudioListener(threadId));
+                .openSession(config, listener);
         sessions.put(threadId, session);
         session.feedText(markdown);
         session.finishText();
         log.info("TTS 手动朗读：threadId={}, {} 字", threadId, markdown.length());
+    }
+
+    /**
+     * 命中缓存回放：用 RedisAudioListener 把缓存 PCM 按格式分块推给该 thread，
+     * 前端收到与实时合成同构的 start / PCM 帧 / end 序列，无感。
+     */
+    private void replayCached(String threadId, TtsAudioCache.Entry entry) {
+        RedisAudioListener listener = new RedisAudioListener(threadId);
+        listener.onFormat(entry.sampleRate(), entry.bitsPerSample(), entry.channels());
+        byte[] pcm = ttsAudioCache.decodePcm(entry);
+        // 分块推，避免单个超大二进制帧（16KB ≈ 0.33s @ 24kHz/16bit 单声道）
+        final int chunkSize = 16000;
+        for (int off = 0; off < pcm.length; off += chunkSize) {
+            int end = Math.min(off + chunkSize, pcm.length);
+            listener.onAudioChunk(java.util.Arrays.copyOfRange(pcm, off, end));
+        }
+        listener.onEnd();
+    }
+
+    /**
+     * 缓存写入装饰器：透传给底层 listener 照常推帧（合成/播放链路不受影响），
+     * 同时累积整段裸 PCM，onEnd 正常收尾时落缓存（onError / 中断不落）。
+     */
+    private class CachingAudioListener implements TtsAudioListener {
+
+        private final TtsAudioListener delegate;
+        private final String cacheKey;
+        private final java.io.ByteArrayOutputStream pcmBuffer = new java.io.ByteArrayOutputStream();
+        private int sampleRate;
+        private int bitsPerSample;
+        private int channels;
+        private boolean failed = false;
+
+        CachingAudioListener(TtsAudioListener delegate, String cacheKey) {
+            this.delegate = delegate;
+            this.cacheKey = cacheKey;
+        }
+
+        @Override
+        public void onFormat(int sampleRate, int bitsPerSample, int channels) {
+            this.sampleRate = sampleRate;
+            this.bitsPerSample = bitsPerSample;
+            this.channels = channels;
+            delegate.onFormat(sampleRate, bitsPerSample, channels);
+        }
+
+        @Override
+        public void onAudioChunk(byte[] pcm) {
+            pcmBuffer.writeBytes(pcm);
+            delegate.onAudioChunk(pcm);
+        }
+
+        @Override
+        public void onEnd() {
+            delegate.onEnd();
+            if (!failed && sampleRate > 0 && pcmBuffer.size() > 0) {
+                try {
+                    ttsAudioCache.put(cacheKey, sampleRate, bitsPerSample, channels, pcmBuffer.toByteArray());
+                } catch (Exception e) {
+                    log.warn("TTS 缓存写入失败（忽略）: {}", e.getMessage());
+                }
+            }
+        }
+
+        @Override
+        public void onError(String message) {
+            failed = true;
+            delegate.onError(message);
+        }
     }
 }

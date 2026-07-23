@@ -99,6 +99,7 @@ public class AgentDefinitionController {
         vo.setAllowFileType(agentDefinitionService.allowFileType(id));
         vo.setEnabledTools(agentDefinitionService.getEnabledToolsOfAgent(id));
         vo.setEnabledSkills(agentDefinitionService.getEnabledSkillsOfAgent(id));
+        vo.setEnabledMcp(agentDefinitionService.getEnabledMcpOfAgent(id));
         return R.data(vo);
     }
 

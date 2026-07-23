@@ -83,6 +83,8 @@ CREATE TABLE `agent_definition` (
   `asr_model_config_id` bigint DEFAULT NULL COMMENT '语音识别模型配置ID（NULL=不启用语音输入）',
   `tts_model_config_id` bigint DEFAULT NULL COMMENT '语音合成模型配置ID（NULL=不启用语音播报）',
   `model_params_override` text COMMENT '模型参数覆盖',
+  `tts_params_override` text COMMENT '语音合成(TTS)参数覆盖（agent 级，如 {"voice":"Cherry"}）',
+  `asr_params_override` text COMMENT '语音识别(ASR)参数覆盖（预留，二期启用）',
   `tool_choice_strategy` enum('AUTO','NONE','REQUIRED','SPECIFIC') DEFAULT 'AUTO' COMMENT '工具选择策略',
   `specific_tool_name` varchar(100) DEFAULT NULL COMMENT '指定工具名称（当tool_choice_strategy=SPECIFIC时）',
   `system_prompt_template_id` bigint DEFAULT NULL COMMENT '系统提示词模板ID',

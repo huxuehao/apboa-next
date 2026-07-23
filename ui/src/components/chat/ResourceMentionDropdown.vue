@@ -12,6 +12,7 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { ArrowLeftOutlined } from '@ant-design/icons-vue'
 import type { FlatFileItem } from '@/composables/chat/useWorkspaceFiles'
 import type {
+  AgentMcpToolItem,
   AgentSkillItem,
   AgentToolItem,
   MentionResourceItem,
@@ -34,6 +35,8 @@ const props = withDefaults(
     agentTools?: AgentToolItem[]
     /** Agent 技能列表 */
     agentSkills?: AgentSkillItem[]
+    /** Agent MCP 工具列表（按 server 分组拍平，带 server 标注） */
+    agentMcpTools?: AgentMcpToolItem[]
     /** 过滤关键词（来自 @ 后输入） */
     keyword?: string
   }>(),
@@ -41,6 +44,7 @@ const props = withDefaults(
     workspaceFiles: () => [],
     agentTools: () => [],
     agentSkills: () => [],
+    agentMcpTools: () => [],
     keyword: ''
   }
 )
@@ -56,7 +60,8 @@ const emit = defineEmits<{
 const { flatItems, folderSections } = useResourceCategories({
   workspaceFiles: computed(() => props.workspaceFiles),
   agentTools: computed(() => props.agentTools),
-  agentSkills: computed(() => props.agentSkills)
+  agentSkills: computed(() => props.agentSkills),
+  agentMcpTools: computed(() => props.agentMcpTools)
 })
 
 /** 当前视图：主页 / 详情页 */
@@ -140,14 +145,37 @@ const filteredDetailItems = computed<MentionResourceItem[]>(() => {
 })
 
 /**
+ * MCP 详情页：按 serverId 分组，每项携带在 filteredDetailItems 中的全局 index，
+ * 使分组渲染与既有的扁平键盘导航/滚动索引对齐（详情页导航仍以 filteredDetailItems 为准）。
+ */
+const detailGroups = computed(() => {
+  if (detailKind.value !== 'agent-mcp') return []
+  const groups = new Map<string, {
+    serverId: string
+    serverName: string
+    items: Array<{ item: MentionResourceItem; index: number }>
+  }>()
+  filteredDetailItems.value.forEach((item, index) => {
+    const raw = item.raw as AgentMcpToolItem
+    const sid = raw.serverId
+    if (!groups.has(sid)) {
+      groups.set(sid, { serverId: sid, serverName: raw.serverName, items: [] })
+    }
+    groups.get(sid)!.items.push({ item, index })
+  })
+  return Array.from(groups.values())
+})
+
+/**
  * 按 kind 取出原始数据列表
  */
 function pickRawListByKind(
   kind: ResourceKind
-): Array<FlatFileItem | AgentToolItem | AgentSkillItem> {
+): Array<FlatFileItem | AgentToolItem | AgentSkillItem | AgentMcpToolItem> {
   if (kind === 'workspace-file') return props.workspaceFiles
   if (kind === 'agent-tool') return props.agentTools
   if (kind === 'agent-skill') return props.agentSkills
+  if (kind === 'agent-mcp') return props.agentMcpTools
   return []
 }
 
@@ -458,28 +486,57 @@ const transitionName = computed(() =>
               >
                 <span>暂无可用项</span>
               </div>
-              <div
-                v-for="(item, index) in filteredDetailItems"
-                :key="`detail-${item.id}`"
-                :ref="(el) => { if (el) detailItemRefs[index] = el as HTMLDivElement }"
-                class="dropdown-item detail-item"
-                :class="{ active: index === detailActiveIndex }"
-                @click="handleDetailItemClick(item, index)"
-                @mouseenter="detailActiveIndex = index"
-              >
-                <div class="dropdown-item-content detail-item-content">
-                  <span class="detail-item-name" :title="item.alias || item.name">
-                    {{ item.alias || item.name }}
-                  </span>
-                  <span
-                    v-if="item.description"
-                    class="detail-item-desc"
-                    :title="item.description"
+              <!-- MCP：按 server 分组标题 + 组内工具（index 用全局索引，键盘导航/滚动零改） -->
+              <template v-else-if="detailKind === 'agent-mcp'">
+                <div v-for="group in detailGroups" :key="`mcp-grp-${group.serverId}`" class="detail-group">
+                  <div class="detail-group-title">{{ group.serverName }}</div>
+                  <div
+                    v-for="{ item, index } in group.items"
+                    :key="`detail-${item.id}`"
+                    :ref="(el) => { if (el) detailItemRefs[index] = el as HTMLDivElement }"
+                    class="dropdown-item detail-item"
+                    :class="{ active: index === detailActiveIndex }"
+                    @click="handleDetailItemClick(item, index)"
+                    @mouseenter="detailActiveIndex = index"
                   >
-                    {{ item.description }}
-                  </span>
+                    <div class="dropdown-item-content detail-item-content">
+                      <span class="detail-item-name" :title="item.name">{{ item.name }}</span>
+                      <span
+                        v-if="item.description"
+                        class="detail-item-desc"
+                        :title="item.description"
+                      >
+                        {{ item.description }}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              </template>
+              <!-- 非 MCP：扁平渲染 -->
+              <template v-else>
+                <div
+                  v-for="(item, index) in filteredDetailItems"
+                  :key="`detail-${item.id}`"
+                  :ref="(el) => { if (el) detailItemRefs[index] = el as HTMLDivElement }"
+                  class="dropdown-item detail-item"
+                  :class="{ active: index === detailActiveIndex }"
+                  @click="handleDetailItemClick(item, index)"
+                  @mouseenter="detailActiveIndex = index"
+                >
+                  <div class="dropdown-item-content detail-item-content">
+                    <span class="detail-item-name" :title="item.alias || item.name">
+                      {{ item.alias || item.name }}
+                    </span>
+                    <span
+                      v-if="item.description"
+                      class="detail-item-desc"
+                      :title="item.description"
+                    >
+                      {{ item.description }}
+                    </span>
+                  </div>
+                </div>
+              </template>
             </div>
           </div>
         </Transition>
@@ -772,6 +829,13 @@ const transitionName = computed(() =>
   align-items: flex-start;
   justify-content: flex-start;
   gap: 2px;
+}
+
+.detail-group-title {
+  padding: 6px 12px 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-placeholder);
 }
 
 .detail-item-name {

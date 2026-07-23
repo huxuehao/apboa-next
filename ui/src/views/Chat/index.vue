@@ -42,6 +42,9 @@ const userInfo = computed(() => accountStore.userInfo)
 
 const agentId = computed(() => (props.chatAgentId || route.params.agentId) as string || '')
 
+// 嵌入模式（网站 iframe / 悬浮气泡）：URL 带 ?embed=1 时隐藏会话列表等外壳，只保留主聊天
+const embedMode = computed(() => route.query.embed === '1')
+
 // 智能体详情
 const { agentDetail, agentAvatar, allowFileType } = useAgentDetail(agentId)
 
@@ -50,10 +53,12 @@ const accountId = computed(() => accountStore.userInfo?.id)
 const enableMemory = computed(() => agentDetail.value?.enableMemory === true)
 const enablePlanning = computed(() => agentDetail.value?.enablePlanning === true)
 const showToolProcess = computed(() => agentDetail.value?.showToolProcess === true)
-// 语音输入是否可用（智能体绑定了 ASR 模型才显示麦克风）
-const voiceEnabled = computed(() => !!agentDetail.value?.asrModelConfigId)
-// 语音播报是否可用（智能体绑定了 TTS 模型才显示播报开关与朗读按钮）
-const ttsEnabled = computed(() => !!agentDetail.value?.ttsModelConfigId)
+// 语音输入是否可用（智能体绑定了 ASR 模型才显示麦克风）；嵌入模式下强制关闭
+// （跨源 iframe 麦克风被浏览器权限策略拦截，见 embed 相关说明）
+const voiceEnabled = computed(() => !!agentDetail.value?.asrModelConfigId && !embedMode.value)
+// 语音播报是否可用（智能体绑定了 TTS 模型才显示播报开关与朗读按钮）；嵌入模式下强制关闭
+// （跨源 ws 因 SameSite=Lax cookie 带不过去，握手鉴权拿不到 token）
+const ttsEnabled = computed(() => !!agentDetail.value?.ttsModelConfigId && !embedMode.value)
 // 是否配置了代码执行
 const hasCodeExecutionConfig = computed(() => agentDetail.value?.codeExecutionConfigId)
 
@@ -390,7 +395,8 @@ const {
   syncSubscription: syncTtsSubscription,
   toggleAutoBroadcast: toggleTtsBroadcast,
   interrupt: ttsInterrupt,
-  localStop: ttsLocalStop
+  localStop: ttsLocalStop,
+  stopAll: ttsStopAll
 } = useTtsPlayback()
 
 // 上下文与订阅对齐：agent / 会话 / 开关 / 能力任一变化都重算
@@ -959,6 +965,8 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   stopPolling()
   disconnectStream()
+  // 离开页面彻底停朗读并退订（ttsStreamPlayer 是全局单例，组件卸载不会自动停）
+  ttsStopAll()
 })
 
 // 运行状态变化时更新 runningSessions
@@ -981,6 +989,7 @@ watch(isRunning, (running) => {
 <template>
   <div class="chat-page">
     <ChatSidebar
+      v-if="!embedMode"
       :collapsed="sidebarCollapsed"
       :agent-name="agentDetail?.name"
       :agent-avatar="agentAvatar"
@@ -1010,6 +1019,7 @@ watch(isRunning, (running) => {
     <ChatMain
       v-else
       ref="chatMainRef"
+      :embed="embedMode"
       :title="headerTitle"
       :message-size="messagesList.length"
       :welcome-headline="`来和 ${agentDetail?.name || '智能体'} 聊聊吧`"

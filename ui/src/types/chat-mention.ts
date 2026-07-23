@@ -12,7 +12,7 @@
  * 2. 在 useResourceCategories 注册表中补充元数据
  * 3. 如需在消息侧渲染，在 TaggedContentRenderer 中注册组件
  */
-export type ResourceKind = 'workspace-file' | 'agent-tool' | 'agent-skill'
+export type ResourceKind = 'workspace-file' | 'agent-tool' | 'agent-skill' | 'agent-mcp'
 
 /**
  * Agent 工具项（用于 mock 与后续接入）
@@ -38,6 +38,20 @@ export interface AgentSkillItem {
   alias?: string
   /** 技能描述 */
   description?: string
+}
+
+/**
+ * Agent MCP 工具项（按 server 分组的工具，拍平后带 server 标注）
+ */
+export interface AgentMcpToolItem {
+  /** 工具名（= LLM 调用名 = <agent-mcp> 标签 content = 同 kind 内唯一标识） */
+  name: string
+  /** 工具描述 */
+  description?: string
+  /** 所属 MCP 服务 ID（下拉分组用） */
+  serverId: string
+  /** 所属 MCP 服务名（下拉分组标题用） */
+  serverName: string
 }
 
 /**

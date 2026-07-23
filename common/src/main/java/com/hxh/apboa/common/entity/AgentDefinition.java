@@ -78,6 +78,18 @@ public class AgentDefinition extends BaseTenantEntity {
     private JsonNode modelParamsOverride;
 
     /**
+     * 语音合成(TTS)参数覆盖（agent 级，扁平 bodyParams，如 {"voice":"Cherry"}；覆盖模型层默认音色）
+     */
+    @TableField(typeHandler = JsonNodeTypeHandler.class)
+    private JsonNode ttsParamsOverride;
+
+    /**
+     * 语音识别(ASR)参数覆盖（agent 级，扁平 bodyParams；当前仅占位，provider 消费二期接入）
+     */
+    @TableField(typeHandler = JsonNodeTypeHandler.class)
+    private JsonNode asrParamsOverride;
+
+    /**
      * 工具选择策略
      */
     private ToolChoiceStrategy toolChoiceStrategy;

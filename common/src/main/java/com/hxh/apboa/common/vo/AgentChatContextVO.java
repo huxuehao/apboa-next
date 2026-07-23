@@ -28,4 +28,7 @@ public class AgentChatContextVO {
 
     /** 启用的技能包 */
     private List<SkillPackage> enabledSkills;
+
+    /** 启用的 MCP 服务及工具（按 server 分组，供 @ 提及具体 MCP 工具） */
+    private List<McpServerToolsVO> enabledMcp;
 }

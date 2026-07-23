@@ -8,6 +8,7 @@
 
 import { computed, h, type Component, type Ref } from 'vue'
 import {
+  ApiOutlined,
   AppstoreOutlined,
   FolderOutlined,
   ToolOutlined
@@ -15,6 +16,7 @@ import {
 import MediaIcon from '@/components/common/MediaIcon.vue'
 import type { FlatFileItem } from '@/composables/chat/useWorkspaceFiles'
 import type {
+  AgentMcpToolItem,
   AgentSkillItem,
   AgentToolItem,
   MentionResourceItem,
@@ -38,6 +40,7 @@ export interface DisplayResolveContext {
   workspaceFiles?: FlatFileItem[]
   agentTools?: AgentToolItem[]
   agentSkills?: AgentSkillItem[]
+  agentMcpTools?: AgentMcpToolItem[]
 }
 
 /**
@@ -121,6 +124,25 @@ export const RESOURCE_CATEGORY_REGISTRY: Record<ResourceKind, ResourceCategoryMe
       const hit = ctx.agentSkills?.find((s) => s.name === content)
       return hit?.alias || content
     }
+  },
+  'agent-mcp': {
+    kind: 'agent-mcp',
+    tagName: 'agent-mcp',
+    label: 'MCP 工具',
+    folderIcon: ApiOutlined,
+    asFolder: true,
+    order: 30,
+    renderItemIcon: () => h(ApiOutlined),
+    // MCP 工具以「工具名」作为 tagContent（= LLM 调用名，软引导让模型认得），显示成「服务名 · 工具名」
+    resolveTagContent: (item) => item.id,
+    resolveTagDisplay: (item) => {
+      const raw = item.raw as AgentMcpToolItem | undefined
+      return raw?.serverName ? `${raw.serverName} · ${item.name}` : item.name
+    },
+    resolveDisplayFromContent: (content, ctx) => {
+      const hit = ctx.agentMcpTools?.find((t) => t.name === content)
+      return hit ? `${hit.serverName} · ${hit.name}` : content
+    }
   }
 }
 
@@ -146,7 +168,7 @@ export function findKindByTagName(tagName: string): ResourceKind | null {
  */
 export function toResourceItem(
   kind: ResourceKind,
-  raw: FlatFileItem | AgentToolItem | AgentSkillItem
+  raw: FlatFileItem | AgentToolItem | AgentSkillItem | AgentMcpToolItem
 ): MentionResourceItem {
   if (kind === 'workspace-file') {
     const f = raw as FlatFileItem
@@ -156,6 +178,16 @@ export function toResourceItem(
       name: f.fullName || f.name,
       description: f.folderPath || undefined,
       raw: f
+    }
+  }
+  if (kind === 'agent-mcp') {
+    const m = raw as AgentMcpToolItem
+    return {
+      kind,
+      id: m.name,
+      name: m.name,
+      description: m.description,
+      raw: m
     }
   }
   const r = raw as AgentToolItem | AgentSkillItem
@@ -176,6 +208,7 @@ export interface ResourceSources {
   workspaceFiles: Ref<FlatFileItem[]>
   agentTools: Ref<AgentToolItem[]>
   agentSkills: Ref<AgentSkillItem[]>
+  agentMcpTools: Ref<AgentMcpToolItem[]>
 }
 
 /**
@@ -242,9 +275,10 @@ export function useResourceCategories(sources: ResourceSources) {
 function pickRawList(
   kind: ResourceKind,
   sources: ResourceSources
-): Array<FlatFileItem | AgentToolItem | AgentSkillItem> {
+): Array<FlatFileItem | AgentToolItem | AgentSkillItem | AgentMcpToolItem> {
   if (kind === 'workspace-file') return sources.workspaceFiles.value
   if (kind === 'agent-tool') return sources.agentTools.value
   if (kind === 'agent-skill') return sources.agentSkills.value
+  if (kind === 'agent-mcp') return sources.agentMcpTools.value
   return []
 }

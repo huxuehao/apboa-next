@@ -8,6 +8,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { RoutePaths } from '@/router/constants.ts'
 import SmartCodeEditor from '@/components/editor/SmartCodeEditor.vue'
 import ExtendConfigEditor, { type ExtendConfigData } from '@/components/model/ExtendConfigEditor.vue'
+import TtsVoiceSelect from '@/components/model/TtsVoiceSelect.vue'
 import ParamSlider from '@/components/model/ParamSlider.vue'
 import ParamLabel from '@/components/model/ParamLabel.vue'
 import * as modelApi from '@/api/model'
@@ -23,6 +24,7 @@ const props = defineProps<{
     asrModelConfigId: string | null
     ttsModelConfigId: string | null
     modelParamsOverride: Record<string, unknown> | null
+    ttsParamsOverride: Record<string, unknown> | null
     systemPromptTemplateId: string
     followTemplate: boolean
     systemPrompt: string
@@ -202,6 +204,33 @@ function handleTtsProviderChange(value: string | number) {
     formData.value.ttsModelConfigId = null
   }
 }
+
+/** 选中 TTS 模型的提供商（据此显隐音色覆盖下拉，并区分固定列表 vs 动态拉取） */
+const selectedTtsProvider = computed(() => {
+  const id = formData.value.ttsModelConfigId
+  if (!id) return null
+  const model = ttsModels.value.find(m => String(m.id) === String(id))
+  if (!model) return null
+  return modelProviders.value.find(p => String(p.id) === String(model.providerId)) || null
+})
+const selectedTtsIsDashScope = computed(() => selectedTtsProvider.value?.type === 'DASH_SCOPE')
+const selectedTtsIsOpenAi = computed(() => selectedTtsProvider.value?.type === 'OPEN_AI')
+const selectedTtsBaseUrl = computed(() => selectedTtsProvider.value?.baseUrl || '')
+
+/**
+ * agent 级音色覆盖（写入 ttsParamsOverride.voice，扁平结构）。
+ * 空串=不覆盖（跟随模型默认音色），存 {}；否则存 { voice }。
+ */
+const ttsVoiceOverride = computed<string>({
+  get: () => {
+    const ov = formData.value.ttsParamsOverride
+    return ov && typeof ov.voice === 'string' ? ov.voice : ''
+  },
+  set: (v: string) => {
+    const voice = (v || '').trim()
+    formData.value = { ...formData.value, ttsParamsOverride: voice ? { voice } : {} }
+  }
+})
 
 /**
  * 提示词分类选项
@@ -597,6 +626,21 @@ defineExpose({
         </ARadioGroup>
         <div v-else class="text-placeholder text-xs mt-xs">
           不启用语音播报；在模型配置中创建「语音合成」用途的模型后可在此绑定
+        </div>
+      </AFormItem>
+
+      <AFormItem v-if="selectedTtsIsDashScope || selectedTtsIsOpenAi" label="音色">
+        <ARow :gutter="16">
+          <ACol :span="8">
+            <TtsVoiceSelect
+              v-model="ttsVoiceOverride"
+              empty-option-label="跟随模型默认音色"
+              :remote-base-url="selectedTtsIsOpenAi ? selectedTtsBaseUrl : undefined"
+            />
+          </ACol>
+        </ARow>
+        <div class="text-placeholder text-xs mt-xs">
+          仅覆盖该智能体的播报音色；选「跟随模型默认音色」则用所选语音合成模型的默认音色。
         </div>
       </AFormItem>
 

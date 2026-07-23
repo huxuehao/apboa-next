@@ -32,6 +32,8 @@ public class AgentDefinitionVO implements SerializableEnable {
     private Long asrModelConfigId;
     private Long ttsModelConfigId;
     private JsonNode modelParamsOverride;
+    private JsonNode ttsParamsOverride;
+    private JsonNode asrParamsOverride;
     private List<Long> skill;
     private List<Long> workflow;
     private List<Long> tool;

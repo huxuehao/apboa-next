@@ -67,6 +67,8 @@ const props = defineProps<{
   currentPlan?: PlanInfo | null
   /** 语音输入聚合状态 */
   voiceState?: import('@/composables/chat/useVoiceInput').VoiceInputState
+  /** 嵌入模式（?embed=1）：隐藏会话列表相关外壳（打开会话列表的汉堡按钮等） */
+  embed?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -321,6 +323,7 @@ defineExpose({
     <header class="chat-main-header">
       <!-- 移动端菜单按钮 -->
       <button
+        v-if="!embed"
         type="button"
         class="chat-mobile-menu-btn"
         title="打开会话列表"

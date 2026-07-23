@@ -63,6 +63,7 @@ const formData = ref({
     asrModelConfigId: null as string | null,
     ttsModelConfigId: null as string | null,
     modelParamsOverride: null as Record<string, unknown> | null,
+    ttsParamsOverride: null as Record<string, unknown> | null,
     systemPromptTemplateId: '',
     followTemplate: true,
     systemPrompt: ''
@@ -192,6 +193,7 @@ watch(
           asrModelConfigId: props.data.asrModelConfigId || null,
           ttsModelConfigId: props.data.ttsModelConfigId || null,
           modelParamsOverride: props.data.modelParamsOverride || null,
+          ttsParamsOverride: props.data.ttsParamsOverride || null,
           systemPromptTemplateId: props.data.systemPromptTemplateId,
           followTemplate: props.data.followTemplate,
           systemPrompt: props.data.systemPrompt
@@ -256,6 +258,7 @@ function resetForm() {
       asrModelConfigId: null,
       ttsModelConfigId: null,
       modelParamsOverride: null,
+      ttsParamsOverride: null,
       systemPromptTemplateId: '',
       followTemplate: true,
       systemPrompt: ''
@@ -349,6 +352,7 @@ async function handleSubmit() {
       asrModelConfigId: formData.value.model.asrModelConfigId || null,
       ttsModelConfigId: formData.value.model.ttsModelConfigId || null,
       modelParamsOverride: formData.value.model.modelParamsOverride,
+      ttsParamsOverride: formData.value.model.ttsParamsOverride,
       systemPromptTemplateId: formData.value.model.systemPromptTemplateId,
       followTemplate: formData.value.model.followTemplate,
       systemPrompt: formData.value.model.systemPrompt,

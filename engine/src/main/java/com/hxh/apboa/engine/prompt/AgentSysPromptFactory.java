@@ -91,6 +91,10 @@ public class AgentSysPromptFactory {
                 while completing the task. Follow that skill's procedure unless it is
                 clearly unsuitable for the request.
 
+                The user can also explicitly request the use of a specific MCP tool via the <agent-mcp>toolName</agent-mcp> tag.
+                When you see this tag, treat it as a strong hint that the user wants you to invoke that MCP tool
+                while completing the task. Prefer that tool unless it is clearly unsuitable for the request.
+
                 workspace_path_and_execution_rules is your core skill, which specifies the precautions for using %s.
                 When using the above tools, you must strictly follow the rules defined in workspace_path_and_execution_rules.
                 """;

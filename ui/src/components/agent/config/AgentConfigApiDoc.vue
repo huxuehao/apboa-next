@@ -20,7 +20,7 @@
  */
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
-import { CopyOutlined, CheckOutlined, DownOutlined, RightOutlined, KeyOutlined, LinkOutlined, ThunderboltOutlined, SyncOutlined, GlobalOutlined, FolderOpenOutlined, SoundOutlined, FilePdfOutlined, PrinterOutlined, CloseOutlined, DownloadOutlined } from '@ant-design/icons-vue'
+import { CopyOutlined, CheckOutlined, DownOutlined, RightOutlined, KeyOutlined, LinkOutlined, ThunderboltOutlined, SyncOutlined, GlobalOutlined, CodeOutlined, FolderOpenOutlined, SoundOutlined, FilePdfOutlined, PrinterOutlined, CloseOutlined, DownloadOutlined } from '@ant-design/icons-vue'
 import { message, Modal } from 'ant-design-vue'
 import { getChatKey } from '@/api/agentChatKey'
 import { renderApiDocPdf, buildStandaloneApiDocHtml, buildExportFileBaseName, formatDateTime, type ExportSection, type ExportEndpoint, type ExportFileFormat, type ExportOptions } from '@/utils/apiDocExport'
@@ -100,6 +100,23 @@ watch(
 const accessUrl = computed(() => {
   const loc = window.location
   return `${loc.protocol}//${loc.host}/api/runtime/agui/run/${props.agentCode}`
+})
+
+/**
+ * 网站嵌入 · 方式一 iframe 直接嵌入代码
+ */
+const embedIframeCode = computed(() => {
+  if (!externalChatUrl.value) return ''
+  return `<iframe\n  src="${externalChatUrl.value}?embed=1"\n  style="width:400px;height:800px;border:none;border-radius:12px"\n></iframe>`
+})
+
+/**
+ * 网站嵌入 · 方式二 悬浮气泡引入代码
+ */
+const embedBubbleCode = computed(() => {
+  if (!externalChatUrl.value) return ''
+  const scriptSrc = externalChatUrl.value.replace(/#\/.*$/, 'embed.js')
+  return `<script\n  src="${scriptSrc}"\n  data-chat-key="${chatKey.value || '{chatKey}'}"\n  defer\n><\/script>`
 })
 
 /**
@@ -706,8 +723,8 @@ const aguiEndpoints = [
 /**
  * 语音接口定义（ASR 识别 / TTS 合成）
  *
- * 注意：asr/recognize 为 multipart/form-data；tts/speak 返回音频二进制（非 R<> 包装）；
- * tts/broadcast 音频经 WebSocket 通道流回、HTTP 仅返回受理结果。
+ * 注意：asr/recognize 为 multipart/form-data；tts/broadcast 音频经 WebSocket
+ * 通道流回、HTTP 仅返回受理结果。
  */
 const voiceEndpoints = [
   {
@@ -722,16 +739,6 @@ const voiceEndpoints = [
     ],
     bodyExample: null,
     responseExample: '{\n  "code": 200,\n  "success": true,\n  "data": "识别出的文字内容"\n}'
-  },
-  {
-    id: 'voice-tts-speak',
-    method: 'POST',
-    path: '/api/runtime/tts/speak',
-    desc: '文字转语音',
-    note: '将单段纯文本合成为语音，直接返回音频二进制流（Content-Type 标明实际格式），即产即回不落盘。此接口不走统一 R<> 包装；失败时才返回 JSON 错误体，前端按响应类型区分。',
-    params: [],
-    bodyExample: '{\n  "agentId": "123456",\n  "text": "你好，这是一段语音合成测试。"\n}',
-    responseExample: null
   },
   {
     id: 'voice-tts-broadcast',
@@ -751,6 +758,7 @@ const voiceEndpoints = [
  */
 const exportSections = computed<ExportSection[]>(() => [
   { key: 'external-link', title: '外置对话链接', kind: 'external' },
+  { key: 'embed', title: '网站嵌入', kind: 'embed' },
   { key: 'access', title: '访问入口', kind: 'access' },
   { key: 'agui', title: '对话运行控制接口', kind: 'endpoints', items: aguiEndpoints as ExportEndpoint[] },
   { key: 'auth', title: '鉴权方式', kind: 'auth' },
@@ -961,6 +969,58 @@ function closePreview() {
         </div>
         <div style="font-size: 12px; color: #546e7a; margin-top: 8px;">
           该链接可直接在外部浏览器中打开进行对话，无需登录即可使用。
+        </div>
+      </div>
+    </div>
+
+    <!-- 网站嵌入 -->
+    <div class="api-doc-section">
+      <div class="api-doc-title">
+        <CodeOutlined style="margin-right: 8px;" />网站嵌入
+      </div>
+
+      <div class="api-info-box info">
+        <div style="margin-bottom: 4px; font-weight: 600;">方式一 · iframe 直接嵌入</div>
+        <div style="font-size: 12px; color: #546e7a; margin-bottom: 8px;">
+          把对话作为固定区域嵌入网页，始终可见，宽高可按容器调整。
+        </div>
+        <div style="display: flex; align-items: flex-start; gap: 4px;">
+          <code style="font-size: 13px; word-break: break-all; white-space: pre-wrap; flex: 1;">{{ embedIframeCode || '（暂无对话链接）' }}</code>
+          <AButton
+            type="text"
+            size="small"
+            :disabled="!embedIframeCode"
+            @click="copyToClipboard(embedIframeCode, 'embed-iframe')"
+          >
+            <template #icon>
+              <CheckOutlined v-if="copiedKey === 'embed-iframe'" style="color: #52c41a;" />
+              <CopyOutlined v-else />
+            </template>
+          </AButton>
+        </div>
+      </div>
+
+      <div class="api-info-box success">
+        <div style="margin-bottom: 4px; font-weight: 600;">方式二 · 悬浮气泡</div>
+        <div style="font-size: 12px; color: #546e7a; margin-bottom: 8px;">
+          在网站右下角生成悬浮按钮，点击弹出对话浮窗；把下面一行放到页面 &lt;/body&gt; 之前即可。
+        </div>
+        <div style="display: flex; align-items: flex-start; gap: 4px;">
+          <code style="font-size: 13px; word-break: break-all; white-space: pre-wrap; flex: 1;">{{ embedBubbleCode || '（暂无对话链接）' }}</code>
+          <AButton
+            type="text"
+            size="small"
+            :disabled="!embedBubbleCode"
+            @click="copyToClipboard(embedBubbleCode, 'embed-bubble')"
+          >
+            <template #icon>
+              <CheckOutlined v-if="copiedKey === 'embed-bubble'" style="color: #52c41a;" />
+              <CopyOutlined v-else />
+            </template>
+          </AButton>
+        </div>
+        <div style="font-size: 12px; color: #546e7a; margin-top: 8px;">
+          可选属性：data-base-url、data-title、data-color、data-position（left|right）、data-width、data-height（默认 400×800）。
         </div>
       </div>
     </div>
@@ -1412,7 +1472,7 @@ function closePreview() {
 
       <div class="api-info-box info" style="margin-bottom: 12px;">
         <div style="font-size: 12px; color: #546e7a;">
-          语音输入输出：<code>asr/recognize</code> 为 multipart/form-data 语音转文字；<code>tts/speak</code> 直接返回音频二进制（非 R&lt;&gt; 包装）；<code>tts/broadcast</code> 音频经 WebSocket 通道流回、HTTP 仅返回受理结果。
+          语音输入输出：<code>asr/recognize</code> 为 multipart/form-data 语音转文字；<code>tts/broadcast</code> 音频经 WebSocket 通道流回、HTTP 仅返回受理结果。
         </div>
       </div>
 

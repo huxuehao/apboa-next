@@ -38,8 +38,15 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
+import com.hxh.apboa.mcp.service.McpServerService;
+import com.hxh.apboa.mcp.service.McpToolService;
+import com.hxh.apboa.common.enums.McpToolExposureMode;
+import com.hxh.apboa.common.vo.McpServerToolsVO;
+import com.hxh.apboa.common.vo.AgentMcpBindingVO;
 
 /**
  * 智能体定义Service实现
@@ -53,6 +60,8 @@ public class AgentDefinitionServiceImpl extends ServiceImpl<AgentDefinitionMappe
     private final AgentToolService agentToolService;
     private final ToolService toolService;
     private final AgentMcpServerService agentMcpServerService;
+    private final McpServerService mcpServerService;
+    private final McpToolService mcpToolService;
     private final AgentSkillPackageService agentSkillPackageService;
     private final SkillPackageService skillPackageService;
     private final AgentSubAgentService agentSubAgentService;
@@ -342,6 +351,31 @@ public class AgentDefinitionServiceImpl extends ServiceImpl<AgentDefinitionMappe
                             .in(Workflow::getId, workflowIds));
         }
         return Collections.emptyList();
+    public List<McpServerToolsVO> getEnabledMcpOfAgent(Long agentId) {
+        List<McpServerToolsVO> result = new ArrayList<>();
+        for (AgentMcpBindingVO binding : agentMcpServerService.getBindings(agentId)) {
+            McpServer server = mcpServerService.getById(binding.getMcpServerId());
+            if (server == null) {
+                continue;
+            }
+            List<McpTool> tools = mcpToolService.listRuntimeTools(server.getId());
+            if (binding.getExposureMode() == McpToolExposureMode.SELECTED_ONLY) {
+                Set<Long> selected = new HashSet<>(binding.getMcpToolIds() == null
+                        ? List.of() : binding.getMcpToolIds());
+                tools = tools.stream().filter(t -> selected.contains(t.getId())).toList();
+            }
+            List<McpServerToolsVO.McpToolBrief> briefs = tools.stream()
+                    .filter(t -> !Boolean.TRUE.equals(t.getMissing()))
+                    .map(t -> new McpServerToolsVO.McpToolBrief(t.getToolName(), t.getDescription()))
+                    .toList();
+            if (!briefs.isEmpty()) {
+                result.add(new McpServerToolsVO(server.getId(), server.getName(), briefs));
+            }
+        }
+        return result;
+    }
+
+    @Override
     public String getAvatar(Long id) {
         // 只取 avatar 单列，避免加载整行（含 JSON 大字段）
         AgentDefinition agent = lambdaQuery()

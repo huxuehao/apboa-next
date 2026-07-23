@@ -11,6 +11,7 @@ import ResourceMentionDropdown from './ResourceMentionDropdown.vue'
 import { type FlatFileItem, useWorkspaceFiles } from '@/composables/chat/useWorkspaceFiles'
 import { extractTextFromEditor, renderTaggedTextToHtml } from '@/utils/chat/tagSystem'
 import type {
+  AgentMcpToolItem,
   AgentSkillItem,
   AgentToolItem,
   MentionResourceItem
@@ -66,6 +67,8 @@ const { flatFiles, fetchFiles } = useWorkspaceFiles(sessionIdRef)
 const agentTools = ref<AgentToolItem[]>([])
 /** Agent 技能列表 */
 const agentSkills = ref<AgentSkillItem[]>([])
+/** Agent MCP 工具列表（按 server 分组拍平，带 server 标注） */
+const agentMcpTools = ref<AgentMcpToolItem[]>([])
 
 watch(() => props.agentId, async () => {
   const ctx = await fetchAgentChatContext(props.agentId)
@@ -85,6 +88,17 @@ watch(() => props.agentId, async () => {
       description: item.description
     }))
     useSkillAliasMap().setFromSkills(ctx.enabledSkills)
+  }
+  if (ctx?.enabledMcp) {
+    // 后端按 server 分组返回，拍平成带 server 标注的工具列表；工具名既作 content 也作唯一标识
+    agentMcpTools.value = ctx.enabledMcp.flatMap((server) =>
+      (server.tools || []).map((t) => ({
+        name: t.name,
+        description: t.description,
+        serverId: String(server.serverId),
+        serverName: server.serverName
+      }))
+    )
   }
 }, { immediate: true })
 
@@ -128,7 +142,8 @@ const renderTagToHtml = (tagName: string, tagContent: string): string => {
     const display = meta.resolveDisplayFromContent(tagContent, {
       workspaceFiles: flatFiles.value,
       agentTools: agentTools.value,
-      agentSkills: agentSkills.value
+      agentSkills: agentSkills.value,
+      agentMcpTools: agentMcpTools.value
     })
     return `<span contenteditable="false" class="editor-tag editor-tag-${tagName}" data-tag="${tagName}" data-content="${escapeHtml(tagContent)}"><span class="editor-tag-inner"><span class="editor-tag-name">${escapeHtml(display)}</span></span></span>`
   }
@@ -684,6 +699,7 @@ watch(
       :workspace-files="flatFiles"
       :agent-tools="agentTools"
       :agent-skills="agentSkills"
+      :agent-mcp-tools="agentMcpTools"
       :keyword="mentionQuery"
       @select="insertResourceTag"
       @close="mentionVisible = false"

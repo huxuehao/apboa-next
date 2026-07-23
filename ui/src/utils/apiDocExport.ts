@@ -32,7 +32,7 @@ export interface ExportEndpoint {
 }
 
 /** 区块类型：external=外置链接 / access=对话入口 / auth=鉴权 / endpoints=接口数组 */
-export type ExportSectionKind = 'external' | 'access' | 'auth' | 'endpoints'
+export type ExportSectionKind = 'external' | 'embed' | 'access' | 'auth' | 'endpoints'
 
 export interface ExportSection {
   key: string
@@ -233,6 +233,50 @@ function renderExternalSection(section: ExportSection, opts: ExportOptions): str
   )
 }
 
+function renderEmbedSection(section: ExportSection, opts: ExportOptions): string {
+  const raw = opts.externalChatUrl
+  if (!raw) {
+    return (
+      `<section class="doc-section">` +
+      `<h1 id="${escapeHtml(sectionAnchorId(section))}" class="doc-h2">${escapeHtml(section.title)}</h1>` +
+      `<div class="info-box info"><div class="box-hint">该智能体尚未生成外置对话链接，无法展示嵌入代码。</div></div>` +
+      `</section>`
+    )
+  }
+  // embedUrl / scriptSrc / chatKey 不预先转义：最终由 renderCodeBlock 内部 escapeHtml 统一处理
+  const embedUrl = desensitizeChatUrl(raw, opts.desensitize) + '?embed=1'
+  const scriptSrc = raw.replace(/#\/.*$/, 'embed.js')
+  const keyMatch = raw.match(/communication\/([^/?#]+)/)
+  const chatKey = opts.desensitize ? '{chatKey}' : keyMatch ? keyMatch[1] : '{chatKey}'
+  const iframeCode =
+    `<iframe\n` +
+    `  src="${embedUrl}"\n` +
+    `  style="width:400px;height:800px;border:none;border-radius:12px"\n` +
+    `></iframe>`
+  const bubbleCode =
+    `<script\n` +
+    `  src="${scriptSrc}"\n` +
+    `  data-chat-key="${chatKey}"\n` +
+    `  defer\n` +
+    `><\/script>`
+  return (
+    `<section class="doc-section">` +
+    `<h1 id="${escapeHtml(sectionAnchorId(section))}" class="doc-h2">${escapeHtml(section.title)}</h1>` +
+    `<div class="info-box info">` +
+    `<div class="box-title">方式一 · iframe 直接嵌入</div>` +
+    `<div class="box-text">把智能体对话作为固定区域嵌入网页，始终可见；宽高可按容器调整。</div>` +
+    renderCodeBlock('HTML', iframeCode) +
+    `</div>` +
+    `<div class="info-box success">` +
+    `<div class="box-title">方式二 · 悬浮气泡</div>` +
+    `<div class="box-text">在网站右下角生成悬浮按钮，点击弹出对话浮窗（内嵌上方 embed 页）。把下面一行放到页面 &lt;/body&gt; 之前即可。</div>` +
+    renderCodeBlock('HTML', bubbleCode) +
+    `<div class="box-hint">可选属性：data-base-url（默认自动推导）、data-title、data-color、data-position（left | right）、data-width、data-height（默认 400×800）。</div>` +
+    `</div>` +
+    `</section>`
+  )
+}
+
 function renderAuthSection(section: ExportSection): string {
   return (
     `<section class="doc-section">` +
@@ -323,6 +367,8 @@ function renderSection(section: ExportSection, opts: ExportOptions): string {
   switch (section.kind) {
     case 'external':
       return renderExternalSection(section, opts)
+    case 'embed':
+      return renderEmbedSection(section, opts)
     case 'access':
       return renderAccessSection(section, opts)
     case 'auth':

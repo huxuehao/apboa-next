@@ -81,6 +81,24 @@ public final class ExtendConfigHelper {
         }
     }
 
+    /**
+     * 将扁平覆盖参数并入 configWrapper.bodyParams（覆盖同名 key），
+     * 用于 agent 级 TTS/ASR 参数覆盖（如音色 {"voice":"Cherry"}）。override 为空则不改动。
+     * 复制出新 map，避免污染模型层可能共享的 bodyParams。
+     */
+    public static void mergeBodyParams(ModelConfigWrapper configWrapper, JsonNode override) {
+        if (override == null || override.isNull() || !override.isObject() || override.isEmpty()) {
+            return;
+        }
+        Map<String, Object> merged = new HashMap<>();
+        Map<String, Object> existing = configWrapper.getBodyParams();
+        if (existing != null) {
+            merged.putAll(existing);
+        }
+        merged.putAll(parseObjectMap(override));
+        configWrapper.setBodyParams(merged);
+    }
+
     public static Map<String, String> parseStringMap(JsonNode node) {
         if (node == null || !node.isObject()) {
             return Map.of();

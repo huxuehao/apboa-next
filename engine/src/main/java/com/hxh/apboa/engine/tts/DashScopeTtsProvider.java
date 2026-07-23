@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.ExchangeStrategies;
 import org.springframework.web.reactive.function.client.WebClient;
 
+import java.net.URI;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.Map;
@@ -102,7 +103,9 @@ public class DashScopeTtsProvider implements TtsProvider {
         String url = audio.path("url").asText(null);
         if (!FuncUtils.isEmpty(url)) {
             byte[] bytes = WEB_CLIENT.get()
-                    .uri(url)
+                    // OSS 预签名 URL 带 Signature 等查询参数，必须用 URI 对象传入；
+                    // 传字符串会被 WebClient 当 URI 模板二次编码，破坏签名导致 403
+                    .uri(URI.create(url))
                     .retrieve()
                     .bodyToMono(byte[].class)
                     .block(TIMEOUT);

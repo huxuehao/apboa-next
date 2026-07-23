@@ -128,6 +128,8 @@ export interface AgentDefinitionVO {
   /** 语音合成模型配置ID（null=不启用语音播报） */
   ttsModelConfigId?: string | null
   modelParamsOverride: Record<string, unknown> | null
+  /** 语音合成(TTS)参数覆盖（agent 级，如 {voice:'Cherry'}）；null/不传=跟随模型默认音色 */
+  ttsParamsOverride: Record<string, unknown> | null
   skill: string[]
   workflow: string[]
   tool: string[]
@@ -180,6 +182,17 @@ export interface AgentChatContextVO {
   allowFileType: string[]
   enabledTools: ToolConfig[]
   enabledSkills: SkillPackage[]
+  enabledMcp: EnabledMcpServerVO[]
+}
+
+/**
+ * chat-context 里 agent 启用的 MCP 服务及其工具（按 server 分组，供 @ 提及具体 MCP 工具）。
+ * 注意：与下方管理页的 McpServerVO 含义不同，勿混用。
+ */
+export interface EnabledMcpServerVO {
+  serverId: string | number
+  serverName: string
+  tools: { name: string; description?: string }[]
 }
 
 /**
