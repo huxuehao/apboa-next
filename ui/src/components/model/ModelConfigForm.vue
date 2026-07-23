@@ -383,7 +383,7 @@ function showVoiceProtocol() {
     width: 680,
     okText: '知道了',
     content: h('div', { style: { maxHeight: '60vh', overflowY: 'auto', fontSize: '13px', lineHeight: '1.7' } }, [
-      h('p', {}, [h('strong', 'TTS 服务实现以下两条约定，apboa-next 即可下拉选音色：')]),
+      h('p', {}, [h('strong', 'TTS 服务实现以下两条约定，Apboa Next 即可下拉选音色：')]),
       h('p', {}, [h('strong', '① 音色列表接口')]),
       h('pre', { style: preStyle }, 'GET  {baseUrl}/voices\n\n响应 JSON:\n[\n  {\n    "name": "音色名",\n    "refAudio": "参考音频绝对路径",\n    "refText": "参考音频的准确转写"\n  }\n]'),
       h('p', {}, [h('strong', '② 音色文件夹规范（TTS 服务扫它自己的目录）')]),
@@ -391,7 +391,7 @@ function showVoiceProtocol() {
       h('p', {}, [h('strong', '说明')]),
       h('ul', { style: { paddingLeft: '20px', margin: '0' } }, [
         h('li', {}, 'refAudio 是「跑合成的 TTS 服务」本地能读到的绝对路径'),
-        h('li', {}, 'apboa-next 库里只存音色名，合成时后端调 /voices 解析成 ref_audio + ref_text'),
+        h('li', {}, 'Apboa Next 库里只存音色名，合成时后端调 /voices 解析成 ref_audio + ref_text'),
         h('li', {}, 'lang_code 固定 Chinese；此协议只属于 TTS，与 ASR 无关')
       ])
     ])

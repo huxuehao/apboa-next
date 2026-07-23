@@ -27,6 +27,9 @@ defineProps<{
 
 <template>
   <div class="advanced-config-node">
+    <Handle type="target" :position="Position.Top" id="top" />
+    <Handle type="target" :position="Position.Right" id="right" />
+    <Handle type="target" :position="Position.Bottom" id="bottom" />
     <Handle type="target" :position="Position.Left" id="left" />
 
     <div class="node-header">

@@ -16,7 +16,8 @@ import {
   ThunderboltOutlined,
   FileTextOutlined,
   SettingOutlined,
-  SafetyCertificateOutlined
+  SafetyCertificateOutlined,
+  BranchesOutlined
 } from '@ant-design/icons-vue'
 import type { CategoryNodeData } from '../types'
 
@@ -40,7 +41,8 @@ const iconMap: Record<string, typeof ToolOutlined> = {
   ThunderboltOutlined,
   FileTextOutlined,
   SettingOutlined,
-  SafetyCertificateOutlined
+  SafetyCertificateOutlined,
+  BranchesOutlined
 }
 </script>
 
@@ -54,8 +56,14 @@ const iconMap: Record<string, typeof ToolOutlined> = {
     }"
   >
     <!-- 连接点 -->
+    <Handle type="target" :position="Position.Top" id="top" />
+    <Handle type="target" :position="Position.Right" id="right" />
+    <Handle type="target" :position="Position.Bottom" id="bottom" />
     <Handle type="target" :position="Position.Left" id="left" />
+    <Handle type="source" :position="Position.Top" id="top" />
     <Handle type="source" :position="Position.Right" id="right" />
+    <Handle type="source" :position="Position.Bottom" id="bottom" />
+    <Handle type="source" :position="Position.Left" id="left" />
 
     <div class="node-icon">
       <component :is="iconMap[data.icon]" />

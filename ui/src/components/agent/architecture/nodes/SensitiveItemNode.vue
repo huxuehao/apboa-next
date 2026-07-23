@@ -40,6 +40,9 @@ const actionText = computed(() => {
 
 <template>
   <div class="sensitive-item-node" :class="{ disabled: !data.sensitive.enabled }">
+    <Handle type="target" :position="Position.Top" id="top" />
+    <Handle type="target" :position="Position.Right" id="right" />
+    <Handle type="target" :position="Position.Bottom" id="bottom" />
     <Handle type="target" :position="Position.Left" id="left" />
 
     <div class="node-header">

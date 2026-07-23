@@ -8,10 +8,10 @@ import com.hxh.apboa.common.enums.McpActivationStatus;
 import com.hxh.apboa.common.enums.McpProtocol;
 import com.hxh.apboa.common.enums.McpToolExposureMode;
 import com.hxh.apboa.common.vo.AgentMcpBindingVO;
-import com.hxh.apboa.node.agent.McpConfig;
 import com.hxh.apboa.engine.hitl.ConfirmFieldMetaBuilder;
 import com.hxh.apboa.engine.hook.builtins.IConfirmationHook;
 import com.hxh.apboa.engine.identity.IdentityAssertionSigner;
+import com.hxh.apboa.node.agent.McpConfig;
 import com.hxh.apboa.mcp.config.impl.HttpMcpClientConfig;
 import com.hxh.apboa.mcp.config.impl.SseMcpClientConfig;
 import com.hxh.apboa.mcp.config.impl.StdioMcpClientConfig;
@@ -94,66 +94,14 @@ public class McpClientFactory {
         List<AgentMcpBindingVO> bindings = agentMcpServerService.getBindings(agentDefinition.getId());
 
         for (AgentMcpBindingVO binding : bindings) {
-            Long mcpId = binding.getMcpServerId();
-            McpServer mcpServer = mcpServerService.getById(mcpId);
-            if (!isRuntimeAvailable(mcpServer)) {
-                closeStaleContext(mcpId);
-                continue;
-            }
-
-            mcpToolService.ensureBackfilledFromCache(mcpServer);
-            List<McpTool> runtimeTools = mcpToolService.listRuntimeTools(mcpId);
-            if (binding.getExposureMode() == McpToolExposureMode.SELECTED_ONLY) {
-                Set<Long> selectedIds = new HashSet<>(binding.getMcpToolIds() == null
-                        ? List.of()
-                        : binding.getMcpToolIds());
-                runtimeTools = runtimeTools.stream()
-                        .filter(tool -> selectedIds.contains(tool.getId()))
-                        .toList();
-            }
-
-            if (runtimeTools.isEmpty()) {
-                closeStaleContext(mcpId);
-                log.warn("MCP '{}' has no runtime tools after governance filtering; skip lazy registration",
-                        mcpServer.getName());
-                continue;
-            }
-
-            LazyMcpAgentTool.RuntimeDegradeContext degradeContext = new LazyMcpAgentTool.RuntimeDegradeContext(
-                    mcpServer.getId(),
-                    mcpServer.getName(),
-                    mcpServer.getActivationRevision(),
-                    mcpServer.getConfigHash(),
-                    mcpServer.getRuntimeFailThreshold());
-
-            runtimeTools.forEach(tool -> {
-                McpSchema.Tool toolSchema = parseToolSchema(tool);
-                if (toolSchema == null) {
-                    return;
-                }
-                // HITL §6.6：按 MCP 工具自身 need_confirm 登记确认清单
-                // （key 用原生名 toolSchema.name() 匹配 ToolUseBlock.name；确认后由 agent 自执行，天然带租户/MCP 上下文）
-                if (Boolean.TRUE.equals(tool.getNeedConfirm())) {
-                    IConfirmationHook.setNeedConfirmTool(toolSchema.name(),
-                            ConfirmFieldMetaBuilder.fromMcpTool(tool));
-                } else {
-                    IConfirmationHook.removeNeedConfirmTool(toolSchema.name());
-                }
-                result.add(new LazyMcpAgentTool(
-                        degradeContext,
-                        toolSchema,
-                        () -> getInitializedClient(mcpServer.getId()),
-                        mcpRuntimeDegradeService,
-                        client -> invalidateContext(mcpServer.getId(), client),
-                        mcpServer.getAudience(),
-                        identityAssertionSigner));
-            });
+            result.addAll(buildLazyToolsForServer(binding.getMcpServerId(),
+                    binding.getExposureMode(), binding.getMcpToolIds(), "governance", true));
         }
         return result;
     }
 
     /**
-     * 根据节点配置构建懒加载MCP工具。
+     * 根据 workflow 节点配置构建懒加载MCP工具。
      *
      * @param mcps MCP节点配置列表
      * @return 懒加载MCP工具列表
@@ -165,51 +113,87 @@ public class McpClientFactory {
         }
 
         for (McpConfig config : mcps) {
-            Long mcpId = config.getMcpServerId();
-            McpServer mcpServer = mcpServerService.getById(mcpId);
-            if (!isRuntimeAvailable(mcpServer)) {
-                closeStaleContext(mcpId);
-                continue;
-            }
-
-            mcpToolService.ensureBackfilledFromCache(mcpServer);
-            List<McpTool> runtimeTools = mcpToolService.listRuntimeTools(mcpId);
-            if (config.getExposureMode() == McpToolExposureMode.SELECTED_ONLY) {
-                Set<Long> selectedIds = new HashSet<>(config.getMcpToolIds() == null
-                        ? List.of()
-                        : config.getMcpToolIds());
-                runtimeTools = runtimeTools.stream()
-                        .filter(tool -> selectedIds.contains(tool.getId()))
-                        .toList();
-            }
-
-            if (runtimeTools.isEmpty()) {
-                closeStaleContext(mcpId);
-                log.warn("MCP '{}' has no runtime tools after workflow node filtering; skip lazy registration",
-                        mcpServer.getName());
-                continue;
-            }
-
-            LazyMcpAgentTool.RuntimeDegradeContext degradeContext = new LazyMcpAgentTool.RuntimeDegradeContext(
-                    mcpServer.getId(),
-                    mcpServer.getName(),
-                    mcpServer.getActivationRevision(),
-                    mcpServer.getConfigHash(),
-                    mcpServer.getRuntimeFailThreshold());
-
-            runtimeTools.forEach(tool -> {
-                McpSchema.Tool toolSchema = parseToolSchema(tool);
-                if (toolSchema == null) {
-                    return;
-                }
-                result.add(new LazyMcpAgentTool(
-                        degradeContext,
-                        toolSchema,
-                        () -> getInitializedClient(mcpServer.getId()),
-                        mcpRuntimeDegradeService));
-            });
+            result.addAll(buildLazyToolsForServer(config.getMcpServerId(),
+                    config.getExposureMode(), config.getMcpToolIds(), "workflow node", false));
         }
         return result;
+    }
+
+    /**
+     * 构建单个 MCP 服务的懒加载工具，agent 绑定与 workflow 节点两条入口共用，
+     * 统一携带身份断言签名与连接失效重建回调。
+     *
+     * @param mcpId           MCP 服务 ID
+     * @param exposureMode    工具暴露模式（null 视为全量暴露）
+     * @param selectedToolIds SELECTED_ONLY 时勾选的工具 ID 列表
+     * @param sourceDesc      过滤来源描述（仅日志用）
+     * @param registerHitl    是否登记 HITL need_confirm 确认清单。确认表是进程级静态表、按工具原生名
+     *                        键控：agent 绑定路径登记（消费方 IConfirmationHook 挂在主对话 agent 上）；
+     *                        workflow 节点路径必须传 false——其 ReActAgent 不挂确认钩子、登记无消费者，
+     *                        写表反而会按同名工具覆盖/摘除主对话链路已登记的确认防线
+     */
+    private List<AgentTool> buildLazyToolsForServer(Long mcpId,
+                                                    McpToolExposureMode exposureMode,
+                                                    List<Long> selectedToolIds,
+                                                    String sourceDesc,
+                                                    boolean registerHitl) {
+        McpServer mcpServer = mcpServerService.getById(mcpId);
+        if (!isRuntimeAvailable(mcpServer)) {
+            closeStaleContext(mcpId);
+            return List.of();
+        }
+
+        mcpToolService.ensureBackfilledFromCache(mcpServer);
+        List<McpTool> runtimeTools = mcpToolService.listRuntimeTools(mcpId);
+        if (exposureMode == McpToolExposureMode.SELECTED_ONLY) {
+            Set<Long> selectedIds = new HashSet<>(selectedToolIds == null
+                    ? List.of()
+                    : selectedToolIds);
+            runtimeTools = runtimeTools.stream()
+                    .filter(tool -> selectedIds.contains(tool.getId()))
+                    .toList();
+        }
+
+        if (runtimeTools.isEmpty()) {
+            closeStaleContext(mcpId);
+            log.warn("MCP '{}' has no runtime tools after {} filtering; skip lazy registration",
+                    mcpServer.getName(), sourceDesc);
+            return List.of();
+        }
+
+        LazyMcpAgentTool.RuntimeDegradeContext degradeContext = new LazyMcpAgentTool.RuntimeDegradeContext(
+                mcpServer.getId(),
+                mcpServer.getName(),
+                mcpServer.getActivationRevision(),
+                mcpServer.getConfigHash(),
+                mcpServer.getRuntimeFailThreshold());
+
+        List<AgentTool> tools = new ArrayList<>();
+        runtimeTools.forEach(tool -> {
+            McpSchema.Tool toolSchema = parseToolSchema(tool);
+            if (toolSchema == null) {
+                return;
+            }
+            // HITL §6.6：按 MCP 工具自身 need_confirm 登记确认清单
+            // （key 用原生名 toolSchema.name() 匹配 ToolUseBlock.name；确认后由 agent 自执行，天然带租户/MCP 上下文）
+            if (registerHitl) {
+                if (Boolean.TRUE.equals(tool.getNeedConfirm())) {
+                    IConfirmationHook.setNeedConfirmTool(toolSchema.name(),
+                            ConfirmFieldMetaBuilder.fromMcpTool(tool));
+                } else {
+                    IConfirmationHook.removeNeedConfirmTool(toolSchema.name());
+                }
+            }
+            tools.add(new LazyMcpAgentTool(
+                    degradeContext,
+                    toolSchema,
+                    () -> getInitializedClient(mcpServer.getId()),
+                    mcpRuntimeDegradeService,
+                    client -> invalidateContext(mcpServer.getId(), client),
+                    mcpServer.getAudience(),
+                    identityAssertionSigner));
+        });
+        return tools;
     }
 
     public Mono<McpClientWrapper> getInitializedClient(Long mcpServerId) {

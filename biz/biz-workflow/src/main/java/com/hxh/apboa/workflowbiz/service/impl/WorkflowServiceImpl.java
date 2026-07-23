@@ -114,6 +114,8 @@ public class WorkflowServiceImpl extends ServiceImpl<WorkflowMapper, Workflow> i
             workflowVersionMapper.delete(new LambdaQueryWrapper<WorkflowVersion>().eq(WorkflowVersion::getWorkflowId, String.valueOf(id)));
             RunWorkflowCache.remove(String.valueOf(id));
         });
+        // force 删除跳过绑定检查，须级联清 agent_workflows，否则留悬空关联
+        agentWorkflowService.deleteByWorkflowIds(ids);
         return removeByIds(ids);
     }
 

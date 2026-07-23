@@ -126,17 +126,20 @@ public class WorkflowTool implements AgentTool {
             return Mono.just(ToolResultBlock.error("System error, AgentContext is null"));
         }
 
-        // 获取 UserDetail
+        // 获取 UserDetail。userInfo 为服务端认证身份，匿名会话（chatKey 免登、暂停恢复等无认证上下文）合法为 null，
+        // 此时只带租户信息，用户字段留空
         AccountVO userInfo = agentContext.getUserInfo();
-        UserDetail userDetail = UserDetail.builder()
-                .id(userInfo.getId())
-                .name(userInfo.getNickname())
-                .username(userInfo.getUsername())
-                .email(userInfo.getEmail())
+        UserDetail.UserDetailBuilder userDetailBuilder = UserDetail.builder()
                 .tenantId(agentContext.getTenantId())
-                .tenantCode(agentContext.getTenantCode())
-                .tenantRole(userInfo.getTenantRole())
-                .build();
+                .tenantCode(agentContext.getTenantCode());
+        if (userInfo != null) {
+            userDetailBuilder.id(userInfo.getId())
+                    .name(userInfo.getNickname())
+                    .username(userInfo.getUsername())
+                    .email(userInfo.getEmail())
+                    .tenantRole(userInfo.getTenantRole());
+        }
+        UserDetail userDetail = userDetailBuilder.build();
 
         return Mono.fromCallable(() -> {
             try {
@@ -172,7 +175,8 @@ public class WorkflowTool implements AgentTool {
         params.forEach(param -> {
             String name = param.getName();
             Object value = inputs.get(name);
-            if (value != null) {
+            // 模型实参优先，未传时才回退 Start 节点配置的默认值
+            if (value == null) {
                 value = param.getValue();
             }
 

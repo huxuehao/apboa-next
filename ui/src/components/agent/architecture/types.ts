@@ -14,7 +14,8 @@ import type {
   ModelConfigVO,
   ModelProviderVO,
   SystemPromptTemplateVO,
-  SensitiveWordConfigVO
+  SensitiveWordConfigVO,
+  WorkflowStatus
 } from '@/types'
 
 /**
@@ -29,6 +30,7 @@ export type NodeType =
   | 'mcp-item'          // MCP项节点
   | 'knowledge-item'    // 知识库项节点
   | 'agent-item'        // 子智能体项节点
+  | 'workflow-item'     // 工作流项节点
   | 'model'             // 模型节点
   | 'prompt'            // 提示词节点
   | 'advanced-config'   // 高级配置节点
@@ -44,6 +46,7 @@ export type CategoryType =
   | 'mcp'
   | 'knowledge'
   | 'sub-agent'
+  | 'workflow'
   | 'model'
   | 'prompt'
   | 'advanced'
@@ -124,12 +127,39 @@ export interface AgentItemNodeData {
 }
 
 /**
+ * 架构图中的工作流摘要
+ */
+export interface ArchitectureWorkflow {
+  id: string
+  name: string
+  remark?: string
+  available: boolean
+  enabled?: boolean
+  status?: WorkflowStatus
+  loadFailed?: boolean
+}
+
+/**
+ * 工作流项节点数据
+ */
+export interface WorkflowItemNodeData {
+  workflow: ArchitectureWorkflow
+}
+
+/**
+ * 模型节点用途
+ */
+export type ArchitectureModelRole = 'LLM' | 'ASR' | 'TTS'
+
+/**
  * 模型节点数据
  */
 export interface ModelNodeData {
+  role: ArchitectureModelRole
   modelConfig: ModelConfigVO | null
   provider: ModelProviderVO | null
   paramsOverride: Record<string, unknown> | null
+  loadFailed?: boolean
 }
 
 /**
@@ -172,7 +202,10 @@ export interface ArchitectureLoadingState {
   mcps: boolean
   knowledgeBases: boolean
   subAgents: boolean
+  workflows: boolean
   model: boolean
+  asrModel: boolean
+  ttsModel: boolean
   prompt: boolean
   sensitive: boolean
 }
@@ -188,8 +221,16 @@ export interface ArchitectureData {
   mcps: McpServerVO[]
   knowledgeBases: KnowledgeBaseConfigVO[]
   subAgents: AgentDefinitionVO[]
+  workflows: ArchitectureWorkflow[]
   modelConfig: ModelConfigVO | null
   modelProvider: ModelProviderVO | null
+  modelLoadFailed: boolean
+  asrModelConfig: ModelConfigVO | null
+  asrModelProvider: ModelProviderVO | null
+  asrModelLoadFailed: boolean
+  ttsModelConfig: ModelConfigVO | null
+  ttsModelProvider: ModelProviderVO | null
+  ttsModelLoadFailed: boolean
   promptTemplate: SystemPromptTemplateVO | null
   sensitiveConfig: SensitiveWordConfigVO | null
 }
@@ -251,6 +292,13 @@ export const CATEGORY_CONFIGS: Record<CategoryType, Omit<CategoryConfig, 'type'>
     bgColor: '#FFFFFF',
     borderColor: '#e7e7e7'
   },
+  workflow: {
+    label: '工作流',
+    icon: 'BranchesOutlined',
+    color: '#fa8c16',
+    bgColor: '#FFFFFF',
+    borderColor: '#e7e7e7'
+  },
   model: {
     label: '模型配置',
     icon: 'ThunderboltOutlined',
@@ -286,9 +334,9 @@ export const CATEGORY_CONFIGS: Record<CategoryType, Omit<CategoryConfig, 'type'>
  */
 export const NODE_SIZES = {
   center: { width: 280, height: 160 },
-  category: { width: 140, height: 50 },
-  item: { width: 240, height: 120 },
-  model: { width: 280, height: 200 },
-  prompt: { width: 280, height: 160 },
-  advanced: { width: 280, height: 180 }
+  category: { width: 140, height: 60 },
+  item: { width: 220, height: 130 },
+  model: { width: 280, height: 280 },
+  prompt: { width: 360, height: 430 },
+  advanced: { width: 280, height: 340 }
 }

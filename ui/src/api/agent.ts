@@ -4,6 +4,7 @@ import type {
   PageResult,
   SkillPackage,
   ToolConfig,
+  Workflow,
 } from '@/types'
 import type { AgentDefinitionDTO, AgentDefinitionVO, AgentChatContextVO } from '@/types'
 
@@ -123,5 +124,5 @@ export function enabledSkillsOfAgent(agentId: string) {
  * 获取Agent启用的工作流
  */
 export function enabledWorkflowsOfAgent(agentId: string) {
-  return request.get<ApiResponse<unknown[]>>(`/api/agent/definition/${agentId}/enabled/workflows`)
+  return request.get<ApiResponse<Workflow[]>>(`/api/agent/definition/${agentId}/enabled/workflows`)
 }

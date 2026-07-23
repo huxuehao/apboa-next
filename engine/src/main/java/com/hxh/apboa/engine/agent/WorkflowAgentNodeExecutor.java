@@ -52,7 +52,7 @@ public class WorkflowAgentNodeExecutor implements AgentNodeExecutor {
         SkillBox skillBox = skillBoxFactory.getSkillBox(request.getSkillPackageIds(), toolkit);
 
         AgentContext oldContext = AgentContext.getIfExists().orElse(null);
-        AgentContext agentContext = buildAgentContext(request, definition);
+        AgentContext agentContext = buildAgentContext(request, definition, oldContext);
         AgentContext.init(agentContext);
         try {
             ReActAgent agent = buildAgent(request, definition, model, toolkit, skillBox, agentContext);
@@ -105,7 +105,7 @@ public class WorkflowAgentNodeExecutor implements AgentNodeExecutor {
     /**
      * 构建智能体调用上下文。
      */
-    private AgentContext buildAgentContext(AgentNodeRequest request, AgentDefinition definition) {
+    private AgentContext buildAgentContext(AgentNodeRequest request, AgentDefinition definition, AgentContext outerContext) {
         AgentContext agentContext = new AgentContext();
         agentContext.setThreadId(request.getWorkflowInstanceId());
         agentContext.setRunId(request.getWorkflowInstanceId());
@@ -115,6 +115,11 @@ public class WorkflowAgentNodeExecutor implements AgentNodeExecutor {
         agentContext.setAgentDefinition(definition);
         agentContext.setTenantId(TenantUtils.getCurrentTenantId());
         agentContext.setTenantCode(TenantUtils.getCurrentTenantCode());
+        // 对话内触发时继承主 agent 的服务端认证身份，MCP 身份断言才能带上用户主体（sub）；
+        // REST 直接触发无外层上下文，保持 null 按匿名断言处理
+        if (outerContext != null) {
+            agentContext.setUserInfo(outerContext.getUserInfo());
+        }
         return agentContext;
     }
 

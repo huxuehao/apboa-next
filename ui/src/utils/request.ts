@@ -92,8 +92,9 @@ instance.interceptors.response.use(
       window.location.reload();
       return Promise.reject(msg);
     } else {
-      console.error('系统异常，请稍后再试：', msg)
-      AMessage.error('系统异常，请稍后再试').then(() => {})
+      // 展示后端具体业务错误文案（全局异常处理器已保证 msg 用户友好），console 同步留痕便于追踪
+      console.error('业务异常：', msg)
+      AMessage.error(msg).then(() => {})
       return Promise.reject(msg);
     }
   },
@@ -102,8 +103,8 @@ instance.interceptors.response.use(
     // 1. 非401错误直接抛出
     if (!error.response || error.response.status !== 401) {
       NProgress.done();
-      console.error('系统异常，请稍后再试：', error.message || '未知错误')
-      AMessage.error('系统异常，请稍后再试').then(() => {})
+      console.error('系统异常：', error.message || '未知错误')
+      AMessage.error(error.message || '系统异常，请稍后再试').then(() => {})
       return Promise.reject(error);
     }
 

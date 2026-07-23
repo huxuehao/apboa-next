@@ -28,6 +28,9 @@ const descriptionText = computed(() => {
 
 <template>
   <div class="skill-item-node" :class="{ disabled: !data.skill.enabled }">
+    <Handle type="target" :position="Position.Top" id="top" />
+    <Handle type="target" :position="Position.Right" id="right" />
+    <Handle type="target" :position="Position.Bottom" id="bottom" />
     <Handle type="target" :position="Position.Left" id="left" />
 
     <div class="node-header">

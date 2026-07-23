@@ -15,5 +15,7 @@ public interface AgentWorkflowService extends IService<AgentWorkflow> {
     List<Long> getWorkflowIds(Long agentDefinitionId);
     Boolean insertAgentWorkflow(Long agentDefinitionId, List<Long> workflowIds);
     Boolean deleteAgentWorkflow(List<Long> agentIds);
+    /** 按 workflow 方向清关联（删除 workflow 时级联，防 agent_workflows 悬空） */
+    Boolean deleteByWorkflowIds(List<Long> workflowIds);
     Boolean saveAgentWorkflow(Long agentDefinitionId, List<Long> workflowIds);
 }
