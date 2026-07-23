@@ -15,6 +15,7 @@ import com.hxh.apboa.common.enums.WorkflowRunStatus;
 import com.hxh.apboa.common.util.UserUtils;
 import com.hxh.apboa.node.base.NodeOutput;
 import com.hxh.apboa.node.base.context.NodeContext;
+import com.hxh.apboa.node.base.context.NodeExecutionListener;
 import com.hxh.apboa.node.base.request.ParamItem;
 import com.hxh.apboa.node.base.request.RequestParams;
 import com.hxh.apboa.workflow.run.RunWorkflow;
@@ -51,17 +52,24 @@ public class WorkflowRunServiceImpl extends ServiceImpl<WorkflowRunMapper, Workf
         if (workflow == null) {
             throw new RuntimeException("workflow not found");
         }
-        return doRun(workflow, request,  UserUtils.getUserDetail(), false);
+        return doRun(workflow, request,  UserUtils.getUserDetail(), false, NodeExecutionListener.noop());
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public WorkflowRunResult run(Long workflowId, WorkflowRunRequest request, UserDetail userDetail) {
+        return run(workflowId, request, userDetail, NodeExecutionListener.noop());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public WorkflowRunResult run(Long workflowId, WorkflowRunRequest request, UserDetail userDetail,
+                                 NodeExecutionListener executionListener) {
         Workflow workflow = workflowMapper.selectById(workflowId);
         if (workflow == null) {
             throw new RuntimeException("workflow not found");
         }
-        return doRun(workflow, request, userDetail, true);
+        return doRun(workflow, request, userDetail, true, executionListener);
     }
 
     @Override
@@ -71,7 +79,8 @@ public class WorkflowRunServiceImpl extends ServiceImpl<WorkflowRunMapper, Workf
                 .orderByAsc(WorkflowNodeExecution::getStartTime));
     }
 
-    private WorkflowRunResult doRun(Workflow workflow, WorkflowRunRequest request, UserDetail userDetail, boolean publishedOnly) {
+    private WorkflowRunResult doRun(Workflow workflow, WorkflowRunRequest request, UserDetail userDetail,
+                                    boolean publishedOnly, NodeExecutionListener executionListener) {
         WorkflowVersion publishedVersion = publishedOnly ? latestPublishedVersion(workflow.getId()) : null;
         Object config = publishedVersion == null ? workflow.getConfig() : publishedVersion.getConfig();
         if (config == null) {
@@ -98,12 +107,14 @@ public class WorkflowRunServiceImpl extends ServiceImpl<WorkflowRunMapper, Workf
         save(run);
 
         NodeContext context = new NodeContext(String.valueOf(run.getId()));
+        context.setExecutionListener(executionListener);
         context.setRequestParams(toRequestParams(request));
         if (request != null && request.getVariables() != null) {
             request.getVariables().forEach(context.getVariables()::storeVariable);
         }
         // 工作流名下传（智能体节点成本流水的归属快照）：run 行在本事务内未提交，
         // 节点执行期按 instanceId 反查 workflow_run 读不到，只能经变量上下文带入
+        context.getVariables().storeVariable("workflowId", String.valueOf(workflow.getId()));
         context.getVariables().storeVariable("workflowName", workflow.getName());
 
         if (userDetail != null) {

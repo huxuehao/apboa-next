@@ -4,6 +4,7 @@ import com.hxh.apboa.node.base.request.RequestParams;
 import com.hxh.apboa.node.base.NodeOutput;
 import lombok.Getter;
 import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -15,6 +16,7 @@ import java.util.List;
  **/
 @Getter
 @Setter
+@Slf4j
 public class NodeContext {
     /**
      * 工作流实例ID
@@ -39,11 +41,16 @@ public class NodeContext {
      * 节点执行轨迹，严格按照本次运行的节点执行顺序记录。
      */
     private final List<NodeOutput> executionTrace;
+    /** 节点生命周期旁路监听器；异常只记日志，不能中断工作流。 */
+    private NodeExecutionListener executionListener;
+    /** 本次运行内单调递增，用于区分循环节点的多次执行。 */
+    private long executionSequence;
 
     public NodeContext(String workflowInstanceId) {
         this.workflowInstanceId = workflowInstanceId;
         this.variables = new VariableContext();
         this.executionTrace = new ArrayList<>();
+        this.executionListener = NodeExecutionListener.noop();
     }
 
     /**
@@ -53,9 +60,40 @@ public class NodeContext {
         this.nextNodeId = null;
     }
 
-    public void recordExecution(NodeOutput output) {
+    public String notifyExecutionStarted(NodeOutput output) {
+        if (output == null) {
+            return null;
+        }
+        String invocationId = output.getNodeId() + "#" + (++executionSequence);
+        try {
+            executionListener.onNodeStarted(invocationId, output);
+        } catch (RuntimeException e) {
+            log.warn("节点开始监听失败 instanceId={}, nodeId={}: {}",
+                    workflowInstanceId, output.getNodeId(), e.getMessage());
+        }
+        return invocationId;
+    }
+
+    public void recordExecution(String invocationId, NodeOutput output) {
         if (output != null) {
             executionTrace.add(output);
+            try {
+                executionListener.onNodeFinished(invocationId, output);
+            } catch (RuntimeException e) {
+                log.warn("节点完成监听失败 instanceId={}, nodeId={}: {}",
+                        workflowInstanceId, output.getNodeId(), e.getMessage());
+            }
         }
+    }
+
+    /** 兼容独立调用方；引擎主链应传入 notifyExecutionStarted 返回的 invocationId。 */
+    public void recordExecution(NodeOutput output) {
+        recordExecution(null, output);
+    }
+
+    public void setExecutionListener(NodeExecutionListener executionListener) {
+        this.executionListener = executionListener == null
+                ? NodeExecutionListener.noop()
+                : executionListener;
     }
 }

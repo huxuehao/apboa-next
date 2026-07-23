@@ -3,7 +3,7 @@ import { message } from 'ant-design-vue'
 import { useAgentClient } from '@/composables/useAgentClient'
 import { usePlanTracking } from '@/composables/chat/usePlanTracking'
 import { buildToolCallsContent, localNowDateTime } from '@/utils/chat/format'
-import type {ChatMessageVO, ConfirmFieldMeta, RawEvent, WorkflowProcess} from '@/types'
+import type {ChatMessageVO, ConfirmFieldMeta, RawEvent, WorkflowProcess, WorkflowProcessNode} from '@/types'
 import { stopRun, subagentResume, type SubPendingInfo } from '@/api/agui'
 
 let lastIdBig = BigInt(Date.now()) << 12n;
@@ -26,6 +26,42 @@ export interface ToolProgressState {
   attempt?: number
   maxAttempts?: number
   detail?: string
+}
+
+/**
+ * 把节点开始/完成事件合并成可直接渲染的实际执行轨迹。
+ * 完成态的 TOOL_FINISHED 会再用后端权威快照整体覆盖这里的临时状态。
+ */
+function mergeWorkflowNodeProgress(
+  current: WorkflowProcess | undefined,
+  phase: string,
+  incoming: WorkflowProcessNode
+): WorkflowProcess {
+  const nodes = [...(current?.nodes ?? [])]
+  const invocationId = incoming.invocationId
+  let index = invocationId
+    ? nodes.findIndex(node => node.invocationId === invocationId)
+    : -1
+  if (index < 0 && !invocationId && phase === 'WORKFLOW_NODE_FINISHED') {
+    for (let i = nodes.length - 1; i >= 0; i--) {
+      if (nodes[i]?.nodeId === incoming.nodeId && nodes[i]?.status === 'RUNNING') {
+        index = i
+        break
+      }
+    }
+  }
+  if (index >= 0) {
+    nodes[index] = { ...nodes[index]!, ...incoming }
+  } else {
+    nodes.push(incoming)
+  }
+
+  const failed = incoming.status === 'FAIL' || current?.status === 'FAIL'
+  return {
+    ...current,
+    status: failed ? 'FAIL' : 'RUNNING',
+    nodes
+  }
 }
 
 export function useChatStream(
@@ -406,13 +442,16 @@ export function useChatStream(
             }
           }
         }
-        // 工作流内部阶段：排队/等待模型、生成、重试；按 toolUseId 更新对应并行卡片。
+        // 工作流内部阶段：模型阶段更新标题；节点阶段增量组装实际执行轨迹。
         else if (event.name === 'TOOL_PROGRESS') {
-          const v = event.value as { toolUseId?: string; phase?: string; message?: string; attempt?: number; maxAttempts?: number; detail?: string }
+          const v = event.value as { toolUseId?: string; phase?: string; message?: string; attempt?: number; maxAttempts?: number; detail?: string; node?: WorkflowProcessNode }
           if (v?.toolUseId != null && v.phase && v.message) {
             const arr = [...toolCallsInProgress.value]
             const idx = arr.findIndex(t => t.id === String(v.toolUseId))
             if (idx >= 0) {
+              const workflowProcess = v.node
+                ? mergeWorkflowNodeProgress(arr[idx]!.workflowProcess, v.phase, v.node)
+                : arr[idx]!.workflowProcess
               arr[idx] = {
                 ...arr[idx]!,
                 progress: {
@@ -421,7 +460,8 @@ export function useChatStream(
                   attempt: v.attempt,
                   maxAttempts: v.maxAttempts,
                   detail: v.detail
-                }
+                },
+                workflowProcess
               }
               toolCallsInProgress.value = arr
             }

@@ -29,7 +29,7 @@ const props = defineProps<{
   startTime?: number
   /** 工作流内部阶段（等待模型 / 生成 / 重试等） */
   progress?: ToolProgressState
-  /** 工作流完成后的权威节点执行快照（TOOL_FINISHED 即时到达，并随 tool 消息持久化） */
+  /** 工作流实时节点轨迹；完成后由 TOOL_FINISHED 权威快照校准并随 tool 消息持久化。 */
   workflowProcess?: WorkflowProcess
   /** 子智能体实时过程步骤（SUBAGENT_STEP 事件装配，与落库 subProcess 同构） */
   subSteps?: SubProcessStep[]

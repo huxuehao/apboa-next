@@ -10,6 +10,7 @@ import com.hxh.apboa.common.r.R;
 import com.hxh.apboa.common.vo.CostModelPricingVO;
 import com.hxh.apboa.common.vo.CostOverviewVO;
 import com.hxh.apboa.common.vo.CostSessionDetailVO;
+import com.hxh.apboa.common.vo.CostWorkflowDetailVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -67,12 +68,34 @@ public class CostController {
     }
 
     /**
+     * 统一执行账单分页：本期支持对话和工作流；定时任务沿用相同类型契约后续接入。
+     */
+    @GetMapping("/bills")
+    @RoleNeed({TenantRole.TENANT_ADMIN, TenantRole.TENANT_EDITOR})
+    public R<IPage<Map<String, Object>>> bills(
+            PageParams pageParams,
+            @RequestParam(value = "startDate", required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate startDate,
+            @RequestParam(value = "endDate", required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate endDate,
+            @RequestParam(value = "agentId", required = false) Long agentId,
+            @RequestParam(value = "orderBy", required = false, defaultValue = "cost") String orderBy) {
+        return R.data(costStatService.pageExecutionBills(
+                MP.getPage(pageParams), startDate, endDate, agentId, !"time".equals(orderBy)));
+    }
+
+    /**
      * 单会话逐轮成本明细（实际发生口径：含废弃分支，onCurrentPath=false 标记）
      */
     @GetMapping("/session/{sessionId}")
     @RoleNeed({TenantRole.TENANT_ADMIN, TenantRole.TENANT_EDITOR})
     public R<CostSessionDetailVO> sessionDetail(@PathVariable("sessionId") Long sessionId) {
         return R.data(costStatService.sessionDetail(sessionId));
+    }
+
+    /** 工作流单次运行的节点轨迹与成本明细。 */
+    @GetMapping("/workflow/{runId}")
+    @RoleNeed({TenantRole.TENANT_ADMIN, TenantRole.TENANT_EDITOR})
+    public R<CostWorkflowDetailVO> workflowDetail(@PathVariable("runId") String runId) {
+        return R.data(costStatService.workflowDetail(runId));
     }
 
     /**

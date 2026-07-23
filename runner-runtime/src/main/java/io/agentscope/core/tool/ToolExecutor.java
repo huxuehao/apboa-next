@@ -436,6 +436,10 @@ class ToolExecutor {
             if (progress.getDetail() != null && !progress.getDetail().isBlank()) {
                 metadata.put("detail", progress.getDetail());
             }
+            if (progress.getWorkflowNode() != null) {
+                metadata.put(ToolProgressBridge.WORKFLOW_NODE_METADATA_KEY,
+                        progress.getWorkflowNode());
+            }
             callback.accept(
                     toolCall,
                     new ToolResultBlock(

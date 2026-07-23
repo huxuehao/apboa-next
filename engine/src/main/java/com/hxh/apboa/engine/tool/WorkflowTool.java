@@ -153,7 +153,9 @@ public class WorkflowTool implements AgentTool {
                 ToolProgressBridge.emit(toolUseId,
                         ToolProgressBridge.stage("WORKFLOW_STARTING", "工作流正在启动"));
                 // 执行工作流
-                WorkflowRunResult run = workflowRunService.run(workflow.getId(), getRunRequest(param), userDetail);
+                WorkflowRunResult run = workflowRunService.run(
+                        workflow.getId(), getRunRequest(param), userDetail,
+                        new WorkflowNodeProgressListener(toolUseId));
                 ToolProgressBridge.emit(toolUseId,
                         ToolProgressBridge.stage("WORKFLOW_FINISHING", "工作流正在收尾"));
                 WorkflowProcessSnapshot process = WorkflowProcessSnapshot.from(

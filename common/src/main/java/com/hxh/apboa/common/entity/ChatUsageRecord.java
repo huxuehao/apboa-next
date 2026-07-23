@@ -86,6 +86,31 @@ public class ChatUsageRecord implements SerializableEnable {
     private String bizType;
 
     /**
+     * 业务定义 ID：工作流为 workflow.id；未来定时任务可写任务定义 ID。
+     */
+    private String bizId;
+
+    /**
+     * 业务运行 ID：工作流为 workflow_run.id；用于把多条节点流水归并为一次执行账单。
+     */
+    private String bizRunId;
+
+    /**
+     * 业务名称快照：定义删除或改名后账单仍可读。
+     */
+    private String bizLabel;
+
+    /**
+     * 执行步骤 ID：工作流为 node.id；未来可复用于定时任务步骤。
+     */
+    private String stepId;
+
+    /**
+     * 执行步骤名称快照。
+     */
+    private String stepLabel;
+
+    /**
      * 渠道：WEB / CHAT_KEY / SK_API
      */
     private String channel;

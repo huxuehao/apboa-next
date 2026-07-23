@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.hxh.apboa.common.vo.CostModelPricingVO;
 import com.hxh.apboa.common.vo.CostOverviewVO;
 import com.hxh.apboa.common.vo.CostSessionDetailVO;
+import com.hxh.apboa.common.vo.CostWorkflowDetailVO;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -35,10 +36,20 @@ public interface CostStatService {
                                                 Long agentId, boolean orderByCost);
 
     /**
+     * 统一执行账单：对话按会话、工作流按运行实例分别聚合；同一流水只出现一次。
+     */
+    IPage<Map<String, Object>> pageExecutionBills(IPage<Map<String, Object>> page,
+                                                  LocalDate startDate, LocalDate endDate,
+                                                  Long agentId, boolean orderByCost);
+
+    /**
      * 单会话逐轮明细：按「实际发生」口径列出全部 run（含废弃分支，onCurrentPath=false 标记），
      * 附用户问题/回复摘要与汇总卡。会话不存在（或不属当前租户）返回 null。
      */
     CostSessionDetailVO sessionDetail(Long sessionId);
+
+    /** 工作流单次运行成本详情；跨租户或不存在返回 null。 */
+    CostWorkflowDetailVO workflowDetail(String runId);
 
     /**
      * 重算历史成本：区间内流水按模型「当前」单价刷新（补配/改错价后修正历史账）。

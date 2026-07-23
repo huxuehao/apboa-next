@@ -1,27 +1,26 @@
 <!-- eslint-disable vue/multi-word-component-names -->
 <script setup lang="ts">
 /**
- * 成本中心容器页：概览看板 / 会话账单 两个 tab + 会话明细钻取。
- * 时间范围与智能体过滤为两 tab 共享；账单行点击进入明细（组件内切换，返回保留筛选）。
+ * 成本中心容器页：概览看板 / 执行账单 / 模型配价，以及按执行类型钻取详情。
  *
  * @author huxuehao
  */
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed } from 'vue'
 import dayjs, { Dayjs } from 'dayjs'
-import * as agentApi from '@/api/agent'
 import CostOverview from './components/CostOverview.vue'
-import CostSessionBills from './components/CostSessionBills.vue'
+import CostExecutionBills from './components/CostExecutionBills.vue'
 import CostSessionDetail from './components/CostSessionDetail.vue'
+import CostWorkflowDetail from './components/CostWorkflowDetail.vue'
 import CostModelPricing from './components/CostModelPricing.vue'
+import type { CostBillType } from '@/types'
 
 type RangePreset = '7d' | '30d' | 'month' | 'custom'
 
 const activeTab = ref<'overview' | 'sessions' | 'pricing'>('overview')
 const rangePreset = ref<RangePreset>('30d')
 const customRange = ref<[Dayjs, Dayjs] | null>(null)
-const agentId = ref<string | undefined>(undefined)
-/** 非空时显示会话明细钻取视图（返回后保留筛选与分页现场） */
-const detailSessionId = ref<string | null>(null)
+/** 非空时显示类型化账单详情（返回后保留筛选与分页现场）。 */
+const detailTarget = ref<{ type: CostBillType; id: string } | null>(null)
 
 const presetOptions = [
   { label: '近 7 天', value: '7d' },
@@ -48,20 +47,8 @@ const dateQuery = computed<{ startDate: string; endDate: string }>(() => {
   return { startDate: today.subtract(29, 'day').format('YYYY-MM-DD'), endDate: today.format('YYYY-MM-DD') }
 })
 
-/** 智能体过滤下拉（拉一页足量列表） */
-const agentOptions = ref<{ label: string; value: string }[]>([])
-onMounted(async () => {
-  try {
-    const res = await agentApi.page({ current: 1, size: 200 } as never)
-    const records = res.data.data?.records || []
-    agentOptions.value = records.map(a => ({ label: a.name, value: String(a.id) }))
-  } catch {
-    agentOptions.value = []
-  }
-})
-
-function openDetail(sessionId: string) {
-  detailSessionId.value = sessionId
+function openDetail(type: CostBillType, id: string) {
+  detailTarget.value = { type, id }
 }
 </script>
 
@@ -69,29 +56,25 @@ function openDetail(sessionId: string) {
   <div class="cost-page">
     <!-- 明细钻取视图（覆盖列表，返回保留筛选现场） -->
     <CostSessionDetail
-      v-if="detailSessionId"
-      :session-id="detailSessionId"
-      @back="detailSessionId = null"
+      v-if="detailTarget?.type === 'CHAT'"
+      :session-id="detailTarget.id"
+      @back="detailTarget = null"
+    />
+    <CostWorkflowDetail
+      v-else-if="detailTarget?.type === 'WORKFLOW'"
+      :run-id="detailTarget.id"
+      @back="detailTarget = null"
     />
 
-    <template v-else>
+    <template v-else-if="!detailTarget">
       <div class="cost-head flex items-center">
         <ATabs v-model:activeKey="activeTab" class="cost-tabs">
           <ATabPane key="overview" tab="概览看板" />
-          <ATabPane key="sessions" tab="会话账单" />
+          <ATabPane key="sessions" tab="执行账单" />
           <ATabPane key="pricing" tab="模型配价" />
         </ATabs>
         <div class="flex-1"></div>
         <template v-if="activeTab !== 'pricing'">
-          <ASelect
-            v-model:value="agentId"
-            :options="agentOptions"
-            placeholder="全部智能体"
-            allow-clear
-            show-search
-            option-filter-prop="label"
-            class="agent-filter"
-          />
           <ASegmented v-model:value="rangePreset" :options="presetOptions" />
           <ARangePicker
             v-if="rangePreset === 'custom'"
@@ -105,13 +88,11 @@ function openDetail(sessionId: string) {
         v-if="activeTab === 'overview'"
         :start-date="dateQuery.startDate"
         :end-date="dateQuery.endDate"
-        :agent-id="agentId"
       />
-      <CostSessionBills
+      <CostExecutionBills
         v-else-if="activeTab === 'sessions'"
         :start-date="dateQuery.startDate"
         :end-date="dateQuery.endDate"
-        :agent-id="agentId"
         @open-detail="openDetail"
       />
       <CostModelPricing v-else />
@@ -121,9 +102,11 @@ function openDetail(sessionId: string) {
 
 <style scoped lang="scss">
 .cost-page {
+  width: 100%;
   padding: var(--spacing-lg);
-  max-width: 1400px;
-  margin: 0 auto;
+  max-width: none;
+  margin: 0;
+  box-sizing: border-box;
 }
 
 .cost-head {
@@ -135,10 +118,6 @@ function openDetail(sessionId: string) {
     :deep(.ant-tabs-nav) {
       margin-bottom: 0;
     }
-  }
-
-  .agent-filter {
-    min-width: 180px;
   }
 }
 </style>

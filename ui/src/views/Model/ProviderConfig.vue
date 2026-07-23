@@ -22,6 +22,7 @@ const providerId = computed(() => route.params.providerId as string)
 const providerName = ref('')
 const providerDescription = ref('')
 const providerBaseUrl = ref('')
+const providerType = ref<string>()
 
 const modelList = ref<ModelConfigVO[]>([])
 const loading = ref<boolean>(false)
@@ -58,6 +59,7 @@ async function fetchProviderInfo() {
   providerName.value = data.name
   providerDescription.value = data.description || ''
   providerBaseUrl.value = data.baseUrl || ''
+  providerType.value = data.type
 }
 
 /**
@@ -204,6 +206,7 @@ onMounted(() => {
       v-model:visible="formVisible"
       :data="currentData"
       :provider-id="providerId"
+      :provider-type="providerType"
       @success="handleFormSuccess"
     />
   </div>

@@ -2,6 +2,9 @@ package com.hxh.apboa.engine.agent;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.hxh.apboa.common.enums.ToolChoiceStrategy;
 import com.hxh.apboa.node.agent.AgentNodeRequest;
 import io.agentscope.core.skill.AgentSkill;
@@ -50,5 +53,28 @@ class WorkflowAgentNodeExecutorTest {
                 ToolChoiceStrategy.NONE,
                 WorkflowAgentNodeExecutor.hasCallableCapabilities(toolkit, skillBox)))
                 .isEqualTo(1);
+    }
+
+    @Test
+    void shouldMergeQuickModelSwitchesWithoutEnablingAdvancedOverride() {
+        AgentNodeRequest request = new AgentNodeRequest();
+        request.setStreaming(false);
+        request.setThinking(false);
+
+        JsonNode quickOnly = WorkflowAgentNodeExecutor.mergeModelParamsOverride(request);
+        assertThat(quickOnly.get("streaming").asBoolean()).isFalse();
+        assertThat(quickOnly.get("thinking").asBoolean()).isFalse();
+
+        ObjectNode advanced = JsonNodeFactory.instance.objectNode();
+        advanced.put("temperature", 0.2);
+        advanced.put("streaming", false);
+        request.setModelParamsOverrideEnabled(true);
+        request.setModelParamsOverride(advanced);
+        request.setStreaming(true);
+
+        JsonNode merged = WorkflowAgentNodeExecutor.mergeModelParamsOverride(request);
+        assertThat(merged.get("temperature").asDouble()).isEqualTo(0.2);
+        assertThat(merged.get("streaming").asBoolean()).isTrue();
+        assertThat(merged.get("thinking").asBoolean()).isFalse();
     }
 }

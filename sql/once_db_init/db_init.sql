@@ -320,6 +320,11 @@ CREATE TABLE `chat_usage_record` (
   `model_label` varchar(100) NOT NULL COMMENT '模型名快照（模型删改后流水仍自洽）',
   `provider_type` varchar(50) DEFAULT NULL COMMENT '供应商类型快照',
   `biz_type` varchar(20) NOT NULL DEFAULT 'CHAT' COMMENT '场景：CHAT/WORKFLOW/SCHEDULED_JOB/SUB_AGENT',
+  `biz_id` varchar(64) DEFAULT NULL COMMENT '业务定义ID（workflow.id/未来任务定义ID）',
+  `biz_run_id` varchar(64) DEFAULT NULL COMMENT '业务运行ID（workflow_run.id/未来任务运行ID）',
+  `biz_label` varchar(160) DEFAULT NULL COMMENT '业务名称快照',
+  `step_id` varchar(100) DEFAULT NULL COMMENT '执行步骤ID（workflow node.id/未来任务步骤ID）',
+  `step_label` varchar(200) DEFAULT NULL COMMENT '执行步骤名称快照',
   `channel` varchar(20) DEFAULT NULL COMMENT '渠道：WEB/CHAT_KEY/SK_API',
   `input_tokens` bigint NOT NULL DEFAULT 0 COMMENT '输入token（run内累计）',
   `output_tokens` bigint NOT NULL DEFAULT 0 COMMENT '输出token（run内累计）',
@@ -335,7 +340,9 @@ CREATE TABLE `chat_usage_record` (
   KEY `idx_session` (`session_id`),
   KEY `idx_agent_time` (`agent_id`, `created_at`),
   KEY `idx_model_time` (`model_config_id`, `created_at`),
-  KEY `idx_user_time` (`user_id`, `created_at`)
+  KEY `idx_user_time` (`user_id`, `created_at`),
+  KEY `idx_biz_run` (`tenant_id`, `biz_type`, `biz_run_id`),
+  KEY `idx_biz_entity` (`tenant_id`, `biz_type`, `biz_id`, `created_at`)
 ) COMMENT='LLM用量成本流水表';
 
 DROP TABLE IF EXISTS `code_execution_config`;

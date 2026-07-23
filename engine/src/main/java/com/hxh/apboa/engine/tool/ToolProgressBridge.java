@@ -20,6 +20,8 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public final class ToolProgressBridge {
 
+    public static final String WORKFLOW_NODE_METADATA_KEY = "workflow_node";
+
     private static final Map<String, Consumer<Progress>> LISTENERS = new ConcurrentHashMap<>();
     /** 单次工具调用的阶段归档；完成时生成 workflowProcess，doFinally 注销时一并清理。 */
     private static final Map<String, List<Progress>> HISTORY = new ConcurrentHashMap<>();
@@ -114,5 +116,7 @@ public final class ToolProgressBridge {
         Integer requestIndex;
         Long occurredAt;
         Long elapsed;
+        /** 节点生命周期事件携带的增量快照；普通模型阶段为空。 */
+        Map<String, Object> workflowNode;
     }
 }

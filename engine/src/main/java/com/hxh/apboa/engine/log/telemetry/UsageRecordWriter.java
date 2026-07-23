@@ -143,19 +143,22 @@ public class UsageRecordWriter {
     }
 
     /**
-     * 工作流智能体节点记账（biz_type=WORKFLOW）：workflow 可独立运行、无会话可查租户归属，
-     * tenant 由执行上下文显式传入，session_id/message_id 置 NULL。异步执行不阻塞节点返回。
+     * 工作流智能体节点记账（biz_type=WORKFLOW）：对话内触发时写入 chat session_id，
+     * 使会话账单能够区分并汇总工作流内部消耗；独立运行时 session_id 仍为 NULL。
+     * 工作流没有独立 assistant 正文消息，因此 message_id 始终置 NULL。异步执行不阻塞节点返回。
      *
      * <p>workflowInstanceId 是 workflow_run 表主键（不是 chat_session id，绝不能写 session_id 列），
      * 仅用于日志定位；工作流名由调用方经变量上下文取得后组装进 agentLabel 传入——run 行在
      * 外层事务内未提交，此处按 instanceId 反查 workflow_run 是读不到的。
      *
+     * @param sessionId  对话内触发时的 chat_session.id；独立/调试运行传 null
      * @param agentId    对话内触发时的主智能体 DB id（消耗计入其名下，随之受其月预算管控）；
      *                   独立/调试运行为 null → agent_id=0
-     * @param agentLabel 归属快照：对话内为主智能体名，独立运行为「工作流：xxx」
+     * @param agentLabel 工作流名称快照（「工作流：xxx」），用于会话明细识别具体执行主体
      * @param userId     发起人（独立运行为登录用户；对话内匿名会话合法为 null）
      */
-    public void writeWorkflowRun(Long tenantId, String workflowInstanceId,
+    public void writeWorkflowRun(Long tenantId, String workflowId, String workflowInstanceId,
+                                 String workflowName, String nodeId, String nodeName, Long sessionId,
                                  Long agentId, String agentLabel, Long userId,
                                  Long modelConfigId, String channel,
                                  long inputTokens, long outputTokens, int iterationCount, Long durationMs) {
@@ -177,13 +180,15 @@ public class UsageRecordWriter {
 
                 jdbcTemplate.update(
                         "INSERT INTO chat_usage_record (tenant_id, session_id, message_id, agent_id, agent_label, user_id, "
-                                + "model_config_id, model_label, provider_type, biz_type, channel, "
+                                + "model_config_id, model_label, provider_type, biz_type, "
+                                + "biz_id, biz_run_id, biz_label, step_id, step_label, channel, "
                                 + "input_tokens, output_tokens, iteration_count, duration_ms, "
                                 + "input_price, output_price, cost, created_at) "
-                                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                        tenantId, null, null, effectiveAgentId, agentLabel, userId,
+                                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        tenantId, sessionId, null, effectiveAgentId, agentLabel, userId,
                         effectiveModelId, modelLabel != null ? modelLabel : "unknown", price.providerType(),
-                        ChatUsageRecord.BIZ_WORKFLOW, channel,
+                        ChatUsageRecord.BIZ_WORKFLOW,
+                        workflowId, workflowInstanceId, workflowName, nodeId, nodeName, channel,
                         inputTokens, outputTokens, iterationCount, durationMs,
                         price.inputPrice(), price.outputPrice(), cost, java.time.LocalDateTime.now()
                 );

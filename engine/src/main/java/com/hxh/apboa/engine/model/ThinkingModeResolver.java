@@ -9,7 +9,8 @@ import lombok.extern.slf4j.Slf4j;
  * 会话级思考模式覆盖的唯一读取口（Redis，实时读，前端切换即写入）。
  *
  * <p>值语义："1"=强制开 / "0"=强制关 / 无 key=null（默认开，由合成点兜底）。
- * ChatModelFactory 构建模型时按此合成 thinking（仅 DASH_SCOPE 生效），
+ * ChatModelFactory 构建模型时将其作为会话级覆盖参与合成（DASH_SCOPE 直接设置 thinking，
+ * OPEN_AI 选择 thinkingParams.on/off）；工作流节点显式快捷开关的优先级更高。
  * ReActAgentHelper 构建后把当次覆盖值记进 AgentMetadataStore，
  * AguiRequestProcessor 每次 run 对比检测变化触发 agent 重建。
  * 读取异常降级 null（跟随默认，不影响对话）。

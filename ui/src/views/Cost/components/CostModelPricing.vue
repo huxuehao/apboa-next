@@ -6,9 +6,9 @@
  *
  * @author huxuehao
  */
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { message, Modal } from 'ant-design-vue'
-import { ThunderboltOutlined } from '@ant-design/icons-vue'
+import { SearchOutlined, ThunderboltOutlined } from '@ant-design/icons-vue'
 import * as costApi from '@/api/cost'
 import type { CostModelPricingRow } from '@/types'
 import { matchOfficialPrice } from '@/components/model/officialModelPrices'
@@ -16,10 +16,37 @@ import { formatCny, formatTokens } from '../costFormat'
 
 const loading = ref(false)
 const rows = ref<CostModelPricingRow[]>([])
+const searchQuery = ref('')
+const pricingFilter = ref<'all' | 'unpriced' | 'priced'>('all')
 
 /** 行内编辑态：modelConfigId -> 草稿价 */
 const editing = ref<Record<string, { input: number | null; output: number | null }>>({})
 const savingId = ref<string | null>(null)
+
+const pricingOptions = [
+  { label: '全部', value: 'all' },
+  { label: '待配价', value: 'unpriced' },
+  { label: '已配价', value: 'priced' }
+]
+
+const pricedCount = computed(() => rows.value.filter(isPriced).length)
+const unpricedCount = computed(() => rows.value.length - pricedCount.value)
+const pricingCoverage = computed(() => rows.value.length > 0 ? pricedCount.value / rows.value.length * 100 : 0)
+const totalTokens30d = computed(() => rows.value.reduce((sum, row) => sum + Number(row.tokens30d || 0), 0))
+const totalCost30d = computed(() => rows.value.reduce((sum, row) => sum + Number(row.cost30d || 0), 0))
+const totalRuns30d = computed(() => rows.value.reduce((sum, row) => sum + Number(row.runCount30d || 0), 0))
+const totalUnpricedTokens30d = computed(() => rows.value.reduce((sum, row) => sum + Number(row.unpricedTokens30d || 0), 0))
+
+const filteredRows = computed(() => {
+  const keyword = searchQuery.value.trim().toLowerCase()
+  return rows.value.filter(row => {
+    if (pricingFilter.value === 'priced' && !isPriced(row)) return false
+    if (pricingFilter.value === 'unpriced' && isPriced(row)) return false
+    if (!keyword) return true
+    return [row.name, row.modelId, row.providerName, row.providerType]
+      .some(value => String(value || '').toLowerCase().includes(keyword))
+  })
+})
 
 async function loadData() {
   loading.value = true
@@ -129,159 +156,434 @@ async function fillAllUnpriced() {
 }
 
 const columns = [
-  { title: '模型', key: 'name', width: 220, ellipsis: true },
-  { title: '供应商', key: 'provider', width: 130, ellipsis: true },
-  { title: '输入单价（¥/M tok）', key: 'inputPrice', align: 'right' as const, width: 170 },
-  { title: '输出单价（¥/M tok）', key: 'outputPrice', align: 'right' as const, width: 170 },
-  { title: '状态', key: 'status', width: 110 },
-  { title: '近 30 天用量', key: 'usage', align: 'right' as const, width: 180 },
-  { title: '操作', key: 'action', width: 150 }
+  { title: '模型', key: 'name', width: 260 },
+  { title: '供应商', key: 'provider', width: 150 },
+  { title: '模型单价（¥ / 百万 Token）', key: 'pricing', width: 330 },
+  { title: '配价状态', key: 'status', width: 105 },
+  { title: '近 30 天消耗', key: 'usage', width: 205 },
+  { title: '操作', key: 'action', width: 125 }
 ]
 </script>
 
 <template>
   <div class="cost-pricing">
-    <div class="pricing-toolbar flex items-center">
-      <span class="pricing-hint">
-        单价按「元 / 百万 token」填写（供应商官网报价可直接抄）；本地模型（Ollama）填 0；
-        留空=未配价（只记 token 不计成本）。改价只影响之后的新账单，历史修正走保存后的重算确认。
-      </span>
-      <div class="flex-1"></div>
-      <AButton :loading="fillingAll" @click="fillAllUnpriced">
-        <ThunderboltOutlined /> 按官网价填充全部未配价
-      </AButton>
+    <div class="pricing-summary">
+      <div class="summary-item primary">
+        <div class="summary-label">模型配置</div>
+        <div class="summary-value">{{ rows.length }}<span class="summary-unit">个</span></div>
+        <div class="summary-note">其中 {{ rows.filter(row => row.enabled).length }} 个已启用</div>
+      </div>
+      <div class="summary-item" :class="{ warning: unpricedCount > 0 }">
+        <div class="summary-label">配价覆盖率</div>
+        <div class="summary-value">{{ pricingCoverage.toFixed(0) }}%</div>
+        <div class="summary-note">已配 {{ pricedCount }} · 待配 {{ unpricedCount }}</div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-label">近 30 天 Token</div>
+        <div class="summary-value">{{ formatTokens(totalTokens30d) }}</div>
+        <div class="summary-note">共 {{ Number(totalRuns30d).toLocaleString() }} 次模型回复</div>
+      </div>
+      <div class="summary-item" :class="{ warning: totalUnpricedTokens30d > 0 }">
+        <div class="summary-label">近 30 天已计成本</div>
+        <div class="summary-value money">{{ formatCny(totalCost30d) }}</div>
+        <div class="summary-note">
+          <span v-if="totalUnpricedTokens30d > 0">另有 {{ formatTokens(totalUnpricedTokens30d) }} Token 未计价</span>
+          <span v-else>全部用量均已纳入成本</span>
+        </div>
+      </div>
     </div>
 
-    <ATable
-      :columns="columns"
-      :data-source="rows"
-      :loading="loading"
-      row-key="modelConfigId"
-      size="middle"
-      :pagination="false"
-      :scroll="{ x: 1130 }"
-    >
-      <template #bodyCell="{ column, record }">
-        <template v-if="column.key === 'name'">
-          <div class="model-cell">
-            <span class="model-name">{{ record.name }}</span>
-            <span class="model-id" :title="record.modelId">{{ record.modelId }}</span>
-          </div>
-          <ATag v-if="!record.enabled" color="default" :bordered="false">已禁用</ATag>
-        </template>
-        <template v-else-if="column.key === 'provider'">
-          <span>{{ record.providerName || '—' }}</span>
-        </template>
-        <template v-else-if="column.key === 'inputPrice'">
-          <AInputNumber
-            v-if="editing[record.modelConfigId]"
-            v-model:value="editing[record.modelConfigId]!.input"
-            :min="0"
-            :precision="4"
-            size="small"
-            style="width: 120px"
-            placeholder="留空=未配价"
-          />
-          <span v-else class="num">{{ record.inputPrice != null ? record.inputPrice.toFixed(2) : '—' }}</span>
-        </template>
-        <template v-else-if="column.key === 'outputPrice'">
-          <AInputNumber
-            v-if="editing[record.modelConfigId]"
-            v-model:value="editing[record.modelConfigId]!.output"
-            :min="0"
-            :precision="4"
-            size="small"
-            style="width: 120px"
-            placeholder="留空=未配价"
-          />
-          <span v-else class="num">{{ record.outputPrice != null ? record.outputPrice.toFixed(2) : '—' }}</span>
-        </template>
-        <template v-else-if="column.key === 'status'">
-          <ATag v-if="isPriced(record)" color="green" :bordered="false">已配价</ATag>
-          <ATooltip v-else :title="`近30天有 ${formatTokens(record.unpricedTokens30d)} token 未计入成本`">
-            <ATag color="orange" :bordered="false">未配价</ATag>
-          </ATooltip>
-        </template>
-        <template v-else-if="column.key === 'usage'">
-          <span class="num">{{ formatTokens(record.tokens30d) }} tok · {{ isPriced(record) ? formatCny(record.cost30d) : '？' }}</span>
-        </template>
-        <template v-else-if="column.key === 'action'">
-          <template v-if="editing[record.modelConfigId]">
-            <AButton type="link" size="small" :loading="savingId === record.modelConfigId" @click="saveEdit(record)">保存</AButton>
-            <AButton type="text" size="small" @click="cancelEdit(record)">取消</AButton>
+    <section class="pricing-panel">
+      <div class="pricing-head">
+        <div>
+          <div class="section-title">模型价格管理</div>
+          <div class="section-hint">输入、输出价格均按人民币元 / 百万 Token 维护。</div>
+        </div>
+        <AButton :loading="fillingAll" @click="fillAllUnpriced">
+          <ThunderboltOutlined />
+          补全未配价模型
+        </AButton>
+      </div>
+
+      <div class="pricing-guide">
+        <div class="guide-step">
+          <span class="guide-index">1</span>
+          <span><b>云端模型</b>参考供应商官网原价填写</span>
+        </div>
+        <div class="guide-step">
+          <span class="guide-index">2</span>
+          <span><b>本地模型</b>无外部调用费时填写 0</span>
+        </div>
+        <div class="guide-step">
+          <span class="guide-index">3</span>
+          <span><b>保存新价</b>后可选择重算近 30 天历史</span>
+        </div>
+      </div>
+
+      <div class="pricing-toolbar">
+        <AInput v-model:value="searchQuery" allow-clear placeholder="搜索模型、Model ID 或供应商" class="model-search">
+          <template #prefix><SearchOutlined /></template>
+        </AInput>
+        <ASegmented v-model:value="pricingFilter" :options="pricingOptions" />
+        <span class="filter-result">显示 {{ filteredRows.length }} / {{ rows.length }} 个模型</span>
+      </div>
+
+      <ATable
+        :columns="columns"
+        :data-source="filteredRows"
+        :loading="loading"
+        row-key="modelConfigId"
+        size="middle"
+        :pagination="false"
+        :scroll="{ x: 1175 }"
+      >
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.key === 'name'">
+            <div class="model-cell">
+              <div class="model-title-row">
+                <span class="model-name" :title="record.name">{{ record.name }}</span>
+                <ATag v-if="!record.enabled" color="default" :bordered="false">已禁用</ATag>
+              </div>
+              <span class="model-id" :title="record.modelId">{{ record.modelId }}</span>
+            </div>
           </template>
-          <AButton v-else type="link" size="small" @click="startEdit(record)">编辑</AButton>
+          <template v-else-if="column.key === 'provider'">
+            <div class="provider-cell">
+              <span>{{ record.providerName || '—' }}</span>
+              <span class="provider-type">{{ record.providerType || '未知类型' }}</span>
+            </div>
+          </template>
+          <template v-else-if="column.key === 'pricing'">
+            <div v-if="editing[record.modelConfigId]" class="price-editor">
+              <label>
+                <span>输入</span>
+                <AInputNumber
+                  v-model:value="editing[record.modelConfigId]!.input"
+                  :min="0"
+                  :precision="4"
+                  size="small"
+                  placeholder="未配价"
+                />
+              </label>
+              <label>
+                <span>输出</span>
+                <AInputNumber
+                  v-model:value="editing[record.modelConfigId]!.output"
+                  :min="0"
+                  :precision="4"
+                  size="small"
+                  placeholder="未配价"
+                />
+              </label>
+            </div>
+            <div v-else class="price-view">
+              <div class="price-pair">
+                <span class="price-label">输入</span>
+                <b class="num">{{ record.inputPrice != null ? `¥${record.inputPrice.toFixed(4)}` : '—' }}</b>
+              </div>
+              <span class="price-divider"></span>
+              <div class="price-pair">
+                <span class="price-label">输出</span>
+                <b class="num">{{ record.outputPrice != null ? `¥${record.outputPrice.toFixed(4)}` : '—' }}</b>
+              </div>
+            </div>
+          </template>
+          <template v-else-if="column.key === 'status'">
+            <ATag v-if="isPriced(record)" color="green" :bordered="false">已配价</ATag>
+            <ATooltip v-else :title="`近30天有 ${formatTokens(record.unpricedTokens30d)} Token 未计入成本`">
+              <ATag color="orange" :bordered="false">待配价</ATag>
+            </ATooltip>
+          </template>
+          <template v-else-if="column.key === 'usage'">
+            <div class="usage-cell">
+              <span class="usage-main num">{{ formatTokens(record.tokens30d) }} Token</span>
+              <span class="usage-sub num">{{ Number(record.runCount30d).toLocaleString() }} 次回复</span>
+              <span v-if="isPriced(record)" class="usage-cost money num">{{ formatCny(record.cost30d) }}</span>
+              <span v-else class="usage-unpriced">尚未计入成本</span>
+            </div>
+          </template>
+          <template v-else-if="column.key === 'action'">
+            <div v-if="editing[record.modelConfigId]" class="action-group">
+              <AButton type="primary" size="small" :loading="savingId === record.modelConfigId" @click="saveEdit(record)">保存</AButton>
+              <AButton type="text" size="small" @click="cancelEdit(record)">取消</AButton>
+            </div>
+            <AButton v-else type="link" size="small" @click="startEdit(record)">编辑单价</AButton>
+          </template>
         </template>
-      </template>
-    </ATable>
-    <div class="note">
-      价格表快照收录常见模型的官网价（<b>按原价、不含限时折扣</b>），填充后建议与官网核对；
-      未收录的模型（如自定义命名）请查官网手动填写。
-    </div>
+        <template #emptyText>
+          <AEmpty description="没有符合条件的模型" />
+        </template>
+      </ATable>
+
+      <div class="pricing-note">
+        官网价格快照按原价维护，不包含限时折扣；自动填充后仍建议与供应商官网核对。自定义模型名无法匹配时，请手动填写。
+      </div>
+    </section>
   </div>
 </template>
 
 <style scoped lang="scss">
 .cost-pricing {
-  background: var(--color-bg-white);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.pricing-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--spacing-md);
+
+  @media (max-width: 900px) {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.summary-item {
+  position: relative;
+  overflow: hidden;
+  min-width: 0;
+  padding: var(--spacing-md) var(--spacing-lg);
   border: 1px solid var(--color-border-light);
   border-radius: var(--border-radius-lg);
-  padding: var(--spacing-md) var(--spacing-lg);
+  background: var(--color-bg-white);
 
-  /* 放开全局 .ant-tag 120px 截断 */
-  :deep(.ant-table-cell .ant-tag) {
-    max-width: none;
+  &::before {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 3px;
+    content: '';
+    background: #d9d9d9;
   }
+
+  &.primary::before { background: var(--color-primary); }
+  &.warning::before { background: #fa8c16; }
+}
+
+.summary-label {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.summary-value {
+  margin-top: 2px;
+  font-size: 24px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.summary-unit {
+  margin-left: 4px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: 400;
+}
+
+.summary-note {
+  min-height: 18px;
+  margin-top: 2px;
+  color: var(--color-text-placeholder);
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.pricing-panel {
+  min-width: 0;
+  padding: var(--spacing-md) var(--spacing-lg) 0;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--border-radius-lg);
+  background: var(--color-bg-white);
+
+  :deep(.ant-table-cell .ant-tag) {
+    height: auto;
+    max-width: none;
+    margin: 0;
+    white-space: normal;
+  }
+}
+
+.pricing-head,
+.pricing-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.pricing-head {
+  justify-content: space-between;
+}
+
+.section-title {
+  font-weight: 600;
+}
+
+.section-hint,
+.filter-result {
+  margin-top: 2px;
+  color: var(--color-text-placeholder);
+  font-size: var(--font-size-xs);
+}
+
+.pricing-guide {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  overflow: hidden;
+  margin: var(--spacing-md) 0;
+  border: 1px solid #d6e4ff;
+  border-radius: var(--border-radius-md);
+  background: #d6e4ff;
+
+  @media (max-width: 900px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.guide-step {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 12px;
+  color: var(--color-text-secondary);
+  background: #f5f9ff;
+  font-size: var(--font-size-xs);
+
+  b { color: var(--color-text); }
+}
+
+.guide-index {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  color: #fff;
+  background: var(--color-primary);
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 20px;
 }
 
 .pricing-toolbar {
-  gap: var(--spacing-md);
   margin-bottom: var(--spacing-md);
-
-  .pricing-hint {
-    font-size: var(--font-size-xs);
-    color: var(--color-text-placeholder);
-    max-width: 640px;
-  }
+  flex-wrap: wrap;
 }
 
-.model-cell {
-  display: inline-flex;
+.model-search {
+  width: 300px;
+}
+
+.filter-result {
+  margin-left: auto;
+}
+
+.model-cell,
+.provider-cell,
+.usage-cell {
+  display: flex;
   flex-direction: column;
   min-width: 0;
-  vertical-align: middle;
-  margin-right: 6px;
-
-  .model-name {
-    font-weight: 600;
-  }
-
-  .model-id {
-    font-size: var(--font-size-xs);
-    color: var(--color-text-placeholder);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
 }
 
-.muted {
-  color: var(--color-text-secondary);
+.model-title-row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 6px;
+}
+
+.model-name {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-id,
+.provider-type,
+.usage-sub {
+  margin-top: 3px;
+  overflow: hidden;
+  color: var(--color-text-placeholder);
+  font-size: var(--font-size-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.price-editor,
+.price-view {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  gap: 12px;
+}
+
+.price-editor label {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: center;
+  gap: 5px;
+  color: var(--color-text-placeholder);
+  font-size: var(--font-size-xs);
+
+  :deep(.ant-input-number) { width: 100%; }
+}
+
+.price-view {
+  position: relative;
+}
+
+.price-pair {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.price-label {
+  color: var(--color-text-placeholder);
+  font-size: var(--font-size-xs);
+}
+
+.price-divider {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 50%;
+  width: 1px;
+  background: var(--color-border-light);
+}
+
+.usage-main {
+  font-weight: 600;
+}
+
+.usage-cost,
+.usage-unpriced {
+  margin-top: 4px;
+  font-size: var(--font-size-xs);
+}
+
+.usage-unpriced {
+  color: #d46b08;
+}
+
+.action-group {
+  display: flex;
+  gap: 2px;
+}
+
+.pricing-note {
+  padding: 11px 0;
+  border-top: 1px dashed var(--color-border-light);
+  color: var(--color-text-placeholder);
+  font-size: var(--font-size-xs);
+}
+
+.money {
+  color: #d4380d;
 }
 
 .num {
   font-variant-numeric: tabular-nums;
-}
-
-.note {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-placeholder);
-  padding-top: var(--spacing-sm);
-  border-top: 1px dashed var(--color-border-light);
-  margin-top: var(--spacing-sm);
-
-  b {
-    color: var(--color-text-secondary);
-  }
 }
 </style>

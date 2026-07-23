@@ -53,7 +53,7 @@ export interface SubProcessStep {
   subToolUseId?: string
 }
 
-/** 工作流工具的最终执行快照：实时完成事件与 tool 消息 workflowProcess 字段同构。 */
+/** 工作流工具执行快照：执行中由节点事件增量组装，完成后由权威快照校准。 */
 export interface WorkflowProcess {
   runId?: string
   workflowId?: string
@@ -65,6 +65,8 @@ export interface WorkflowProcess {
 }
 
 export interface WorkflowProcessNode {
+  /** 单次节点执行标识；循环中同一 nodeId 会有多个 invocationId。 */
+  invocationId?: string
   nodeId: string
   title?: string
   type?: string

@@ -1,6 +1,13 @@
 import request from '@/utils/request'
 import type { ApiResponse, PageResult } from '@/types'
-import type { CostModelPricingRow, CostOverviewVO, CostSessionBillRow, CostSessionDetailVO } from '@/types'
+import type {
+  CostExecutionBillRow,
+  CostModelPricingRow,
+  CostOverviewVO,
+  CostSessionBillRow,
+  CostSessionDetailVO,
+  CostWorkflowDetailVO
+} from '@/types'
 
 const BASE = '/api/agent/cost'
 
@@ -27,12 +34,22 @@ export function pageSessions(query: CostRangeQuery & { current: number; size: nu
   return request.get<ApiResponse<PageResult<CostSessionBillRow>>>(`${BASE}/sessions`, { params: query })
 }
 
+/** 统一执行账单分页（对话 / 工作流；定时任务后续按同一契约接入）。 */
+export function pageBills(query: CostRangeQuery & { current: number; size: number; orderBy?: 'cost' | 'time' }) {
+  return request.get<ApiResponse<PageResult<CostExecutionBillRow>>>(`${BASE}/bills`, { params: query })
+}
+
 /**
  * 单会话逐轮成本明细（实际发生口径，含废弃分支标记）
  * GET /agent/cost/session/{sessionId}
  */
 export function sessionDetail(sessionId: string) {
   return request.get<ApiResponse<CostSessionDetailVO>>(`${BASE}/session/${sessionId}`)
+}
+
+/** 工作流单次运行成本详情。 */
+export function workflowDetail(runId: string) {
+  return request.get<ApiResponse<CostWorkflowDetailVO>>(`${BASE}/workflow/${runId}`)
 }
 
 /**

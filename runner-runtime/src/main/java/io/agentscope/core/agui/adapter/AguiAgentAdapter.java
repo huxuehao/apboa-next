@@ -23,6 +23,7 @@ import com.hxh.apboa.engine.log.ChatLogHook;
 import com.hxh.apboa.common.util.AgentMetadataStore;
 import com.hxh.apboa.engine.log.telemetry.RunStatAccumulator;
 import com.hxh.apboa.engine.log.telemetry.RunTelemetryExtractor;
+import com.hxh.apboa.engine.tool.ToolProgressBridge;
 import com.hxh.apboa.engine.tool.WorkflowProcessSnapshot;
 import io.agentscope.core.ReActAgent;
 import io.agentscope.core.agent.Agent;
@@ -484,6 +485,10 @@ public class AguiAgentAdapter {
                             }
                             if (metadata.get("detail") != null) {
                                 value.put("detail", metadata.get("detail"));
+                            }
+                            if (metadata.get(ToolProgressBridge.WORKFLOW_NODE_METADATA_KEY) != null) {
+                                value.put("node",
+                                        metadata.get(ToolProgressBridge.WORKFLOW_NODE_METADATA_KEY));
                             }
                             events.add(new AguiEvent.Custom(
                                     state.threadId,

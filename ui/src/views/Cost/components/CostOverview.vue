@@ -21,7 +21,6 @@ use([CanvasRenderer, LineChart, TooltipComponent, GridComponent, LegendComponent
 const props = defineProps<{
   startDate: string
   endDate: string
-  agentId?: string
 }>()
 
 const loading = ref(false)
@@ -32,8 +31,7 @@ async function loadData() {
   try {
     const res = await costApi.overview({
       startDate: props.startDate,
-      endDate: props.endDate,
-      agentId: props.agentId
+      endDate: props.endDate
     })
     data.value = res.data.data
   } catch (e) {
@@ -43,7 +41,7 @@ async function loadData() {
   }
 }
 
-watch(() => [props.startDate, props.endDate, props.agentId], loadData, { immediate: true })
+watch(() => [props.startDate, props.endDate], loadData, { immediate: true })
 
 /** 补配价后重算当前区间的历史流水（未配价告警的配套动作） */
 const recalcLoading = ref(false)
@@ -137,57 +135,138 @@ const trendOption = computed(() => {
   }
 })
 
-/** 模型分布条：宽度按最大成本归一（未配价模型排后、灰条按 token 归一提示体量） */
-const modelBars = computed(() => {
-  const rows = data.value?.byModel || []
-  const maxCost = Math.max(...rows.map(r => Number(r.cost)), 0.000001)
-  return rows.map(r => ({
-    ...r,
-    pct: Math.max(Number(r.cost) / maxCost * 100, Number(r.cost) > 0 ? 2 : 0),
-    unpriced: Number(r.unpricedTokens) > 0 && Number(r.cost) === 0
-  }))
+const totalTokens = computed(() =>
+  Number(data.value?.inputTokens || 0) + Number(data.value?.outputTokens || 0),
+)
+
+const averageRunCost = computed(() => {
+  const runs = Number(data.value?.runCount || 0)
+  return runs > 0 ? Number(data.value?.totalCost || 0) / runs : 0
 })
 
-const bizTypeLabels: Record<string, string> = {
-  CHAT: '对话',
-  WORKFLOW: '工作流',
-  SCHEDULED_JOB: '定时任务',
-  SUB_AGENT: '子智能体'
+const workflowRunCount = computed(() =>
+  Number(data.value?.byBizType?.find(item => item.bizType === 'WORKFLOW')?.runCount || 0),
+)
+
+/** 模型分布：补充成本占比、调用次数与 token 体量；未配价模型继续以斜纹提示。 */
+const modelBars = computed(() => {
+  const rows = data.value?.byModel || []
+  return rows.map(r => {
+    const share = costShare(r.cost)
+    return {
+      ...r,
+      share,
+      pct: barWidth(share, r.cost),
+      totalTokens: Number(r.inputTokens) + Number(r.outputTokens),
+      unpriced: Number(r.unpricedTokens) > 0 && Number(r.cost) === 0
+    }
+  })
+})
+
+const bizTypeMeta: Record<string, { label: string; description: string }> = {
+  CHAT: { label: '对话', description: '主智能体直接生成的对话回复' },
+  WORKFLOW: { label: '工作流', description: '工作流智能体节点产生的模型调用' },
+  SCHEDULED_JOB: { label: '定时任务', description: '由调度任务自动触发的模型调用' },
+  SUB_AGENT: { label: '子智能体', description: '主智能体委派给子智能体的模型调用' }
+}
+
+const channelMeta: Record<string, { label: string; description: string }> = {
+  WEB: { label: '网页入口', description: '网页对话及其继续触发的子智能体、工作流' },
+  CHAT_KEY: { label: '外嵌页面', description: '通过 Chat Key 外嵌页面进入' },
+  SK_API: { label: 'API 调用', description: '通过 API Key 接口进入' },
+  STANDALONE: { label: '直接运行', description: '从工作流编辑器运行或调试，不经过对话入口' },
+  UNKNOWN: { label: '历史未标记', description: '渠道字段上线前产生的存量流水' }
+}
+
+function getBizTypeMeta(bizType: string) {
+  return bizTypeMeta[bizType] || { label: bizType, description: '其他业务场景' }
+}
+
+function getChannelMeta(channel: string | null) {
+  return channelMeta[channel ?? 'UNKNOWN'] || { label: channel || '历史未标记', description: '其他入口渠道' }
+}
+
+function costShare(cost: number) {
+  const total = Number(data.value?.totalCost || 0)
+  return total > 0 ? Number(cost) / total * 100 : 0
+}
+
+function barWidth(share: number, cost: number) {
+  return Number(cost) > 0 ? Math.max(share, 2) : 0
+}
+
+function formatShare(share: number) {
+  return `${share >= 10 ? share.toFixed(1) : share.toFixed(2)}%`
+}
+
+function formatCount(value: number | string) {
+  return Number(value || 0).toLocaleString()
+}
+
+function topAgentRowKey(record: CostOverviewVO['topAgents'][number]) {
+  return `${record.agentId}-${record.agentName}`
+}
+
+function getSubjectType(record: CostOverviewVO['topAgents'][number]) {
+  if (Number(record.agentId) !== 0) return '智能体'
+  const bizTypes = String(record.bizTypes || '')
+  if (bizTypes.includes('WORKFLOW')) return '工作流'
+  if (bizTypes.includes('SCHEDULED_JOB')) return '定时任务'
+  return '非会话任务'
 }
 
 const bizBars = computed(() => {
-  const rows = data.value?.byBizType || []
-  const maxCost = Math.max(...rows.map(r => Number(r.cost)), 0.000001)
-  return rows.map(r => ({
-    ...r,
-    label: bizTypeLabels[r.bizType] || r.bizType,
-    pct: Math.max(Number(r.cost) / maxCost * 100, 2)
-  }))
+  const crossRows = data.value?.byBizChannel || []
+  return (data.value?.byBizType || []).map(r => {
+    const meta = getBizTypeMeta(r.bizType)
+    const share = costShare(r.cost)
+    return {
+      ...r,
+      ...meta,
+      share,
+      pct: barWidth(share, r.cost),
+      totalTokens: Number(r.inputTokens) + Number(r.outputTokens),
+      channelBreakdown: crossRows
+        .filter(part => part.bizType === r.bizType)
+        .map(part => ({
+          ...part,
+          key: part.channel ?? 'UNKNOWN',
+          label: getChannelMeta(part.channel).label
+        }))
+    }
+  })
 })
 
-const channelLabels: Record<string, string> = {
-  WEB: '网页对话',
-  CHAT_KEY: '外嵌页面',
-  SK_API: 'API 调用',
-  STANDALONE: '独立运行'
-}
-
 const channelBars = computed(() => {
-  const rows = data.value?.byChannel || []
-  const maxCost = Math.max(...rows.map(r => Number(r.cost)), 0.000001)
-  return rows.map(r => ({
-    ...r,
-    key: r.channel ?? 'UNKNOWN',
-    label: r.channel ? (channelLabels[r.channel] || r.channel) : '未标记（历史）',
-    pct: Math.max(Number(r.cost) / maxCost * 100, 2)
-  }))
+  const crossRows = data.value?.byBizChannel || []
+  return (data.value?.byChannel || []).map(r => {
+    const meta = getChannelMeta(r.channel)
+    const share = costShare(r.cost)
+    return {
+      ...r,
+      ...meta,
+      key: r.channel ?? 'UNKNOWN',
+      share,
+      pct: barWidth(share, r.cost),
+      totalTokens: Number(r.inputTokens) + Number(r.outputTokens),
+      bizBreakdown: crossRows
+        .filter(part => (part.channel ?? null) === (r.channel ?? null))
+        .map(part => ({
+          ...part,
+          label: getBizTypeMeta(part.bizType).label
+        }))
+    }
+  })
 })
 
 const topAgentColumns = [
   { title: '主体', dataIndex: 'agentName', key: 'agentName', ellipsis: true },
-  { title: '会话数', dataIndex: 'sessionCount', key: 'sessionCount', align: 'right' as const, width: 80 },
+  { title: '类型', key: 'subjectType', width: 90 },
+  { title: '调用', dataIndex: 'runCount', key: 'runCount', align: 'right' as const, width: 70 },
+  { title: '关联会话', dataIndex: 'sessionCount', key: 'sessionCount', align: 'right' as const, width: 86 },
   { title: 'token（入/出）', key: 'tokens', align: 'right' as const, width: 150 },
-  { title: '成本', key: 'cost', align: 'right' as const, width: 100 }
+  { title: '成本', key: 'cost', align: 'right' as const, width: 100 },
+  { title: '占比', key: 'share', align: 'right' as const, width: 72 }
 ]
 </script>
 
@@ -237,19 +316,28 @@ const topAgentColumns = [
           </div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">输入 token</div>
-          <div class="stat-value">{{ formatTokens(data.inputTokens) }}</div>
-          <div class="stat-sub">计价部分 {{ formatCny(data.inputCost) }}</div>
+          <div class="stat-label">总 token</div>
+          <div class="stat-value">{{ formatTokens(totalTokens) }}</div>
+          <div class="stat-sub stat-split">
+            <span>输入 {{ formatTokens(data.inputTokens) }}</span>
+            <span>输出 {{ formatTokens(data.outputTokens) }}</span>
+          </div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">输出 token</div>
-          <div class="stat-value">{{ formatTokens(data.outputTokens) }}</div>
-          <div class="stat-sub">计价部分 {{ formatCny(data.outputCost) }}</div>
+          <div class="stat-label">模型调用</div>
+          <div class="stat-value">{{ formatCount(data.runCount) }}<span class="stat-unit">次</span></div>
+          <div class="stat-sub stat-split">
+            <span>覆盖 {{ formatCount(data.sessionCount) }} 个会话</span>
+            <span>工作流 {{ formatCount(workflowRunCount) }} 次</span>
+          </div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">调用 / 会话</div>
-          <div class="stat-value">{{ data.runCount }}<span class="stat-unit">次</span></div>
-          <div class="stat-sub">覆盖 {{ data.sessionCount }} 个会话</div>
+          <div class="stat-label">平均单次成本</div>
+          <div class="stat-value money">{{ formatCny(averageRunCost) }}</div>
+          <div class="stat-sub stat-split">
+            <span>输入 {{ formatCny(data.inputCost) }}</span>
+            <span>输出 {{ formatCny(data.outputCost) }}</span>
+          </div>
         </div>
       </div>
 
@@ -265,67 +353,141 @@ const topAgentColumns = [
         <div class="panel">
           <div class="panel-head">
             <span class="panel-title">按模型分布</span>
-            <span class="panel-hint">按成本降序</span>
+            <span class="panel-hint">成本 / 调用 / token</span>
           </div>
-          <div class="hbar-list">
-            <div v-for="m in modelBars" :key="m.modelConfigId" class="hbar-row">
-              <span class="hbar-name" :title="m.modelLabel">{{ m.modelLabel }}</span>
-              <span class="hbar-track">
-                <span class="hbar-fill" :class="{ unpriced: m.unpriced }" :style="{ width: (m.unpriced ? 100 : m.pct) + '%' }"></span>
-              </span>
-              <span class="hbar-val">
-                <ATag v-if="m.unpriced" color="orange">未配价 {{ formatTokens(m.unpricedTokens) }}</ATag>
-                <template v-else>{{ formatCny(m.cost) }}</template>
-              </span>
+          <div class="model-list">
+            <div v-for="m in modelBars" :key="m.modelConfigId" class="model-row">
+              <div class="model-head">
+                <span class="model-name" :title="m.modelLabel">{{ m.modelLabel }}</span>
+                <span v-if="m.unpriced">
+                  <ATag color="orange">未配价 {{ formatTokens(m.unpricedTokens) }}</ATag>
+                </span>
+                <span v-else class="model-value">
+                  <span class="money">{{ formatCny(m.cost) }}</span>
+                  <span class="share">{{ formatShare(m.share) }}</span>
+                </span>
+              </div>
+              <div class="dimension-track">
+                <span
+                  class="dimension-fill model"
+                  :class="{ unpriced: m.unpriced }"
+                  :style="{ width: (m.unpriced ? 100 : m.pct) + '%' }"
+                ></span>
+              </div>
+              <div class="model-meta">
+                <span>{{ formatCount(m.runCount) }} 次调用</span>
+                <span>{{ formatTokens(m.totalTokens) }} token</span>
+                <span>输入 {{ formatTokens(m.inputTokens) }} / 输出 {{ formatTokens(m.outputTokens) }}</span>
+              </div>
             </div>
             <AEmpty v-if="!modelBars.length" :image-style="{ height: '48px' }" description="暂无数据" />
           </div>
         </div>
       </div>
 
-      <!-- TopN + 场景分布 -->
-      <div class="chart-grid bottom">
-        <div class="panel">
+      <!-- 业务场景与入口渠道是两套交叉口径，保持并列展示 -->
+      <div class="chart-grid bottom dimension-grid">
+        <div class="panel scene-panel">
           <div class="panel-head">
-            <span class="panel-title">消耗主体 Top10</span>
-            <span class="panel-hint">按成本降序</span>
+            <span class="panel-title">按业务场景</span>
+            <span class="panel-hint">成本花在哪类能力</span>
           </div>
-          <ATable
-            :columns="topAgentColumns"
-            :data-source="data.topAgents"
-            :pagination="false"
-            size="small"
-            row-key="agentId"
-          >
-            <template #bodyCell="{ column, record }">
-              <template v-if="column.key === 'tokens'">
-                <span class="num">{{ formatTokens(record.inputTokens) }} / {{ formatTokens(record.outputTokens) }}</span>
-              </template>
-              <template v-else-if="column.key === 'cost'">
-                <span class="money num">{{ formatCny(record.cost) }}</span>
-              </template>
-            </template>
-          </ATable>
+
+          <div class="dimension-list">
+            <div v-for="b in bizBars" :key="b.bizType" class="dimension-row">
+              <div class="dimension-head">
+                <div class="dimension-title-wrap">
+                  <span class="dimension-title">{{ b.label }}</span>
+                  <span class="dimension-description">{{ b.description }}</span>
+                </div>
+                <div class="dimension-value">
+                  <span class="money">{{ formatCny(b.cost) }}</span>
+                  <span class="share">{{ formatShare(b.share) }}</span>
+                </div>
+              </div>
+              <div class="dimension-track">
+                <span class="dimension-fill scene" :style="{ width: b.pct + '%' }"></span>
+              </div>
+              <div class="dimension-meta">
+                <span>{{ formatCount(b.runCount) }} 次调用 · {{ formatTokens(b.totalTokens) }} token</span>
+                <span v-if="b.channelBreakdown.length" class="breakdown">
+                  入口：
+                  <span v-for="part in b.channelBreakdown" :key="part.key" class="breakdown-chip">
+                    {{ part.label }} {{ formatCny(part.cost) }}
+                  </span>
+                </span>
+              </div>
+            </div>
+            <AEmpty v-if="!bizBars.length" :image-style="{ height: '48px' }" description="暂无数据" />
+          </div>
         </div>
-        <div class="panel">
+        <div class="panel channel-panel">
           <div class="panel-head">
-            <span class="panel-title">按渠道 / 场景</span>
-            <span class="panel-hint">钱从哪个入口烧掉</span>
+            <span class="panel-title">按入口渠道</span>
+            <span class="panel-hint">请求从哪里进入</span>
           </div>
-          <div class="hbar-list">
-            <div v-for="b in channelBars" :key="b.key" class="hbar-row">
-              <span class="hbar-name">{{ b.label }}</span>
-              <span class="hbar-track"><span class="hbar-fill" :style="{ width: b.pct + '%' }"></span></span>
-              <span class="hbar-val">{{ formatCny(b.cost) }}</span>
+          <div class="channel-grid">
+            <div v-for="c in channelBars" :key="c.key" class="channel-card">
+              <div class="channel-card-head">
+                <span class="channel-name">{{ c.label }}</span>
+                <span class="share">{{ formatShare(c.share) }}</span>
+              </div>
+              <div class="channel-description">{{ c.description }}</div>
+              <div class="channel-cost money">{{ formatCny(c.cost) }}</div>
+              <div class="dimension-track">
+                <span class="dimension-fill channel" :style="{ width: c.pct + '%' }"></span>
+              </div>
+              <div class="channel-metrics">
+                {{ formatCount(c.runCount) }} 次调用 · {{ formatTokens(c.totalTokens) }} token
+              </div>
+              <div v-if="c.bizBreakdown.length" class="channel-breakdown">
+                <span v-for="part in c.bizBreakdown" :key="part.bizType" class="breakdown-chip">
+                  {{ part.label }} {{ formatCny(part.cost) }}
+                </span>
+              </div>
             </div>
             <AEmpty v-if="!channelBars.length" :image-style="{ height: '48px' }" description="暂无数据" />
           </div>
-          <div class="biz-split">
-            场景口径：
-            <span v-for="b in bizBars" :key="b.bizType" class="biz-item">{{ b.label }} {{ formatCny(b.cost) }}</span>
-            <span v-if="!bizBars.length">暂无数据</span>
+          <div class="dimension-note">
+            <span class="note-mark">口径说明</span>
+            业务场景解释“花在哪里”，入口渠道解释“从哪里触发”，两组金额不要相加。
           </div>
         </div>
+      </div>
+
+      <!-- 消耗主体全宽展示，避免长工作流名称与多列指标相互挤压 -->
+      <div class="panel subject-panel">
+        <div class="panel-head">
+          <span class="panel-title">消耗主体 Top10</span>
+          <span class="panel-hint">按成本降序，调用与关联会话分开统计</span>
+        </div>
+        <ATable
+          :columns="topAgentColumns"
+          :data-source="data.topAgents"
+          :pagination="false"
+          size="small"
+          :row-key="topAgentRowKey"
+        >
+          <template #bodyCell="{ column, record }">
+            <template v-if="column.key === 'subjectType'">
+              <ATag :color="getSubjectType(record) === '智能体' ? 'blue' : 'purple'" :bordered="false">
+                {{ getSubjectType(record) }}
+              </ATag>
+            </template>
+            <template v-else-if="column.key === 'tokens'">
+              <span class="num">{{ formatTokens(record.inputTokens) }} / {{ formatTokens(record.outputTokens) }}</span>
+            </template>
+            <template v-else-if="column.key === 'sessionCount'">
+              <span class="num">{{ Number(record.sessionCount) > 0 ? formatCount(record.sessionCount) : '—' }}</span>
+            </template>
+            <template v-else-if="column.key === 'cost'">
+              <span class="money num">{{ formatCny(record.cost) }}</span>
+            </template>
+            <template v-else-if="column.key === 'share'">
+              <span class="num share">{{ formatShare(costShare(record.cost)) }}</span>
+            </template>
+          </template>
+        </ATable>
       </div>
     </div>
   </ASpin>
@@ -396,6 +558,13 @@ const topAgentColumns = [
     color: var(--color-text-placeholder);
     margin-top: 2px;
     font-variant-numeric: tabular-nums;
+
+    &.stat-split {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
   }
 }
 
@@ -449,60 +618,259 @@ const topAgentColumns = [
   height: 260px;
 }
 
-.hbar-list {
+.model-list {
   display: flex;
   flex-direction: column;
+  gap: 4px;
 }
 
-.hbar-row {
-  display: grid;
-  grid-template-columns: minmax(90px, 150px) 1fr 110px;
+.model-row {
+  padding: 9px 0;
+  border-bottom: 1px solid var(--color-border-light);
+
+  &:last-child {
+    border-bottom: 0;
+  }
+}
+
+.model-head,
+.model-value,
+.model-meta {
+  display: flex;
   align-items: center;
+  gap: 8px;
+}
+
+.model-head {
+  justify-content: space-between;
+}
+
+.model-name {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-value {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.model-meta {
+  margin-top: 7px;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  color: var(--color-text-placeholder);
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.subject-panel {
+  :deep(.ant-table-cell .ant-tag) {
+    max-width: none;
+  }
+}
+
+.dimension-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dimension-row {
+  padding: 9px 0;
+  border-bottom: 1px solid var(--color-border-light);
+
+  &:last-child {
+    border-bottom: 0;
+  }
+}
+
+.dimension-head,
+.channel-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: var(--spacing-sm);
-  padding: 6px 0;
-  font-size: var(--font-size-sm);
+}
 
-  .hbar-name {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+.dimension-title-wrap {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.dimension-title,
+.channel-name {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.dimension-description,
+.channel-description,
+.channel-metrics {
+  color: var(--color-text-placeholder);
+  font-size: var(--font-size-xs);
+}
+
+.dimension-value {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.share {
+  color: var(--color-text-placeholder);
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.dimension-track {
+  height: 8px;
+  margin-top: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--color-bg-light);
+}
+
+.dimension-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+
+  &.scene {
+    background: linear-gradient(90deg, #722ed1, #b37feb);
   }
 
-  .hbar-track {
-    height: 14px;
-    background: var(--color-bg-light);
-    border-radius: 4px;
-    overflow: hidden;
+  &.channel {
+    background: linear-gradient(90deg, #0f74ff, #69b1ff);
   }
 
-  .hbar-fill {
-    display: block;
-    height: 100%;
-    border-radius: 4px;
-    background: #0F74FF;
+  &.model {
+    background: linear-gradient(90deg, #0f74ff, #69b1ff);
 
     &.unpriced {
       background: repeating-linear-gradient(45deg, #ffd591, #ffd591 4px, transparent 4px, transparent 8px);
     }
   }
+}
 
-  .hbar-val {
-    text-align: right;
-    font-variant-numeric: tabular-nums;
-    color: var(--color-text-secondary);
+.dimension-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 7px;
+  color: var(--color-text-placeholder);
+  font-size: var(--font-size-xs);
+}
+
+.breakdown {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.breakdown-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border: 1px solid #d9d9d9;
+  border-radius: 999px;
+  background: var(--color-bg-white);
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.channel-panel {
+  .panel-head {
+    margin-bottom: var(--spacing-md);
   }
 }
 
-.biz-split {
-  border-top: 1px dashed var(--color-border-light);
-  margin-top: var(--spacing-sm);
-  padding-top: var(--spacing-sm);
-  font-size: var(--font-size-xs);
-  color: var(--color-text-placeholder);
+.channel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: var(--spacing-sm);
+}
 
-  .biz-item {
-    margin-right: var(--spacing-md);
-    font-variant-numeric: tabular-nums;
+.channel-card {
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--border-radius-md);
+  background: var(--color-bg-light);
+}
+
+.channel-description {
+  min-height: 36px;
+  margin-top: 3px;
+  line-height: 18px;
+}
+
+.channel-cost {
+  margin-top: 8px;
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.channel-metrics {
+  margin-top: 7px;
+  font-variant-numeric: tabular-nums;
+}
+
+.channel-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.dimension-note {
+  margin-top: var(--spacing-md);
+  padding: 8px 10px;
+  border-radius: var(--border-radius-sm);
+  background: #f0f7ff;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+
+  .note-mark {
+    margin-right: 6px;
+    color: #0f74ff;
+    font-weight: 600;
+  }
+}
+
+@media (max-width: 1100px) {
+  .dimension-meta {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .breakdown {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 640px) {
+  .dimension-title-wrap {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .channel-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

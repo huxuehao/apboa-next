@@ -14,10 +14,15 @@ import com.hxh.apboa.common.entity.ModelConfig;
 import com.hxh.apboa.common.entity.ModelProvider;
 import com.hxh.apboa.common.enums.ModelCategory;
 import com.hxh.apboa.common.router.MessageTableRouter;
+import com.hxh.apboa.common.util.JsonUtils;
+import com.hxh.apboa.common.util.UserUtils;
 import com.hxh.apboa.common.vo.CostModelPricingVO;
 import com.hxh.apboa.common.vo.CostOverviewVO;
 import com.hxh.apboa.common.vo.CostRunItemVO;
 import com.hxh.apboa.common.vo.CostSessionDetailVO;
+import com.hxh.apboa.common.vo.CostWorkflowDetailVO;
+import com.hxh.apboa.common.vo.CostWorkflowNodeVO;
+import com.hxh.apboa.common.vo.CostWorkflowUsageVO;
 import com.hxh.apboa.model.service.ModelConfigService;
 import com.hxh.apboa.model.service.ModelProviderService;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +30,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -32,6 +39,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -71,6 +79,8 @@ public class CostStatServiceImpl implements CostStatService {
         List<Map<String, Object>> byModel = chatUsageRecordMapper.costGroupByModel(startStr, endExclusive, agentId);
         List<Map<String, Object>> byBizType = chatUsageRecordMapper.costGroupByBizType(startStr, endExclusive, agentId);
         List<Map<String, Object>> byChannel = chatUsageRecordMapper.costGroupByChannel(startStr, endExclusive, agentId);
+        List<Map<String, Object>> byBizChannel = chatUsageRecordMapper.costGroupByBizTypeAndChannel(
+                startStr, endExclusive, agentId);
         List<Map<String, Object>> trend = fillTrendSkeleton(start, end,
                 chatUsageRecordMapper.costTrendByDay(startStr, endExclusive, agentId));
         List<Map<String, Object>> topAgents = attachAgentNames(
@@ -93,6 +103,7 @@ public class CostStatServiceImpl implements CostStatService {
                 .byModel(byModel)
                 .byBizType(byBizType)
                 .byChannel(byChannel)
+                .byBizChannel(byBizChannel)
                 .topAgents(topAgents)
                 .unpricedModels(unpricedModels)
                 .build();
@@ -116,25 +127,135 @@ public class CostStatServiceImpl implements CostStatService {
         Map<Long, ChatSession> sessionMap = chatSessionMapper.selectBatchIds(sessionIds).stream()
                 .collect(Collectors.toMap(ChatSession::getId, Function.identity(), (a, b) -> a));
         Map<Long, String> agentNames = batchAgentNames(
-                rows.stream().map(r -> asLong(r.get("agentId"))).distinct().collect(Collectors.toList()));
+                sessionMap.values().stream().map(ChatSession::getAgentId)
+                        .filter(Objects::nonNull).distinct().collect(Collectors.toList()));
         Map<Long, String> userNames = batchUserNames(
                 rows.stream().map(r -> asLong(r.get("userId"))).distinct().collect(Collectors.toList()));
         Map<Long, Integer> discardedMap = countDiscardedRuns(sessionMap);
         for (Map<String, Object> row : rows) {
             Long sessionId = asLong(row.get("sessionId"));
             ChatSession session = sessionMap.get(sessionId);
+            Long ownerAgentId = session != null ? session.getAgentId() : asLong(row.get("agentId"));
             row.put("title", session != null ? session.getTitle() : "（会话已删除）");
+            row.put("agentId", ownerAgentId);
             row.put("agentName", resolveAgentName(
-                    agentNames.get(asLong(row.get("agentId"))), row.get("agentLabel"), asLong(row.get("agentId"))));
+                    agentNames.get(ownerAgentId), row.get("agentLabel"), ownerAgentId));
             row.put("userName", userNames.getOrDefault(asLong(row.get("userId")), String.valueOf(row.get("userId"))));
             row.put("discardedRuns", discardedMap.getOrDefault(sessionId, 0));
         }
         return result;
     }
 
+    @Override
+    public IPage<Map<String, Object>> pageExecutionBills(IPage<Map<String, Object>> page,
+                                                         LocalDate startDate, LocalDate endDate,
+                                                         Long agentId, boolean orderByCost) {
+        LocalDate end = endDate != null ? endDate : LocalDate.now();
+        LocalDate start = startDate != null ? startDate : end.minusDays(29);
+        IPage<Map<String, Object>> result = chatUsageRecordMapper.pageExecutionBills(
+                page, start.format(DATE_FMT), end.plusDays(1).format(DATE_FMT), agentId, orderByCost);
+        enrichExecutionBills(result.getRecords());
+        return result;
+    }
+
     /**
-     * 页内会话的废弃分支轮次数：会话流水的 message_id 不在 current_message_id
-     * 物化路径上的条数（与明细页 onCurrentPath 同口径）。页大小 10~50，
+     * 统一账单只在这里补展示元数据，流水聚合仍由一条 SQL 完成。工作流运行信息按页批查，
+     * 避免列表为每行额外查询；历史工作流没有 run 关联时保留快照并标记 legacy。
+     */
+    private void enrichExecutionBills(List<Map<String, Object>> rows) {
+        if (rows.isEmpty()) {
+            return;
+        }
+        List<Map<String, Object>> chatRows = rows.stream()
+                .filter(r -> "CHAT".equals(String.valueOf(r.get("billType"))))
+                .collect(Collectors.toList());
+        List<Map<String, Object>> workflowRows = rows.stream()
+                .filter(r -> "WORKFLOW".equals(String.valueOf(r.get("billType"))))
+                .collect(Collectors.toList());
+
+        Map<Long, String> userNames = batchUserNames(
+                rows.stream().map(r -> asLong(r.get("userId"))).collect(Collectors.toList()));
+        for (Map<String, Object> row : rows) {
+            Long userId = asLong(row.get("userId"));
+            row.put("userName", userNames.getOrDefault(userId, userId > 0 ? String.valueOf(userId) : "未记录"));
+        }
+
+        if (!chatRows.isEmpty()) {
+            List<Long> sessionIds = chatRows.stream().map(r -> asLong(r.get("sessionId"))).collect(Collectors.toList());
+            Map<Long, ChatSession> sessionMap = chatSessionMapper.selectBatchIds(sessionIds).stream()
+                    .collect(Collectors.toMap(ChatSession::getId, Function.identity(), (a, b) -> a));
+            Map<Long, String> agentNames = batchAgentNames(
+                    sessionMap.values().stream().map(ChatSession::getAgentId)
+                            .filter(Objects::nonNull).distinct().collect(Collectors.toList()));
+            Map<Long, Integer> discardedMap = countDiscardedRuns(sessionMap);
+            for (Map<String, Object> row : chatRows) {
+                Long sessionId = asLong(row.get("sessionId"));
+                ChatSession session = sessionMap.get(sessionId);
+                Long ownerAgentId = session != null ? session.getAgentId() : asLong(row.get("agentId"));
+                row.put("title", session != null ? session.getTitle() : "（会话已删除）");
+                row.put("agentId", ownerAgentId);
+                row.put("agentName", resolveAgentName(
+                        agentNames.get(ownerAgentId), row.get("agentLabel"), ownerAgentId));
+                row.put("discardedRuns", discardedMap.getOrDefault(sessionId, 0));
+                row.put("status", "COMPLETED");
+            }
+        }
+
+        if (!workflowRows.isEmpty()) {
+            List<String> runIds = workflowRows.stream()
+                    .filter(r -> asLong(r.get("legacy")) == 0)
+                    .map(r -> String.valueOf(r.get("referenceId")))
+                    .distinct()
+                    .collect(Collectors.toList());
+            Map<String, WorkflowRunSnapshot> snapshots = batchWorkflowRunSnapshots(runIds);
+            for (Map<String, Object> row : workflowRows) {
+                String runId = String.valueOf(row.get("referenceId"));
+                boolean legacy = asLong(row.get("legacy")) > 0;
+                WorkflowRunSnapshot snapshot = snapshots.get(runId);
+                row.put("runId", runId);
+                row.put("legacy", legacy);
+                row.put("status", snapshot != null ? snapshot.status() : (legacy ? "HISTORICAL" : "UNKNOWN"));
+                row.put("workflowId", snapshot != null ? snapshot.workflowId() : row.get("workflowId"));
+                row.put("title", snapshot != null && snapshot.workflowName() != null
+                        ? snapshot.workflowName() : workflowTitle(row.get("titleSnapshot")));
+                row.put("nodeCount", snapshot != null ? snapshot.nodeCount() : null);
+                if (snapshot != null) {
+                    row.put("durationMs", duration(snapshot.startTime(), snapshot.endTime()));
+                    row.put("version", snapshot.version());
+                }
+            }
+        }
+    }
+
+    private Map<String, WorkflowRunSnapshot> batchWorkflowRunSnapshots(List<String> runIds) {
+        Long tenantId = UserUtils.getTenantId();
+        if (tenantId == null || runIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        String placeholders = String.join(",", Collections.nCopies(runIds.size(), "?"));
+        List<Object> args = new ArrayList<>();
+        args.add(tenantId);
+        args.addAll(runIds);
+        Map<String, WorkflowRunSnapshot> result = new HashMap<>();
+        jdbcTemplate.query(
+                "SELECT r.id, r.workflow_id, r.version, r.status, r.inputs, r.outputs, r.error, "
+                        + "r.start_time, r.end_time, w.name AS workflow_name, "
+                        + "(SELECT COUNT(*) FROM workflow_node_execution n WHERE n.tenant_id = r.tenant_id "
+                        + "AND CAST(n.workflow_run_id AS UNSIGNED) = r.id) AS node_count "
+                        + "FROM workflow_run r LEFT JOIN workflow w ON w.id = CAST(r.workflow_id AS UNSIGNED) "
+                        + "AND w.tenant_id = r.tenant_id WHERE r.tenant_id = ? AND r.id IN (" + placeholders + ")",
+                rs -> {
+                    WorkflowRunSnapshot snapshot = workflowRunSnapshot(rs);
+                    result.put(snapshot.runId(), snapshot);
+                },
+                args.toArray());
+        return result;
+    }
+
+    /**
+     * 页内会话的真实废弃回复数：有 assistant 消息载体、但 message_id 不在
+     * current_message_id 物化路径上的条数。message_id 为空的子智能体等内部调用
+     * 不属于聊天分支，不能算作重新生成废弃。页大小 10~50，
      * 一次流水批查 + 每会话一次消息主键查，开销可控
      */
     private Map<Long, Integer> countDiscardedRuns(Map<Long, ChatSession> sessionMap) {
@@ -174,6 +295,8 @@ public class CostStatServiceImpl implements CostStatService {
         List<ChatUsageRecord> records = chatUsageRecordMapper.selectList(
                 Wrappers.<ChatUsageRecord>lambdaQuery()
                         .eq(ChatUsageRecord::getSessionId, sessionId)
+                        .in(ChatUsageRecord::getBizType,
+                                ChatUsageRecord.BIZ_CHAT, ChatUsageRecord.BIZ_SUB_AGENT)
                         .orderByAsc(ChatUsageRecord::getId));
 
         // 当前链：current_message_id 的 path 上的所有消息 id
@@ -197,24 +320,34 @@ public class CostStatServiceImpl implements CostStatService {
         long inputTokens = 0;
         long outputTokens = 0;
         int discardedRuns = 0;
+        int visibleReplyCount = 0;
+        int internalRunCount = 0;
+        int llmCallCount = 0;
         int unpricedRuns = 0;
         Map<String, Map<String, Object>> byModel = new LinkedHashMap<>();
 
         for (ChatUsageRecord r : records) {
-            boolean onPath = r.getMessageId() != null && currentPathIds.contains(r.getMessageId());
+            String pathStatus = classifyPathStatus(r.getMessageId(), currentPathIds);
+            boolean discarded = CostRunItemVO.PATH_DISCARDED.equals(pathStatus);
             ChatMessage assistantMsg = r.getMessageId() != null ? briefMap.get(r.getMessageId()) : null;
 
             if (r.getCost() != null) {
                 totalCost = totalCost.add(r.getCost());
-                if (!onPath) {
+                if (discarded) {
                     discardedCost = discardedCost.add(r.getCost());
                 }
             } else {
                 unpricedRuns++;
             }
-            if (!onPath) {
+            if (discarded) {
                 discardedRuns++;
             }
+            if (CostRunItemVO.PATH_INTERNAL.equals(pathStatus)) {
+                internalRunCount++;
+            } else {
+                visibleReplyCount++;
+            }
+            llmCallCount += r.getIterationCount() != null ? r.getIterationCount() : 1;
             inputTokens += r.getInputTokens() != null ? r.getInputTokens() : 0;
             outputTokens += r.getOutputTokens() != null ? r.getOutputTokens() : 0;
 
@@ -234,6 +367,9 @@ public class CostStatServiceImpl implements CostStatService {
                     .recordId(r.getId())
                     .messageId(r.getMessageId())
                     .createdAt(r.getCreatedAt())
+                    .agentId(r.getAgentId())
+                    .agentName(r.getAgentLabel())
+                    .bizType(r.getBizType())
                     .modelConfigId(r.getModelConfigId())
                     .modelLabel(r.getModelLabel())
                     .iterationCount(r.getIterationCount())
@@ -241,7 +377,9 @@ public class CostStatServiceImpl implements CostStatService {
                     .outputTokens(r.getOutputTokens())
                     .durationMs(r.getDurationMs())
                     .cost(r.getCost())
-                    .onCurrentPath(onPath)
+                    .pathStatus(pathStatus)
+                    .onCurrentPath(CostRunItemVO.PATH_INTERNAL.equals(pathStatus)
+                            ? null : CostRunItemVO.PATH_CURRENT.equals(pathStatus))
                     .userQuestion(traceUserQuestion(assistantMsg, briefMap))
                     .assistantSummary(assistantMsg != null ? assistantMsg.getContent() : null)
                     .build());
@@ -267,12 +405,290 @@ public class CostStatServiceImpl implements CostStatService {
                 .inputTokens(inputTokens)
                 .outputTokens(outputTokens)
                 .runCount(runs.size())
+                .visibleReplyCount(visibleReplyCount)
+                .internalRunCount(internalRunCount)
+                .llmCallCount(llmCallCount)
                 .discardedRunCount(discardedRuns)
                 .discardedCost(discardedCost)
                 .unpricedRunCount(unpricedRuns)
                 .byModel(new ArrayList<>(byModel.values()))
                 .runs(runs)
                 .build();
+    }
+
+    @Override
+    public CostWorkflowDetailVO workflowDetail(String runId) {
+        Long tenantId = UserUtils.getTenantId();
+        if (tenantId == null || runId == null || runId.isBlank()) {
+            return null;
+        }
+        boolean legacy = runId.startsWith("legacy-");
+        WorkflowRunSnapshot snapshot = legacy ? null
+                : batchWorkflowRunSnapshots(List.of(runId)).get(runId);
+
+        List<ChatUsageRecord> records;
+        if (legacy) {
+            Long recordId = parseLegacyRecordId(runId);
+            if (recordId == null) {
+                return null;
+            }
+            records = chatUsageRecordMapper.selectList(Wrappers.<ChatUsageRecord>lambdaQuery()
+                    .eq(ChatUsageRecord::getId, recordId)
+                    .eq(ChatUsageRecord::getBizType, ChatUsageRecord.BIZ_WORKFLOW));
+        } else {
+            records = chatUsageRecordMapper.selectList(Wrappers.<ChatUsageRecord>lambdaQuery()
+                    .eq(ChatUsageRecord::getBizType, ChatUsageRecord.BIZ_WORKFLOW)
+                    .eq(ChatUsageRecord::getBizRunId, runId)
+                    .orderByAsc(ChatUsageRecord::getId));
+        }
+        if (snapshot == null && records.isEmpty()) {
+            return null;
+        }
+
+        BigDecimal totalCost = BigDecimal.ZERO;
+        long inputTokens = 0;
+        long outputTokens = 0;
+        int llmCallCount = 0;
+        int unpricedRunCount = 0;
+        long usageDurationMs = 0;
+        Map<String, Map<String, Object>> byModel = new LinkedHashMap<>();
+        List<CostWorkflowUsageVO> usages = new ArrayList<>();
+        Map<String, List<ChatUsageRecord>> usageByNode = new LinkedHashMap<>();
+
+        for (ChatUsageRecord record : records) {
+            inputTokens += value(record.getInputTokens());
+            outputTokens += value(record.getOutputTokens());
+            llmCallCount += record.getIterationCount() != null ? record.getIterationCount() : 1;
+            usageDurationMs += value(record.getDurationMs());
+            if (record.getCost() == null) {
+                unpricedRunCount++;
+            } else {
+                totalCost = totalCost.add(record.getCost());
+            }
+
+            Map<String, Object> model = byModel.computeIfAbsent(record.getModelLabel(), key -> {
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("modelLabel", key);
+                item.put("runCount", 0);
+                item.put("llmCallCount", 0);
+                item.put("inputTokens", 0L);
+                item.put("outputTokens", 0L);
+                item.put("cost", BigDecimal.ZERO);
+                return item;
+            });
+            model.put("runCount", (int) model.get("runCount") + 1);
+            model.put("llmCallCount", (int) model.get("llmCallCount")
+                    + (record.getIterationCount() != null ? record.getIterationCount() : 1));
+            model.put("inputTokens", (long) model.get("inputTokens") + value(record.getInputTokens()));
+            model.put("outputTokens", (long) model.get("outputTokens") + value(record.getOutputTokens()));
+            if (record.getCost() != null) {
+                model.put("cost", ((BigDecimal) model.get("cost")).add(record.getCost()));
+            }
+
+            usages.add(CostWorkflowUsageVO.builder()
+                    .recordId(record.getId())
+                    .createdAt(record.getCreatedAt())
+                    .nodeId(record.getStepId())
+                    .nodeName(record.getStepLabel())
+                    .modelConfigId(record.getModelConfigId())
+                    .modelLabel(record.getModelLabel())
+                    .iterationCount(record.getIterationCount())
+                    .inputTokens(record.getInputTokens())
+                    .outputTokens(record.getOutputTokens())
+                    .durationMs(record.getDurationMs())
+                    .cost(record.getCost())
+                    .build());
+            String nodeKey = record.getStepId() != null ? record.getStepId() : "usage-" + record.getId();
+            usageByNode.computeIfAbsent(nodeKey, key -> new ArrayList<>()).add(record);
+        }
+
+        List<CostWorkflowNodeVO> nodes = new ArrayList<>();
+        if (snapshot != null) {
+            for (WorkflowNodeSnapshot node : loadWorkflowNodes(runId, tenantId)) {
+                List<ChatUsageRecord> nodeUsages = usageByNode.remove(node.nodeId());
+                nodes.add(toWorkflowNode(node, nodeUsages != null ? nodeUsages : List.of()));
+            }
+        }
+        // 极端情况下节点执行日志缺失或历史流水无法关联，仍保留用量，不让成本从详情消失。
+        for (Map.Entry<String, List<ChatUsageRecord>> entry : usageByNode.entrySet()) {
+            ChatUsageRecord first = entry.getValue().get(0);
+            WorkflowNodeSnapshot usageOnly = new WorkflowNodeSnapshot(
+                    first.getStepId(), first.getStepLabel() != null ? first.getStepLabel() : "未关联智能体节点",
+                    "AGENT", legacy ? "HISTORICAL" : "USAGE_ONLY", null,
+                    null, null, null, null);
+            nodes.add(toWorkflowNode(usageOnly, entry.getValue()));
+        }
+
+        ChatUsageRecord latest = records.isEmpty() ? null : records.get(records.size() - 1);
+        Long userId = latest != null ? latest.getUserId() : null;
+        String workflowName = snapshot != null ? snapshot.workflowName() : null;
+        if ((workflowName == null || workflowName.isBlank()) && latest != null) {
+            workflowName = latest.getBizLabel() != null
+                    ? latest.getBizLabel() : workflowTitle(latest.getAgentLabel());
+        }
+        Long startTime = snapshot != null ? snapshot.startTime() : null;
+        Long endTime = snapshot != null ? snapshot.endTime() : null;
+        Long runDuration = duration(startTime, endTime);
+        return CostWorkflowDetailVO.builder()
+                .runId(runId)
+                .workflowId(snapshot != null ? snapshot.workflowId() : latest != null ? latest.getBizId() : null)
+                .workflowName(workflowName != null ? workflowName : "历史工作流")
+                .version(snapshot != null ? snapshot.version() : null)
+                .status(snapshot != null ? snapshot.status() : "HISTORICAL")
+                .inputs(snapshot != null ? snapshot.inputs() : null)
+                .outputs(snapshot != null ? snapshot.outputs() : null)
+                .error(snapshot != null ? snapshot.error() : null)
+                .startTime(startTime)
+                .endTime(endTime)
+                .durationMs(runDuration != null ? runDuration : usageDurationMs)
+                .userId(userId)
+                .userName(userId != null
+                        ? batchUserNames(List.of(userId)).getOrDefault(userId, String.valueOf(userId)) : "未记录")
+                .channel(latest != null ? latest.getChannel() : null)
+                .sourceSessionId(latest != null ? latest.getSessionId() : null)
+                .legacy(legacy)
+                .totalCost(totalCost)
+                .inputTokens(inputTokens)
+                .outputTokens(outputTokens)
+                .usageRunCount(records.size())
+                .llmCallCount(llmCallCount)
+                .unpricedRunCount(unpricedRunCount)
+                .byModel(new ArrayList<>(byModel.values()))
+                .nodes(nodes)
+                .usages(usages)
+                .build();
+    }
+
+    private List<WorkflowNodeSnapshot> loadWorkflowNodes(String runId, Long tenantId) {
+        List<WorkflowNodeSnapshot> nodes = new ArrayList<>();
+        jdbcTemplate.query(
+                "SELECT node_id, node_title, node_type, status, error, inputs, outputs, start_time, end_time "
+                        + "FROM workflow_node_execution WHERE tenant_id = ? "
+                        + "AND CAST(workflow_run_id AS UNSIGNED) = ? "
+                        + "ORDER BY start_time, id",
+                rs -> {
+                    nodes.add(new WorkflowNodeSnapshot(
+                            rs.getString("node_id"), rs.getString("node_title"), rs.getString("node_type"),
+                            rs.getString("status"), rs.getString("error"), rs.getString("inputs"),
+                            rs.getString("outputs"), nullableLong(rs, "start_time"), nullableLong(rs, "end_time")));
+                },
+                tenantId, runId);
+        return nodes;
+    }
+
+    private CostWorkflowNodeVO toWorkflowNode(WorkflowNodeSnapshot node, List<ChatUsageRecord> usages) {
+        BigDecimal cost = BigDecimal.ZERO;
+        long inputTokens = 0;
+        long outputTokens = 0;
+        long usageDuration = 0;
+        int llmCalls = 0;
+        int unpriced = 0;
+        Set<String> models = new LinkedHashSet<>();
+        for (ChatUsageRecord usage : usages) {
+            inputTokens += value(usage.getInputTokens());
+            outputTokens += value(usage.getOutputTokens());
+            usageDuration += value(usage.getDurationMs());
+            llmCalls += usage.getIterationCount() != null ? usage.getIterationCount() : 1;
+            if (usage.getCost() == null) {
+                unpriced++;
+            } else {
+                cost = cost.add(usage.getCost());
+            }
+            if (usage.getModelLabel() != null) {
+                models.add(usage.getModelLabel());
+            }
+        }
+        Long nodeDuration = duration(node.startTime(), node.endTime());
+        return CostWorkflowNodeVO.builder()
+                .nodeId(node.nodeId())
+                .nodeName(node.nodeName())
+                .nodeType(node.nodeType())
+                .status(node.status())
+                .error(node.error())
+                .inputs(node.inputs())
+                .outputs(node.outputs())
+                .startTime(node.startTime())
+                .endTime(node.endTime())
+                .durationMs(nodeDuration != null ? nodeDuration : usageDuration)
+                .inputTokens(inputTokens)
+                .outputTokens(outputTokens)
+                .usageRunCount(usages.size())
+                .llmCallCount(llmCalls)
+                .unpricedRunCount(unpriced)
+                .cost(cost)
+                .models(new ArrayList<>(models))
+                .build();
+    }
+
+    private WorkflowRunSnapshot workflowRunSnapshot(ResultSet rs) throws SQLException {
+        return new WorkflowRunSnapshot(
+                rs.getString("id"), rs.getString("workflow_id"), rs.getString("workflow_name"),
+                rs.getString("version"), rs.getString("status"), parseJsonValue(rs.getString("inputs")),
+                parseJsonValue(rs.getString("outputs")), rs.getString("error"),
+                nullableLong(rs, "start_time"), nullableLong(rs, "end_time"), rs.getInt("node_count"));
+    }
+
+    private Object parseJsonValue(String json) {
+        if (json == null || json.isBlank()) {
+            return null;
+        }
+        try {
+            return JsonUtils.parse(json);
+        } catch (RuntimeException ignored) {
+            return json;
+        }
+    }
+
+    private Long parseLegacyRecordId(String runId) {
+        try {
+            return Long.valueOf(runId.substring("legacy-".length()));
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    private String workflowTitle(Object value) {
+        String title = value != null ? String.valueOf(value) : null;
+        if (title == null || title.isBlank()) {
+            return "历史工作流";
+        }
+        return title.startsWith("工作流：") ? title.substring("工作流：".length()) : title;
+    }
+
+    private Long duration(Long startTime, Long endTime) {
+        return startTime != null && endTime != null ? Math.max(0, endTime - startTime) : null;
+    }
+
+    private Long nullableLong(ResultSet rs, String column) throws SQLException {
+        Object value = rs.getObject(column);
+        return value instanceof Number number ? number.longValue() : null;
+    }
+
+    private long value(Long number) {
+        return number != null ? number : 0L;
+    }
+
+    private record WorkflowRunSnapshot(
+            String runId, String workflowId, String workflowName, String version, String status,
+            Object inputs, Object outputs, String error, Long startTime, Long endTime, int nodeCount) {
+    }
+
+    private record WorkflowNodeSnapshot(
+            String nodeId, String nodeName, String nodeType, String status, String error,
+            String inputs, String outputs, Long startTime, Long endTime) {
+    }
+
+    /**
+     * 成本流水与聊天消息链的三态关系。内部调用没有独立 assistant 消息，
+     * messageId 为空是正常数据形态，不代表被重新生成顶替。
+     */
+    static String classifyPathStatus(Integer messageId, Set<Integer> currentPathIds) {
+        if (messageId == null) {
+            return CostRunItemVO.PATH_INTERNAL;
+        }
+        return currentPathIds.contains(messageId)
+                ? CostRunItemVO.PATH_CURRENT
+                : CostRunItemVO.PATH_DISCARDED;
     }
 
     @Override

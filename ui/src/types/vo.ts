@@ -793,6 +793,8 @@ export interface CostModelRow {
 export interface CostAgentRow {
   agentId: string
   agentName: string
+  /** 主体涉及的业务场景，agent_id=0 时用于区分工作流、定时任务等非会话主体 */
+  bizTypes?: string
   sessionCount: number | string
   runCount: number | string
   inputTokens: number
@@ -816,6 +818,8 @@ export interface CostOverviewVO {
   byBizType: { bizType: string; cost: number; inputTokens: number; outputTokens: number; runCount: number | string }[]
   /** 按渠道分布：channel null=渠道标记上线前的历史流水 */
   byChannel: { channel: string | null; cost: number; inputTokens: number; outputTokens: number; runCount: number | string }[]
+  /** 场景 × 渠道交叉分布，用于解释每类业务消耗来自哪个入口 */
+  byBizChannel: { bizType: string; channel: string | null; cost: number; inputTokens: number; outputTokens: number; runCount: number | string }[]
   topAgents: CostAgentRow[]
   unpricedModels: CostModelRow[]
 }
@@ -829,6 +833,16 @@ export interface CostSessionBillRow {
   userId: string
   userName: string
   runCount: number | string
+  /** 有 assistant 消息载体的回复数（含真实废弃分支） */
+  visibleReplyCount: number | string
+  /** 子智能体等无独立 assistant 消息载体的内部运行数 */
+  internalRunCount: number | string
+  subAgentRunCount: number | string
+  workflowRunCount: number | string
+  scheduledJobRunCount: number | string
+  otherInternalRunCount: number | string
+  /** 所有运行的实际 LLM 调用次数之和 */
+  llmCallCount: number | string
   /** 被重新生成顶替的废弃轮次数 */
   discardedRuns: number | string
   inputTokens: number
@@ -840,11 +854,49 @@ export interface CostSessionBillRow {
   lastActiveAt: string
 }
 
+export type CostBillType = 'CHAT' | 'WORKFLOW' | 'SCHEDULED_JOB'
+
+/** 成本中心统一执行账单行；当前接入对话和工作流，定时任务类型为后续扩展位。 */
+export interface CostExecutionBillRow {
+  billId: string
+  billType: CostBillType
+  referenceId: string
+  sessionId: string | null
+  runId: string | null
+  workflowId: string | null
+  title: string
+  agentId: string | null
+  agentName: string | null
+  userId: string | null
+  userName: string
+  status: string
+  legacy: boolean
+  version: string | null
+  channel: string | null
+  nodeCount: number | string | null
+  runCount: number | string
+  visibleReplyCount: number | string
+  internalRunCount: number | string
+  subAgentRunCount: number | string
+  llmCallCount: number | string
+  discardedRuns: number | string
+  inputTokens: number
+  outputTokens: number
+  cost: number
+  unpricedRuns: number | string
+  models: string
+  durationMs: number | null
+  lastActiveAt: string
+}
+
 /** 会话明细的单轮条目 */
 export interface CostRunItemVO {
   recordId: string
   messageId: number | null
   createdAt: string
+  agentId: string
+  agentName: string
+  bizType: string
   modelConfigId: string
   modelLabel: string
   iterationCount: number
@@ -853,8 +905,10 @@ export interface CostRunItemVO {
   durationMs: number | null
   /** null=未计价 */
   cost: number | null
-  /** false=被重新生成顶替的废弃分支 */
-  onCurrentPath: boolean
+  /** CURRENT=当前回复，DISCARDED=真实废弃，INTERNAL=内部调用 */
+  pathStatus: 'CURRENT' | 'DISCARDED' | 'INTERNAL'
+  /** 兼容旧接口；内部调用为 null */
+  onCurrentPath: boolean | null
   userQuestion: string | null
   assistantSummary: string | null
 }
@@ -887,9 +941,82 @@ export interface CostSessionDetailVO {
   inputTokens: number
   outputTokens: number
   runCount: number
+  visibleReplyCount: number
+  internalRunCount: number
+  llmCallCount: number
   discardedRunCount: number
   discardedCost: number
   unpricedRunCount: number
   byModel: { modelLabel: string; runCount: number; cost: number }[]
   runs: CostRunItemVO[]
+}
+
+export interface CostWorkflowUsageVO {
+  recordId: string
+  createdAt: string
+  nodeId: string | null
+  nodeName: string | null
+  modelConfigId: string
+  modelLabel: string
+  iterationCount: number
+  inputTokens: number
+  outputTokens: number
+  durationMs: number | null
+  cost: number | null
+}
+
+export interface CostWorkflowNodeVO {
+  nodeId: string | null
+  nodeName: string
+  nodeType: string
+  status: string
+  error: string | null
+  inputs: string | null
+  outputs: string | null
+  startTime: string | null
+  endTime: string | null
+  durationMs: number | null
+  inputTokens: number
+  outputTokens: number
+  usageRunCount: number
+  llmCallCount: number
+  unpricedRunCount: number
+  cost: number
+  models: string[]
+}
+
+/** 工作流单次执行的运行快照、节点轨迹和用量明细。 */
+export interface CostWorkflowDetailVO {
+  runId: string
+  workflowId: string | null
+  workflowName: string
+  version: string | null
+  status: string
+  inputs: unknown
+  outputs: unknown
+  error: string | null
+  startTime: string | null
+  endTime: string | null
+  durationMs: number | null
+  userId: string | null
+  userName: string
+  channel: string | null
+  sourceSessionId: string | null
+  legacy: boolean
+  totalCost: number
+  inputTokens: number
+  outputTokens: number
+  usageRunCount: number
+  llmCallCount: number
+  unpricedRunCount: number
+  byModel: {
+    modelLabel: string
+    runCount: number
+    llmCallCount: number
+    inputTokens: number
+    outputTokens: number
+    cost: number
+  }[]
+  nodes: CostWorkflowNodeVO[]
+  usages: CostWorkflowUsageVO[]
 }

@@ -54,7 +54,10 @@ public class CostOverviewVO implements SerializableEnable {
     /** 按渠道分布：channel（WEB/CHAT_KEY/SK_API，null=未标记历史）/ cost / tokens / runCount */
     private List<Map<String, Object>> byChannel;
 
-    /** 智能体 TopN：agentId / agentName / sessionCount / runCount / tokens / cost */
+    /** 场景 × 渠道交叉分布：bizType / channel / cost / tokens / runCount */
+    private List<Map<String, Object>> byBizChannel;
+
+    /** 消耗主体 TopN：agentId / agentName / bizTypes / sessionCount / runCount / tokens / cost */
     private List<Map<String, Object>> topAgents;
 
     /** 未配价告警：byModel 中 unpricedTokens>0 的子集 */

@@ -1,5 +1,8 @@
 package com.hxh.apboa.engine.agent;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.hxh.apboa.common.UserDetail;
 import com.hxh.apboa.common.consts.SysConst;
 import com.hxh.apboa.common.entity.AgentDefinition;
@@ -167,17 +170,20 @@ public class WorkflowAgentNodeExecutor implements AgentNodeExecutor {
                     ? agentContext.getTenantId()
                     : (outerContext != null ? outerContext.getTenantId() : null);
             Long mainAgentId = null;
-            String agentLabel = null;
+            String agentLabel = request.getWorkflowName() != null
+                    ? "工作流：" + request.getWorkflowName()
+                    : "工作流";
             Long userId = null;
+            Long sessionId = null;
             String channel = null;
             if (outerContext != null) {
                 if (outerContext.getAgentDefinition() != null) {
                     mainAgentId = outerContext.getAgentDefinition().getId();
-                    agentLabel = outerContext.getAgentDefinition().getName();
                 }
                 if (outerContext.getUserInfo() != null) {
                     userId = outerContext.getUserInfo().getId();
                 }
+                sessionId = parseChatSessionId(outerContext.getThreadId());
                 channel = ChatChannelHolder.get(outerContext.getThreadId());
             } else {
                 UserDetail userDetail = UserUtils.getUserDetail();
@@ -186,17 +192,26 @@ public class WorkflowAgentNodeExecutor implements AgentNodeExecutor {
                 // 渠道标记上线前的历史流水混在「未标记（历史）」一桶
                 channel = SysConst.CHANNEL_STANDALONE;
             }
-            if (mainAgentId == null) {
-                agentLabel = request.getWorkflowName() != null ? "工作流：" + request.getWorkflowName() : "工作流";
-            }
-
-            usageRecordWriter.writeWorkflowRun(tenantId, request.getWorkflowInstanceId(),
+            usageRecordWriter.writeWorkflowRun(tenantId, request.getWorkflowId(), request.getWorkflowInstanceId(),
+                    request.getWorkflowName(), request.getNodeId(), request.getNodeName(), sessionId,
                     mainAgentId, agentLabel, userId,
                     request.getModelConfigId(), channel,
                     inputTokens, outputTokens, iterations, durationMs);
         } catch (Exception ex) {
             log.error("工作流节点成本记账失败 instanceId={} node={}: {}",
                     request.getWorkflowInstanceId(), request.getNodeId(), ex.getMessage());
+        }
+    }
+
+    /** 非对话执行的 threadId 可能不是数字，无法可靠关联 chat_session 时保持为空。 */
+    private Long parseChatSessionId(String threadId) {
+        if (threadId == null || threadId.isBlank()) {
+            return null;
+        }
+        try {
+            return Long.valueOf(threadId);
+        } catch (NumberFormatException ignored) {
+            return null;
         }
     }
 
@@ -209,8 +224,9 @@ public class WorkflowAgentNodeExecutor implements AgentNodeExecutor {
         definition.setAgentCode("workflow-agent-" + request.getNodeId());
         definition.setDescription(request.getNodeName());
         definition.setModelConfigId(request.getModelConfigId());
-        if (request.isModelParamsOverrideEnabled()) {
-            definition.setModelParamsOverride(request.getModelParamsOverride());
+        JsonNode modelParamsOverride = mergeModelParamsOverride(request);
+        if (modelParamsOverride != null) {
+            definition.setModelParamsOverride(modelParamsOverride);
         }
         definition.setSystemPrompt(request.getSystemPrompt());
         definition.setMaxIterations(request.getMaxIterations());
@@ -220,6 +236,25 @@ public class WorkflowAgentNodeExecutor implements AgentNodeExecutor {
         definition.setStructuredOutputReminder(StructuredOutputReminder.PROMPT);
         definition.setStructuredOutputSchema(request.getStructuredOutput());
         return definition;
+    }
+
+    /**
+     * 合并高级参数覆盖与模型快捷开关。快捷开关不依赖“启用参数覆盖”，并覆盖同名旧字段；
+     * 两个快捷值均为 null 且高级覆盖关闭时返回 null，使旧工作流继续跟随模型默认值。
+     */
+    static JsonNode mergeModelParamsOverride(AgentNodeRequest request) {
+        ObjectNode merged = JsonNodeFactory.instance.objectNode();
+        JsonNode advanced = request.getModelParamsOverride();
+        if (request.isModelParamsOverrideEnabled() && advanced != null && advanced.isObject()) {
+            merged.setAll((ObjectNode) advanced);
+        }
+        if (request.getStreaming() != null) {
+            merged.put("streaming", request.getStreaming());
+        }
+        if (request.getThinking() != null) {
+            merged.put("thinking", request.getThinking());
+        }
+        return merged.isEmpty() ? null : merged;
     }
 
     /**

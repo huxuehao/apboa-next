@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
- * 工作流最终执行过程：实时完成卡片、聊天历史和日志会话共用。
- * 数据来自后端 nodeExecutions 权威快照，组件只负责展示，不推测未执行节点。
+ * 工作流实际执行过程：运行中消费节点增量，完成后消费 nodeExecutions 权威快照。
+ * 组件只展示已进入执行的节点，不根据画布拓扑推测未执行节点。
  */
 import { computed, ref } from 'vue'
 import {
@@ -10,6 +10,7 @@ import {
   CloseCircleFilled,
   CopyOutlined,
   DownOutlined,
+  LoadingOutlined,
   MinusCircleFilled,
   RightOutlined,
 } from '@ant-design/icons-vue'
@@ -61,6 +62,7 @@ const copiedKey = ref<string | null>(null)
 const nodes = computed(() => Array.isArray(props.process.nodes) ? props.process.nodes : [])
 const processStatusText = computed(() => statusText(props.process.status))
 const processFailed = computed(() => props.process.status === 'FAIL')
+const processRunning = computed(() => props.process.status === 'RUNNING')
 
 function toggle(index: number) {
   expanded.value[index] = !expanded.value[index]
@@ -123,7 +125,7 @@ async function copyContent(key: string, value?: string) {
       <span>工作流过程</span>
       <span
         class="workflow-process-summary"
-        :class="processFailed ? 'is-fail' : 'is-success'"
+        :class="processFailed ? 'is-fail' : processRunning ? 'is-running' : 'is-success'"
       >
         {{ processStatusText }} · {{ nodes.length }} 个节点
         <template v-if="process.elapsed != null"> · {{ formatElapsed(process.elapsed) }}</template>
@@ -134,7 +136,7 @@ async function copyContent(key: string, value?: string) {
       {{ process.error }}
     </div>
 
-    <div v-for="(node, index) in nodes" :key="`${node.nodeId}-${index}`" class="workflow-process-node">
+    <div v-for="(node, index) in nodes" :key="node.invocationId || `${node.nodeId}-${index}`" class="workflow-process-node">
       <div class="workflow-process-node-head" @click="toggle(index)">
         <span class="workflow-process-arrow">
           <DownOutlined v-if="expanded[index]" />
@@ -142,6 +144,7 @@ async function copyContent(key: string, value?: string) {
         </span>
         <CheckCircleFilled v-if="node.status === 'SUCCESS'" class="workflow-status-icon is-success" />
         <CloseCircleFilled v-else-if="node.status === 'FAIL'" class="workflow-status-icon is-fail" />
+        <LoadingOutlined v-else-if="node.status === 'RUNNING'" spin class="workflow-status-icon is-running" />
         <MinusCircleFilled v-else class="workflow-status-icon is-stop" />
         <span class="workflow-process-node-index">{{ index + 1 }}.</span>
         <span class="workflow-process-node-title">{{ nodeTitle(node, index) }}</span>

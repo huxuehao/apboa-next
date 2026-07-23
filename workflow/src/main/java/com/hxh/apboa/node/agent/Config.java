@@ -23,6 +23,14 @@ public class Config implements NodeConfig {
      */
     private Long modelConfigId;
     /**
+     * 流式输出快捷覆盖；null 表示跟随模型配置。
+     */
+    private Boolean streaming;
+    /**
+     * 思考模式快捷覆盖；null 表示跟随模型配置。
+     */
+    private Boolean thinking;
+    /**
      * 是否启用模型参数覆盖。
      */
     private boolean modelParamsOverrideEnabled = false;

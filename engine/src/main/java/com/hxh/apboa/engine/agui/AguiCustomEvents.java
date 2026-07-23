@@ -63,9 +63,11 @@ public final class AguiCustomEvents {
 
     /**
      * 工具内部阶段进度（当前用于工作流工具的模型调用可观测性）。
-     * 载荷：{@code {toolUseId, phase, message, attempt?, maxAttempts?, detail?}}。
+     * 载荷：{@code {toolUseId, phase, message, attempt?, maxAttempts?, detail?, node?}}；
+     * node 为节点开始/完成时携带的增量快照（含 invocationId，用于循环节点精确合并）。
      * phase 包括 WORKFLOW_STARTING / MODEL_WAITING / MODEL_GENERATING /
-     * MODEL_RETRYING / MODEL_SUCCEEDED / MODEL_FAILED / WORKFLOW_FINISHING。
+     * MODEL_RETRYING / MODEL_SUCCEEDED / MODEL_FAILED / WORKFLOW_NODE_STARTED /
+     * WORKFLOW_NODE_FINISHED / WORKFLOW_FINISHING。
      */
     public static final String TOOL_PROGRESS = "TOOL_PROGRESS";
 

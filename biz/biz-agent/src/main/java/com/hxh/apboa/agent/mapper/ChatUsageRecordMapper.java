@@ -53,6 +53,13 @@ public interface ChatUsageRecordMapper extends BaseMapper<ChatUsageRecord> {
                                                  @Param("agentId") Long agentId);
 
     /**
+     * 按场景与渠道交叉分布，用于解释某类业务消耗具体从哪个入口产生
+     */
+    List<Map<String, Object>> costGroupByBizTypeAndChannel(@Param("start") String start,
+                                                           @Param("endExclusive") String endExclusive,
+                                                           @Param("agentId") Long agentId);
+
+    /**
      * 智能体 TopN（名称由 service 层批查组装，避免 LEFT JOIN 与租户插件的语义纠缠）
      */
     List<Map<String, Object>> costTopAgents(@Param("start") String start,
@@ -64,6 +71,17 @@ public interface ChatUsageRecordMapper extends BaseMapper<ChatUsageRecord> {
      * orderByCost=true 按成本降序，否则按最后活跃降序
      */
     com.baomidou.mybatisplus.core.metadata.IPage<Map<String, Object>> pageSessionBills(
+            com.baomidou.mybatisplus.core.metadata.IPage<Map<String, Object>> page,
+            @Param("start") String start,
+            @Param("endExclusive") String endExclusive,
+            @Param("agentId") Long agentId,
+            @Param("orderByCost") boolean orderByCost);
+
+    /**
+     * 统一执行账单分页：对话按 session 聚合，工作流按 workflow_run 聚合。
+     * 定时任务使用相同 biz_id/biz_run_id 契约，待接入时扩展 SQL 分支即可。
+     */
+    com.baomidou.mybatisplus.core.metadata.IPage<Map<String, Object>> pageExecutionBills(
             com.baomidou.mybatisplus.core.metadata.IPage<Map<String, Object>> page,
             @Param("start") String start,
             @Param("endExclusive") String endExclusive,

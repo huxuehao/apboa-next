@@ -74,13 +74,36 @@
         ORDER BY cost DESC
     </select>
 
+    <!-- 场景 × 渠道交叉分布：同一笔流水同时属于一个场景和一个入口，供前端解释构成而非重复计费 -->
+    <select id="costGroupByBizTypeAndChannel" resultType="java.util.Map">
+        SELECT biz_type                                                                                  AS bizType,
+               channel                                                                                   AS channel,
+               IFNULL(SUM(cost), 0)                                                                      AS cost,
+               IFNULL(SUM(input_tokens), 0)                                                              AS inputTokens,
+               IFNULL(SUM(output_tokens), 0)                                                             AS outputTokens,
+               COUNT(*)                                                                                  AS runCount
+        FROM chat_usage_record
+        WHERE <include refid="timeAndAgentFilter"/>
+        GROUP BY biz_type, channel
+        ORDER BY cost DESC
+    </select>
+
     <!-- 会话账单分页：按 session 聚合；models 为该会话用过的模型 label 去重串 -->
     <select id="pageSessionBills" resultType="java.util.Map">
         SELECT session_id                                                                               AS sessionId,
-               MAX(agent_id)                                                                            AS agentId,
-               SUBSTRING_INDEX(GROUP_CONCAT(agent_label ORDER BY id DESC SEPARATOR '\n'), '\n', 1)      AS agentLabel,
+               MAX(CASE WHEN biz_type = 'CHAT' THEN agent_id END)                                        AS agentId,
+               SUBSTRING_INDEX(GROUP_CONCAT(CASE WHEN biz_type = 'CHAT' THEN agent_label END
+                   ORDER BY id DESC SEPARATOR '\n'), '\n', 1)                                           AS agentLabel,
                MAX(user_id)                                                                             AS userId,
                COUNT(*)                                                                                 AS runCount,
+               SUM(CASE WHEN message_id IS NOT NULL THEN 1 ELSE 0 END)                                  AS visibleReplyCount,
+               SUM(CASE WHEN message_id IS NULL THEN 1 ELSE 0 END)                                      AS internalRunCount,
+               SUM(CASE WHEN message_id IS NULL AND biz_type = 'SUB_AGENT' THEN 1 ELSE 0 END)           AS subAgentRunCount,
+               SUM(CASE WHEN message_id IS NULL AND biz_type = 'WORKFLOW' THEN 1 ELSE 0 END)            AS workflowRunCount,
+               SUM(CASE WHEN message_id IS NULL AND biz_type = 'SCHEDULED_JOB' THEN 1 ELSE 0 END)       AS scheduledJobRunCount,
+               SUM(CASE WHEN message_id IS NULL AND (biz_type IS NULL OR biz_type NOT IN ('SUB_AGENT',
+                   'WORKFLOW', 'SCHEDULED_JOB')) THEN 1 ELSE 0 END)                                      AS otherInternalRunCount,
+               IFNULL(SUM(iteration_count), 0)                                                          AS llmCallCount,
                IFNULL(SUM(input_tokens), 0)                                                             AS inputTokens,
                IFNULL(SUM(output_tokens), 0)                                                            AS outputTokens,
                IFNULL(SUM(cost), 0)                                                                     AS cost,
@@ -95,6 +118,55 @@
         <choose>
             <when test="orderByCost">ORDER BY cost DESC, lastActiveAt DESC</when>
             <otherwise>ORDER BY lastActiveAt DESC</otherwise>
+        </choose>
+    </select>
+
+    <!--
+      统一执行账单：每条成本流水只归属一个账单类型，避免会话与工作流重复计费。
+      CHAT/SUB_AGENT 归入会话；WORKFLOW 按 biz_run_id 归入工作流执行。
+      旧工作流流水没有 biz_run_id，只能退化为一条流水一行并显式标记 legacy。
+      SCHEDULED_JOB 的通用关联字段已预留，本期暂不纳入列表。
+    -->
+    <select id="pageExecutionBills" resultType="java.util.Map">
+        SELECT CONCAT(grouped.billType, ':', grouped.referenceId)                                      AS billId,
+               grouped.*
+        FROM (
+            SELECT CASE WHEN biz_type = 'WORKFLOW' THEN 'WORKFLOW' ELSE 'CHAT' END                     AS billType,
+                   CASE WHEN biz_type = 'WORKFLOW'
+                        THEN COALESCE(biz_run_id, CONCAT('legacy-', id))
+                        ELSE CAST(session_id AS CHAR) END                                               AS referenceId,
+                   MAX(session_id)                                                                     AS sessionId,
+                   MAX(biz_id)                                                                         AS workflowId,
+                   SUBSTRING_INDEX(GROUP_CONCAT(COALESCE(biz_label, agent_label)
+                       ORDER BY id DESC SEPARATOR '\n'), '\n', 1)                                      AS titleSnapshot,
+                   MAX(CASE WHEN biz_type = 'CHAT' THEN agent_id END)                                  AS agentId,
+                   SUBSTRING_INDEX(GROUP_CONCAT(CASE WHEN biz_type = 'CHAT' THEN agent_label END
+                       ORDER BY id DESC SEPARATOR '\n'), '\n', 1)                                      AS agentLabel,
+                   MAX(user_id)                                                                        AS userId,
+                   COUNT(*)                                                                            AS runCount,
+                   SUM(CASE WHEN message_id IS NOT NULL THEN 1 ELSE 0 END)                             AS visibleReplyCount,
+                   SUM(CASE WHEN message_id IS NULL AND biz_type = 'SUB_AGENT' THEN 1 ELSE 0 END)      AS internalRunCount,
+                   SUM(CASE WHEN biz_type = 'SUB_AGENT' THEN 1 ELSE 0 END)                             AS subAgentRunCount,
+                   IFNULL(SUM(iteration_count), 0)                                                     AS llmCallCount,
+                   IFNULL(SUM(input_tokens), 0)                                                        AS inputTokens,
+                   IFNULL(SUM(output_tokens), 0)                                                       AS outputTokens,
+                   IFNULL(SUM(cost), 0)                                                                AS cost,
+                   SUM(CASE WHEN cost IS NULL THEN 1 ELSE 0 END)                                       AS unpricedRuns,
+                   GROUP_CONCAT(DISTINCT model_label ORDER BY model_label SEPARATOR ',')               AS models,
+                   SUBSTRING_INDEX(GROUP_CONCAT(channel ORDER BY id DESC SEPARATOR '\n'), '\n', 1)    AS channel,
+                   IFNULL(SUM(duration_ms), 0)                                                         AS durationMs,
+                   MAX(created_at)                                                                     AS lastActiveAt,
+                   MAX(CASE WHEN biz_type = 'WORKFLOW' AND biz_run_id IS NULL THEN 1 ELSE 0 END)       AS legacy
+            FROM chat_usage_record
+            WHERE created_at >= #{start} AND created_at &lt; #{endExclusive}
+              AND ((biz_type IN ('CHAT', 'SUB_AGENT') AND session_id IS NOT NULL)
+                   OR biz_type = 'WORKFLOW')
+            <if test="agentId != null">AND agent_id = #{agentId}</if>
+            GROUP BY billType, referenceId
+        ) grouped
+        <choose>
+            <when test="orderByCost">ORDER BY grouped.cost DESC, grouped.lastActiveAt DESC</when>
+            <otherwise>ORDER BY grouped.lastActiveAt DESC</otherwise>
         </choose>
     </select>
 
@@ -155,6 +227,7 @@
     <select id="costTopAgents" resultType="java.util.Map">
         SELECT agent_id                                                                                  AS agentId,
                SUBSTRING_INDEX(GROUP_CONCAT(agent_label ORDER BY id DESC SEPARATOR '\n'), '\n', 1)       AS agentLabel,
+               GROUP_CONCAT(DISTINCT biz_type ORDER BY biz_type SEPARATOR ',')                            AS bizTypes,
                COUNT(DISTINCT session_id)                                                                AS sessionCount,
                COUNT(*)                                                                                  AS runCount,
                IFNULL(SUM(input_tokens), 0)                                                              AS inputTokens,
