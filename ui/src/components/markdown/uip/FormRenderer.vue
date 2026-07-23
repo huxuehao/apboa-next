@@ -198,6 +198,8 @@ function handleReset() {
   border-radius: 12px;
   padding: 18px 20px;
   background: #fafbfc;
+  /* 长文本兜底断行（继承到卡片内所有文本） */
+  overflow-wrap: break-word;
 }
 
 .uip-form-title {
@@ -210,6 +212,13 @@ function handleReset() {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
+  gap: 8px;
+}
+
+/* 标题文本允许收缩换行，不挤掉右侧"已完成"徽标 */
+.uip-form-title > span:first-child {
+  flex: 1;
+  min-width: 0;
 }
 
 .uip-form-status {
@@ -217,6 +226,7 @@ function handleReset() {
   font-weight: 400;
   color: #52c41a;
   letter-spacing: 0.5px;
+  flex-shrink: 0;
 }
 
 .uip-form {

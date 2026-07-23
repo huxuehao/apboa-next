@@ -18,6 +18,7 @@ export interface AgentPreference {
   planActive?: boolean
   toolProcessActive?: boolean
   sidebarCollapsed?: boolean
+  commonQuestionsCollapsed?: boolean
 }
 
 /** 偏好映射：key 为 `${agentId}_${accountId}` */
@@ -145,6 +146,32 @@ export const useChatStore = defineStore(
       preferences.value[key].sidebarCollapsed = value
     }
 
+    /**
+     * 获取对话中常驻常用问题的折叠状态（默认展开）
+     */
+    function getCommonQuestionsCollapsed(
+      agentId: string,
+      accountId: string | undefined
+    ): boolean {
+      if (!agentId) return false
+      const key = preferenceKey(agentId, accountId)
+      return preferences.value[key]?.commonQuestionsCollapsed ?? false
+    }
+
+    /**
+     * 设置对话中常驻常用问题的折叠状态
+     */
+    function setCommonQuestionsCollapsed(
+      agentId: string,
+      accountId: string | undefined,
+      value: boolean
+    ): void {
+      if (!agentId) return
+      const key = preferenceKey(agentId, accountId)
+      if (!preferences.value[key]) preferences.value[key] = {}
+      preferences.value[key].commonQuestionsCollapsed = value
+    }
+
     return {
       preferences,
       getMemoryActive,
@@ -154,7 +181,9 @@ export const useChatStore = defineStore(
       getSidebarCollapsed,
       setSidebarCollapsed,
       getToolProcessActive,
-      setToolProcessActive
+      setToolProcessActive,
+      getCommonQuestionsCollapsed,
+      setCommonQuestionsCollapsed
     }
   },
   {

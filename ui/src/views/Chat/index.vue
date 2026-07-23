@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import {computed, onBeforeUnmount, onMounted, ref, watch} from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { Modal, message } from 'ant-design-vue'
 import { useAccountStore, useChatStore } from '@/stores'
 import { formatSessionTitle } from '@/utils/chat/format'
@@ -8,6 +8,7 @@ import { useAgentDetail } from '@/composables/chat/useAgentDetail'
 import { useSessions } from '@/composables/chat/useSessions'
 import { useCurrentSession } from '@/composables/chat/useCurrentSession'
 import { useChatStream } from '@/composables/chat/useChatStream'
+import { RouteNames } from '@/router'
 import ChatSidebar from '@/components/chat/ChatSidebar.vue'
 import ChatMain from '@/components/chat/ChatMain.vue'
 import RenameModal from '@/components/chat/RenameModal.vue'
@@ -31,6 +32,7 @@ const props = withDefaults(defineProps<{
 })
 
 const route = useRoute()
+const router = useRouter()
 const accountStore = useAccountStore()
 const chatStore = useChatStore()
 const userInfo = computed(() => accountStore.userInfo)
@@ -38,7 +40,7 @@ const userInfo = computed(() => accountStore.userInfo)
 const agentId = computed(() => (props.chatAgentId || route.params.agentId) as string || '')
 
 // 智能体详情
-const { agentDetail, allowFileType } = useAgentDetail(agentId)
+const { agentDetail, agentAvatar, allowFileType } = useAgentDetail(agentId)
 
 // 记忆/规划是否可用（由 agentDetail 决定）
 const accountId = computed(() => accountStore.userInfo?.id)
@@ -91,6 +93,18 @@ const handelToolProcess = (v: boolean) => {
   chatStore.setToolProcessActive(id as string, accountId.value as string, v)
 }
 
+// 常驻常用问题折叠状态（per agent+account 持久化偏好）
+const commonQuestionsCollapsed = computed(() => {
+  const id = agentDetail.value?.id ?? agentId.value
+  chatStore.preferences
+  return chatStore.getCommonQuestionsCollapsed(id as string, accountId.value as string)
+})
+
+const handleToggleQuestionsCollapsed = () => {
+  const id = agentDetail.value?.id ?? agentId.value
+  chatStore.setCommonQuestionsCollapsed(id as string, accountId.value as string, !commonQuestionsCollapsed.value)
+}
+
 // 会话列表管理
 const {
   pinnedSessions,
@@ -119,6 +133,12 @@ const {
   loadMoreHistory,
   loadingMessages
 } = useCurrentSession(agentId)
+
+// 顶部标题：无实义标题（未创建会话回退智能体名 / 占位"新对话"）时隐藏
+const headerTitle = computed(() => {
+  const t = currentSessionTitle.value
+  return (!t || t === '新对话') ? '' : t
+})
 
 // 已上传附件（仅已完成上传的计入 fileIds）
 const uploadedFiles = ref<UploadedFileItem[]>([])
@@ -237,10 +257,11 @@ watch(streamingMessageId, (newId) => {
   }
 })
 
-/** 构建文件前缀字符串 */
+/** 构建文件前缀字符串（剔除 localUrl：objectURL 是会话内存态临时地址，不得落库） */
 function buildFilesPrefix(files: UploadedFileItem[]): string {
   if (!files.length) return ''
-  return JSON.stringify({ files }) + '@==##::::##==@'
+  const persistable = files.map(({ localUrl: _localUrl, ...rest }) => rest)
+  return JSON.stringify({ files: persistable }) + '@==##::::##==@'
 }
 
 // 构建展示消息
@@ -373,6 +394,55 @@ const handleSelectSession = async (session: ChatSessionVO) => {
   preserveRunningSession.value = false
 }
 
+// ========== 会话 URL 同步（/chat/:agentId/:sessionId?） ==========
+
+// 外置对话页（Communication）以 props.chatAgentId 嵌入本组件，其 URL 是
+// /communication/:chatKey，嵌入模式下禁止改写路由；
+// route.name 守卫防止离开对话页时（params 已清空、组件尚未卸载）watch 误改写目标路由
+const isStandaloneChatRoute = computed(() => !props.chatAgentId && route.name === RouteNames.CHAT)
+
+// 状态 -> URL：会话变化（选择/新建/发消息懒创建/删除当前会话）统一同步到地址栏；
+// replace 不堆浏览器历史，返回键保持"离开对话页"语义
+watch(currentSessionId, (sid) => {
+  if (!isStandaloneChatRoute.value) return
+  const target = sid ? `/chat/${agentId.value}/${sid}` : `/chat/${agentId.value}`
+  if (route.path !== target) router.replace(target)
+})
+
+/**
+ * URL -> 状态：按地址栏中的会话 ID 恢复会话（刷新/直链进入/浏览器前进后退）。
+ * 复用 handleSelectSession 完整进入路径（断流、加载消息、运行中重连、HITL 恢复），
+ * 因此必须在 runningSessions 就位（getActiveRuns 返回）后调用，否则不会重连 SSE。
+ */
+const restoreSessionFromRoute = async () => {
+  if (!isStandaloneChatRoute.value) return
+  const sid = route.params.sessionId as string | undefined
+  if (!sid || sid === currentSessionId.value) return
+  try {
+    const res = await chatSessionApi.getSessionDetail(sid)
+    const session = res.data?.data
+    if (session && String(session.agentId) === agentId.value) {
+      await handleSelectSession(session)
+      return
+    }
+  } catch {
+    // 查询失败与"不存在/不属于当前智能体"同样处理
+  }
+  message.warning('会话不存在或已删除')
+  router.replace(`/chat/${agentId.value}`)
+}
+
+// 浏览器前进/后退或手动改地址栏时响应（与 currentSessionId 比较防回环）
+watch(() => route.params.sessionId, (sid) => {
+  if (!isStandaloneChatRoute.value) return
+  if (!sid) {
+    // 退到无会话 URL（含切换智能体）：有会话则回欢迎页
+    if (currentSessionId.value) resetSession(null)
+    return
+  }
+  void restoreSessionFromRoute()
+})
+
 // 会话菜单操作
 const handleSessionMenu = async (key: string, session: ChatSessionVO) => {
   const id = String(session.id)
@@ -491,6 +561,15 @@ const handleVEPRetry = async (vepCode: string) => {
 }
 
 // 发送消息
+/**
+ * 点击欢迎页常用问题卡片：填入输入框后直接发送，与手动输入同链路
+ */
+const handleQuickQuestion = (question: string) => {
+  if (isRunning.value) return
+  inputText.value = question
+  handleSend()
+}
+
 const handleSend = async () => {
   const text = inputText.value.trim()
   const filesToSend = uploadedFiles.value.filter((f) => !f.uploading)
@@ -588,20 +667,14 @@ const stopPolling = () => {
   }
 }
 
-// 初始化：获取活跃运行列表，若当前会话在运行则重连
+// 初始化：获取活跃运行列表后按 URL 恢复会话（运行中重连/HITL 恢复由 handleSelectSession 承担）
 onMounted(async () => {
   loadSessions()
   try {
     const activeIds = await getActiveRuns()
     runningSessions.value = new Set(activeIds)
-    if (currentSessionId.value) {
-      if (activeIds.includes(currentSessionId.value)) {
-        reconnectStream(currentSessionId.value)
-      } else {
-        // 非运行中：可能是 HITL 确认暂停态，尝试从持久暂停态重建确认 UI
-        void restoreConfirm(currentSessionId.value)
-      }
-    }
+    // 必须在 runningSessions 就位后恢复，否则恢复的运行中会话不会重连 SSE
+    await restoreSessionFromRoute()
     if (activeIds.length > 0) {
       startPolling()
     }
@@ -638,6 +711,7 @@ watch(isRunning, (running) => {
     <ChatSidebar
       :collapsed="sidebarCollapsed"
       :agent-name="agentDetail?.name"
+      :agent-avatar="agentAvatar"
       :pinned-sessions="pinnedSessions"
       :other-sessions="otherSessions"
       :current-session-id="currentSessionId"
@@ -664,10 +738,14 @@ watch(isRunning, (running) => {
     <ChatMain
       v-else
       ref="chatMainRef"
-      :title="currentSessionTitle || agentDetail?.name || '对话'"
+      :title="headerTitle"
       :message-size="messagesList.length"
       :welcome-headline="`来和 ${agentDetail?.name || '智能体'} 聊聊吧`"
       :welcome-desc="agentDetail?.description || '有什么想说的，直接发给我就好～'"
+      :common-questions="agentDetail?.commonQuestions"
+      :common-questions-pinned="agentDetail?.commonQuestionsPinned !== false"
+      :common-questions-collapsed="commonQuestionsCollapsed"
+      :agent-avatar="agentAvatar"
       :messages="displayMessages"
       :tool-calls="toolCallsInProgress"
       :input-value="inputText"
@@ -698,6 +776,8 @@ watch(isRunning, (running) => {
       @auto-approve="handleAutoApproveChange"
       @toolContent="handelToolContent"
       @send="handleSend"
+      @quick-question="handleQuickQuestion"
+      @toggle-questions-collapsed="handleToggleQuestionsCollapsed"
       @abort="abortRun"
       @toggle-sidebar="toggleSidebar"
       @toggle-workspace="toggleWorkspace"

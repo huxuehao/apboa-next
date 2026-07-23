@@ -248,6 +248,7 @@ public class ChatSessionServiceImpl extends ServiceImpl<ChatSessionMapper, ChatS
     public IPage<ChatSessionVO> pageSessions(PageParams pageParams, ChatSessionQueryDTO query) {
         Long userId = query.getUserId() != null ? query.getUserId() : UserUtils.getId();
         LambdaQueryWrapper<ChatSession> wrapper = new LambdaQueryWrapper<ChatSession>()
+                .eq(query.getId() != null, ChatSession::getId, query.getId())
                 .eq(userId != null, ChatSession::getUserId, userId)
                 .eq(query.getAgentId() != null, ChatSession::getAgentId, query.getAgentId())
                 .eq(query.getIsPinned() != null, ChatSession::getIsPinned, query.getIsPinned())

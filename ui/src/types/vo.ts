@@ -96,6 +96,20 @@ export interface AccountVO {
 }
 
 /**
+ * 智能体常用问题
+ */
+export interface CommonQuestion {
+  /** 图标名称（对应 @ant-design/icons-vue 组件名，不在映射表中时不渲染图标） */
+  icon?: string
+  /** 图标颜色 */
+  color?: string
+  /** 卡片标题 */
+  title: string
+  /** 点击卡片后发送的问题内容 */
+  question: string
+}
+
+/**
  * 智能体定义VO
  */
 export interface AgentDefinitionVO {
@@ -104,6 +118,9 @@ export interface AgentDefinitionVO {
   name: string
   agentCode: string
   description: string
+  commonQuestions?: CommonQuestion[] | null
+  /** 常用问题是否在对话中常驻显示（DB 默认 1） */
+  commonQuestionsPinned?: boolean
   modelConfigId: string
   modelParamsOverride: Record<string, unknown> | null
   skill: string[]

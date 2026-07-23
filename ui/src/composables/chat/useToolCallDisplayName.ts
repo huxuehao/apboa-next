@@ -42,6 +42,13 @@ const FRAMEWORK_TOOL_NAMES: Record<string, string> = {
   load_file_text_content: '读取附件',
   execute_shell_command: '执行 Shell 命令',
   context_reload: '重载上下文',
+  // 计划模块内置工具（enablePlanning 时由框架注册）
+  create_plan: '创建计划',
+  get_subtask_count: '查询子任务数',
+  update_subtask_state: '更新子任务状态',
+  view_subtasks: '查看子任务',
+  finish_subtask: '完成子任务',
+  finish_plan: '完成计划',
 }
 /** 幂等加载标志 */
 let loaded = false

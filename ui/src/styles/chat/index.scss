@@ -160,6 +160,12 @@ $small-mobile-breakpoint: 375px;
   flex-shrink: 0;
 }
 
+/* 智能体自定义头像（替换默认 logo 位） */
+.chat-sidebar-agent-avatar {
+  border-radius: var(--border-radius-md);
+  object-fit: cover;
+}
+
 .chat-sidebar-name {
   font-size: var(--font-size-lg);
   font-weight: 600;
@@ -467,10 +473,34 @@ $small-mobile-breakpoint: 375px;
 }
 
 .chat-message {
+  /* 纵向：气泡在上、footer（时间 + 复制按钮）在下；水平对齐由 align-items 控制 */
   display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   max-width: 100%;
   transition: background-color 0.3s ease;
   border-radius: var(--border-radius-md);
+}
+
+/* 消息 footer 行：相对时间 + 复制按钮（气泡外部下方，jm 风格） */
+.chat-msg-footer {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 22px; /* 固定占位：复制按钮 hover 渐显时不引起布局跳动 */
+  padding: 2px var(--spacing-xs) 0;
+}
+
+.chat-msg-footer--assistant {
+  /* 对齐气泡内正文左缘（气泡水平 padding 同值） */
+  padding-left: var(--spacing-md);
+}
+
+.chat-msg-time {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-placeholder);
+  user-select: none;
+  cursor: default;
 }
 
 /* 导航器点击后的消息高亮闪烁 */
@@ -489,7 +519,7 @@ $small-mobile-breakpoint: 375px;
 }
 
 .chat-message-user {
-  justify-content: flex-end;
+  align-items: flex-end;
 }
 
 .chat-message-bubble {
@@ -744,17 +774,32 @@ $small-mobile-breakpoint: 375px;
   text-align: center;
   min-width: 0;
 
-  /* 移动端适配：调整欢迎页 */
+  /* 移动端适配：顶部留白收紧，把垂直空间让给内容与输入框 */
   @media (max-width: $mobile-breakpoint) {
     padding: var(--spacing-xl) var(--spacing-md);
     justify-content: flex-start;
-    padding-top: 20vh;
+    padding-top: 24px;
   }
 
   /* 小型手机适配 */
   @media (max-width: $small-mobile-breakpoint) {
     padding: var(--spacing-lg) var(--spacing-sm);
-    padding-top: 15vh;
+    padding-top: 16px;
+  }
+}
+
+/* 欢迎页智能体大头像（方形整图展示，轻圆角防生硬） */
+.chat-welcome-avatar {
+  width: 136px;
+  height: 136px;
+  border-radius: var(--border-radius-lg);
+  object-fit: cover;
+  margin-bottom: var(--spacing-md);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+
+  @media (max-width: $mobile-breakpoint) {
+    width: 112px;
+    height: 112px;
   }
 }
 
@@ -803,6 +848,101 @@ $small-mobile-breakpoint: 375px;
   }
 }
 
+.chat-welcome-questions {
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.chat-welcome-questions-label {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--spacing-sm);
+  text-align: left;
+}
+
+.chat-welcome-questions-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacing-sm);
+
+  /* 移动端：紧凑小卡（只留图标+标题）后双列依然放得下，收紧间距 */
+  @media (max-width: $mobile-breakpoint) {
+    gap: 8px;
+  }
+}
+
+.chat-welcome-question-card {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background-color: var(--color-bg-white);
+  border: 1px solid var(--color-border-base);
+  border-radius: var(--border-radius-lg);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  min-width: 0;
+  transition: all var(--transition-base);
+
+  &:hover {
+    border-color: var(--color-primary);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    transform: translateY(-1px);
+  }
+
+  .question-card-icon {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    font-size: 20px;
+    /* 与标题首行光学对齐 */
+    margin-top: 2px;
+  }
+
+  .question-card-content {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .question-card-title {
+    font-size: var(--font-size-base);
+    font-weight: 500;
+    color: var(--color-text-primary);
+    word-break: break-word;
+  }
+
+  .question-card-question {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-secondary);
+    line-height: 1.5;
+    word-break: break-word;
+  }
+
+  /* 移动端紧凑形态：隐藏 question 全文（点击仍发送完整内容），压缩内边距 */
+  @media (max-width: $mobile-breakpoint) {
+    padding: 10px 12px;
+    align-items: center;
+
+    .question-card-icon {
+      font-size: 18px;
+      margin-top: 0;
+    }
+
+    .question-card-title {
+      font-size: var(--font-size-sm);
+    }
+
+    .question-card-question {
+      display: none;
+    }
+  }
+}
+
 .chat-welcome-input {
   margin-top: var(--spacing-lg);
   width: 100%;
@@ -815,6 +955,82 @@ $small-mobile-breakpoint: 375px;
     max-width: 100%;
     margin-top: var(--spacing-md);
     padding: 0 var(--spacing-xs);
+  }
+}
+
+/* 对话中常驻的常用问题快捷入口（输入框上方） */
+.chat-pinned-questions {
+  margin-bottom: var(--spacing-xs);
+}
+
+.chat-pinned-questions-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: transparent;
+  padding: 2px 4px;
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  border-radius: var(--border-radius-sm);
+
+  &:hover {
+    color: var(--color-text-regular);
+  }
+}
+
+.chat-pinned-questions-caret {
+  font-size: 10px;
+  transition: transform var(--transition-base);
+
+  &.collapsed {
+    transform: rotate(-90deg);
+  }
+}
+
+.chat-pinned-questions-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+  margin-top: var(--spacing-xs);
+}
+
+.chat-pinned-question-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background-color: var(--color-bg-white);
+  border: 1px solid var(--color-border-base);
+  border-radius: var(--border-radius-md);
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-regular);
+  transition: all var(--transition-base);
+  max-width: 200px;
+
+  .chip-icon {
+    display: inline-flex;
+    align-items: center;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+
+  .chip-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &:hover:not(:disabled) {
+    border-color: var(--color-primary);
+    background-color: rgba($chat-primary, 0.04);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 }
 

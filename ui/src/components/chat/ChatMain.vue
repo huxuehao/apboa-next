@@ -4,14 +4,16 @@ import {
   MenuOutlined,
   FolderOutlined,
   FolderOpenOutlined,
-  LoadingOutlined
+  LoadingOutlined,
+  DownOutlined
 } from '@ant-design/icons-vue'
+import { resolveCommonQuestionIcon } from '@/components/agent/commonQuestionIcons'
 import MessageList from './MessageList.vue'
 import MessageNavigator from './MessageNavigator.vue'
 import ChatInput from './ChatInput.vue'
 import Welcome from './Welcome.vue'
 import PlanPanel from './PlanPanel.vue'
-import type { DisplayMessage, UploadedFileItem, PlanInfo } from '@/types'
+import type { DisplayMessage, UploadedFileItem, PlanInfo, CommonQuestion } from '@/types'
 import type {FlatFileItem} from "@/composables/chat/useWorkspaceFiles.ts";
 import type { InteractionSubmitPayload } from '@/components/markdown/uip/types'
 import WorkspaceFilePreview from "@/components/workspace/WorkspaceFilePreview.vue";
@@ -21,6 +23,14 @@ const props = defineProps<{
   messageSize: number
   welcomeHeadline: string
   welcomeDesc?: string
+  /** 欢迎页常用问题卡片 */
+  commonQuestions?: CommonQuestion[] | null
+  /** 常用问题是否在对话中常驻显示 */
+  commonQuestionsPinned?: boolean
+  /** 常驻常用问题是否折叠（偏好由父层持久化） */
+  commonQuestionsCollapsed?: boolean
+  /** 智能体自定义头像（base64 data URL） */
+  agentAvatar?: string | null
   messages: DisplayMessage[]
   toolCalls: any[]
   inputValue: string
@@ -69,6 +79,10 @@ const emit = defineEmits<{
   (e: 'interactionSubmit', payload: InteractionSubmitPayload): void
   (e: 'uipRetry', uipCode: string): void
   (e: 'vepRetry', vepCode: string): void
+  /** 点击欢迎页常用问题卡片 */
+  (e: 'quickQuestion', question: string): void
+  /** 切换常驻常用问题折叠状态 */
+  (e: 'toggleQuestionsCollapsed'): void
 }>()
 
 // 滚动容器 ref
@@ -266,6 +280,8 @@ defineExpose({
         :input-value="inputValue"
         :agent-id="agentId"
         :description="welcomeDesc"
+        :agent-avatar="agentAvatar"
+        :common-questions="commonQuestions"
         :uploaded-files="uploadedFiles"
         :isRunning="isRunning"
         :memory-active="memoryActive"
@@ -277,7 +293,6 @@ defineExpose({
         :tool-process-active="toolProcessActive"
         :auto-approve-active="autoApproveActive"
         :session-id="sessionId"
-        :has-code-execution-config="hasCodeExecutionConfig"
         :mention-allowed="true"
         @update:input-value="$emit('update:inputValue', $event)"
         @update:uploaded-files="$emit('update:uploadedFiles', $event)"
@@ -287,6 +302,7 @@ defineExpose({
         @auto-approve="$emit('autoApprove', $event)"
         @send="handleSend"
         @new-session="$emit('newSession')"
+        @quick-question="$emit('quickQuestion', $event)"
       />
     </div>
 
@@ -331,6 +347,43 @@ defineExpose({
       </div>
       <div class="chat-main-input-wrap" v-if="!sessionMessageTable">
         <div class="chat-input-outer">
+          <div
+            v-if="commonQuestionsPinned && commonQuestions && commonQuestions.length > 0"
+            class="chat-pinned-questions"
+          >
+            <button
+              type="button"
+              class="chat-pinned-questions-toggle"
+              :title="commonQuestionsCollapsed ? '展开常用问题' : '收起常用问题'"
+              @click="$emit('toggleQuestionsCollapsed')"
+            >
+              <DownOutlined
+                class="chat-pinned-questions-caret"
+                :class="{ collapsed: commonQuestionsCollapsed }"
+              />
+              <span>常用问题</span>
+            </button>
+            <div v-show="!commonQuestionsCollapsed" class="chat-pinned-questions-chips">
+              <button
+                v-for="(q, index) in commonQuestions"
+                :key="index"
+                type="button"
+                class="chat-pinned-question-chip"
+                :disabled="isRunning"
+                :title="q.question"
+                @click="$emit('quickQuestion', q.question)"
+              >
+                <span
+                  v-if="resolveCommonQuestionIcon(q.icon)"
+                  class="chip-icon"
+                  :style="{ color: q.color || undefined }"
+                >
+                  <component :is="resolveCommonQuestionIcon(q.icon)" />
+                </span>
+                <span class="chip-title">{{ q.title }}</span>
+              </button>
+            </div>
+          </div>
           <ChatInput
             :model-value="inputValue"
             :agent-id="agentId"

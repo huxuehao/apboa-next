@@ -73,6 +73,22 @@ export function allowFileType(id: string) {
   return request.get<ApiResponse<string[]>>(`/api/agent/definition/${id}/allow/file-type`)
 }
 
+/**
+ * 获取智能体头像（base64 data URL，未设置返回 null；独立于 VO 接口）
+ * GET /agent/definition/{id}/avatar
+ */
+export function getAvatar(id: string) {
+  return request.get<ApiResponse<string | null>>(`/api/agent/definition/${id}/avatar`)
+}
+
+/**
+ * 更新智能体头像（avatar 传空清除）
+ * PUT /agent/definition/{id}/avatar
+ */
+export function updateAvatar(id: string, avatar: string | null) {
+  return request.put<ApiResponse<boolean>>(`/api/agent/definition/${id}/avatar`, { avatar })
+}
+
 
 /**
  * 执行工具

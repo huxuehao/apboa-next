@@ -344,7 +344,8 @@ onMounted(() => {
         <AFormItem label="备注" name="remark">
           <AInput v-model:value="formData.remark" placeholder="请输入备注" type="textarea" :rows="3" />
         </AFormItem>
-        <AFormItem label="是否启用" name="valid">
+        <!-- 新增默认禁用入库（handleAdd 初始 valid=0），启用走列表"设为有效"原子切换 -->
+        <AFormItem v-if="formMode !== 'add'" label="是否启用" name="valid">
           <ASelect v-model:value="formData.valid" placeholder="请选择">
             <ASelectOption :value="1">启用</ASelectOption>
             <ASelectOption :value="0">禁用</ASelectOption>

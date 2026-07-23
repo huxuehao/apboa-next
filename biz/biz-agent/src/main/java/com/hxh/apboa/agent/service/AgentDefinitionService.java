@@ -30,4 +30,15 @@ public interface AgentDefinitionService extends IService<AgentDefinition> {
     List<ToolConfig> getEnabledToolsOfAgent(Long agentId);
     List<SkillPackage> getEnabledSkillsOfAgent(Long agentId);
     List<Workflow> getEnabledWorkflowsOfAgent(Long agentId);
+
+    /**
+     * 获取智能体头像（base64 data URL，未设置返回 null）。
+     * 头像不进 VO、不随既有查询接口返回，避免 base64 撑大列表/详情响应。
+     */
+    String getAvatar(Long id);
+
+    /**
+     * 更新智能体头像（avatar 为空时清除）
+     */
+    Boolean updateAvatar(Long id, String avatar);
 }

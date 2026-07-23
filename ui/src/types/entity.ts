@@ -388,6 +388,11 @@ export interface UploadedFileItem {
   size: string
   /** 是否正在上传中（上传完成后为 false 或 undefined） */
   uploading?: boolean
+  /**
+   * 图片附件的本地即时预览地址（objectURL，仅会话内存态）。
+   * 发送消息时必须剔除，不得序列化落库
+   */
+  localUrl?: string
 }
 
 /**

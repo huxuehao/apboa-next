@@ -12,7 +12,7 @@ import AgentFormModel from '@/components/agent/AgentFormModel.vue'
 import AgentFormTools from '@/components/agent/AgentFormTools.vue'
 import AgentFormKnowledge from '@/components/agent/AgentFormKnowledge.vue'
 import AgentFormAdvanced from '@/components/agent/AgentFormAdvanced.vue'
-import type { AgentDefinitionVO } from '@/types'
+import type { AgentDefinitionVO, CommonQuestion } from '@/types'
 import { ToolChoiceStrategy } from '@/types'
 import * as agentApi from '@/api/agent'
 import { useAccountStore } from '@/stores'
@@ -47,7 +47,10 @@ const formData = ref({
     name: '',
     agentCode: '',
     description: '',
-    tag: ''
+    tag: '',
+    avatar: null as string | null,
+    commonQuestions: [] as CommonQuestion[],
+    commonQuestionsPinned: true
   },
   model: {
     modelConfigId: '',
@@ -110,6 +113,46 @@ const currentFormRef = computed(() => {
   }
 })
 
+// ========== 头像（独立接口，随保存串行提交） ==========
+// 注意：必须声明在 initFormData 之前——下方 watch(agentData) 带 immediate，
+// setup 阶段即同步调用 loadAvatar，声明靠后会触发 TDZ ReferenceError
+
+/** 头像基线：与当前值一致时保存不发头像请求 */
+const avatarBaseline = ref<string | null>(null)
+
+/**
+ * 异步加载头像回填表单与基线；
+ * 回填会触发 deep watch 误标 isDirty，若此前无编辑则复位
+ */
+function loadAvatar(id: string) {
+  avatarBaseline.value = null
+  agentApi.getAvatar(id).then(res => {
+    const v = res.data?.data || null
+    const wasDirty = isDirty.value
+    formData.value.basic.avatar = v
+    avatarBaseline.value = v
+    if (!wasDirty) {
+      nextTick(() => {
+        isDirty.value = false
+      })
+    }
+  }).catch(() => {})
+}
+
+/**
+ * 头像相对基线有变更时提交（失败不影响主流程，单独提示）
+ */
+async function syncAvatarIfChanged(id: string) {
+  const current = formData.value.basic.avatar ?? null
+  if (current === avatarBaseline.value) return
+  try {
+    await agentApi.updateAvatar(id, current)
+    avatarBaseline.value = current
+  } catch {
+    message.warning('头像保存失败，请重试')
+  }
+}
+
 /**
  * 初始化表单数据
  */
@@ -121,8 +164,12 @@ function initFormData() {
     name: data.name,
     agentCode: data.agentCode,
     description: data.description,
-    tag: data.tag || ''
+    tag: data.tag || '',
+    avatar: null,
+    commonQuestions: data.commonQuestions || [],
+    commonQuestionsPinned: data.commonQuestionsPinned !== false
   }
+  loadAvatar(String(data.id))
   formData.value.model = {
     modelConfigId: data.modelConfigId,
     modelParamsOverride: data.modelParamsOverride || null,
@@ -218,6 +265,9 @@ async function handleSubmit() {
       agentCode: formData.value.basic.agentCode,
       description: formData.value.basic.description,
       tag: formData.value.basic.tag || '',
+      // 始终传数组（清空时传 []），null 会被 updateById 的非空策略跳过导致清不掉旧配置
+      commonQuestions: formData.value.basic.commonQuestions || [],
+      commonQuestionsPinned: formData.value.basic.commonQuestionsPinned !== false,
       modelConfigId: formData.value.model.modelConfigId,
       modelParamsOverride: formData.value.model.modelParamsOverride,
       systemPromptTemplateId: formData.value.model.systemPromptTemplateId,
@@ -255,6 +305,7 @@ async function handleSubmit() {
     }
 
     await agentApi.update(vo as AgentDefinitionVO)
+    await syncAvatarIfChanged(String(props.agentData.id))
     message.success('更新成功')
     isDirty.value = false
     emit('success')
@@ -327,14 +378,18 @@ defineExpose({ isDirty })
   height: 100%;
   background-color: #FFFFFF;
   padding: 12px;
+  display: flex;
+  flex-direction: column;
 }
 .config-edit-form {
-  height: calc(100vh - 280px);
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: var(--spacing-md) 0;
 }
 
 .config-edit-actions {
   padding-top: var(--spacing-md);
+  flex-shrink: 0;
 }
 </style>

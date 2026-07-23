@@ -123,6 +123,8 @@ async function handleSubmit() {
   border-radius: 12px;
   padding: 18px 20px;
   background: #fafbfc;
+  /* 长文本兜底断行（继承到卡片内所有文本） */
+  overflow-wrap: break-word;
 }
 
 .uip-choice-question {
@@ -135,6 +137,17 @@ async function handleSubmit() {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
+  gap: 8px;
+}
+
+/* 问题文本允许收缩换行，不挤掉右侧"已完成"徽标 */
+.uip-choice-question > span:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.uip-choice-status {
+  flex-shrink: 0;
 }
 
 .uip-choice-status {
@@ -148,21 +161,51 @@ async function handleSubmit() {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  /* antd 的 checkbox/radio group 自带 white-space: nowrap 并继承到所有选项文本，
+     nowrap 禁止软换行且优先于 word-break，是长描述溢出的根因，必须显式拉回 */
+  white-space: normal;
 }
 
 .uip-choice-option {
   padding: 8px 12px;
   border-radius: 8px;
   transition: background 0.15s;
+  /* group（flex column）的子项，打破 min-width:auto 收缩下限 */
+  min-width: 0;
 }
 
 .uip-choice-option:not(.is-disabled):hover {
   background: #f2f4f7;
 }
 
+/*
+ * 长文本溢出修复：antd 的 wrapper 默认 inline-flex（宽度由内容决定，可溢出容器），
+ * 且内容 span 作为 flex item 默认 min-width:auto 拒绝收缩，导致文本永远不换行。
+ * 改块级 flex 让宽度受父容器约束，内容区 min-width:0 打破收缩下限。
+ */
+.uip-choice-option :deep(.ant-checkbox-wrapper),
+.uip-choice-option :deep(.ant-radio-wrapper) {
+  display: flex;
+  align-items: flex-start;
+  max-width: 100%;
+}
+
+.uip-choice-option :deep(.ant-checkbox-wrapper > span:last-child),
+.uip-choice-option :deep(.ant-radio-wrapper > span:last-child) {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 顶对齐后勾选框与首行文字的光学对齐 */
+.uip-choice-option :deep(.ant-checkbox),
+.uip-choice-option :deep(.ant-radio) {
+  margin-top: 3px;
+}
+
 .uip-choice-label {
   font-size: 14px;
   color: #1d2129;
+  word-break: break-word;
 }
 
 .uip-choice-desc {
@@ -170,6 +213,7 @@ async function handleSubmit() {
   font-size: 12px;
   color: #86909c;
   margin-top: 2px;
+  word-break: break-word;
 }
 
 .uip-choice-custom {

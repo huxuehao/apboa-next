@@ -26,6 +26,8 @@ public class AgentDefinitionVO implements SerializableEnable {
     private String name;
     private String agentCode;
     private String description;
+    private JsonNode commonQuestions;
+    private Boolean commonQuestionsPinned;
     private Long modelConfigId;
     private JsonNode modelParamsOverride;
     private List<Long> skill;

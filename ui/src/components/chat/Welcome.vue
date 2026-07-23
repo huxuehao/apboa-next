@@ -1,13 +1,17 @@
 <script setup lang="ts">
 import ChatInput from './ChatInput.vue'
-import { computed } from "vue";
+import type { CommonQuestion } from '@/types'
+import { resolveCommonQuestionIcon } from '@/components/agent/commonQuestionIcons'
 
-const props = defineProps<{
+defineProps<{
   messageSize: number
   headline: string
   inputValue: string
   agentId: string
   description?: string
+  /** 智能体自定义头像（base64 data URL），未设置不渲染 */
+  agentAvatar?: string | null
+  commonQuestions?: CommonQuestion[] | null
   uploadedFiles?: import('@/types').UploadedFileItem[]
   isRunning?: boolean
   memoryActive?: boolean
@@ -20,12 +24,7 @@ const props = defineProps<{
   allowUploadFileType?: string[]
   sessionId?: string | null
   mentionAllowed?: boolean
-  hasCodeExecutionConfig?: boolean
 }>()
-
-const needInit = computed(() => {
-  return props.hasCodeExecutionConfig && props.messageSize === 0
-})
 
 defineEmits<{
   (e: 'update:inputValue', value: string): void
@@ -36,13 +35,40 @@ defineEmits<{
   (e: 'toolProcess', value: boolean): void
   (e: 'autoApprove', value: boolean): void
   (e: 'newSession'): void
+  (e: 'quickQuestion', question: string): void
 }>()
 </script>
 
 <template>
   <div class="chat-welcome">
+    <img v-if="agentAvatar" :src="agentAvatar" alt="头像" class="chat-welcome-avatar" />
     <h2 class="chat-welcome-title" :title="headline">{{ headline }}</h2>
     <p v-if="description" class="chat-welcome-desc" :title="description">{{ description }}</p>
+    <div v-if="commonQuestions && commonQuestions.length > 0" class="chat-welcome-questions">
+      <div class="chat-welcome-questions-label">试试这些常用问题</div>
+      <div class="chat-welcome-questions-grid">
+        <button
+          v-for="(q, index) in commonQuestions"
+          :key="index"
+          type="button"
+          class="chat-welcome-question-card"
+          :title="q.question"
+          @click="$emit('quickQuestion', q.question)"
+        >
+          <span
+            v-if="resolveCommonQuestionIcon(q.icon)"
+            class="question-card-icon"
+            :style="{ color: q.color || 'var(--color-primary)' }"
+          >
+            <component :is="resolveCommonQuestionIcon(q.icon)" />
+          </span>
+          <span class="question-card-content">
+            <span class="question-card-title">{{ q.title }}</span>
+            <span class="question-card-question">{{ q.question }}</span>
+          </span>
+        </button>
+      </div>
+    </div>
     <div class="chat-input-outer chat-welcome-input">
       <ChatInput
         :model-value="inputValue"
@@ -59,7 +85,6 @@ defineEmits<{
         :auto-approve-active="autoApproveActive"
         :session-id="sessionId"
         :mention-allowed="mentionAllowed"
-        :need-init="needInit"
         @update:model-value="$emit('update:inputValue', $event)"
         @update:uploaded-files="$emit('update:uploadedFiles', $event)"
         @memory="$emit('memory', $event)"

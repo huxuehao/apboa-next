@@ -41,6 +41,22 @@ public class AgentDefinition extends BaseTenantEntity {
     private String description;
 
     /**
+     * 智能体头像（base64 data URL）
+     */
+    private String avatar;
+
+    /**
+     * 常用问题列表
+     */
+    @TableField(typeHandler = JsonNodeTypeHandler.class)
+    private JsonNode commonQuestions;
+
+    /**
+     * 常用问题是否在对话中常驻显示
+     */
+    private Boolean commonQuestionsPinned;
+
+    /**
      * 基础模型配置ID
      */
     private Long modelConfigId;

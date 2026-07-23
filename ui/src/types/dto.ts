@@ -351,6 +351,8 @@ export interface TenantMemberAddDTO {
  * 会话列表查询DTO
  */
 export interface ChatSessionQueryDTO {
+  /** 会话 ID 精确过滤（排查定位用） */
+  id?: string
   userId?: string
   agentId?: string
   isPinned?: boolean

@@ -139,7 +139,7 @@ const uploadTooltip = computed(() => {
         <button
           type="button"
           class="chat-toolbar-btn chat-toolbar-btn-icon chat-toolbar-btn-circle"
-          :class="{ 'is-warn-active': autoApproveActive }"
+          :class="autoApproveActive ? 'is-warn-active' : 'is-active'"
           @click="toggleAutoApprove"
         >
           <UnlockOutlined v-if="autoApproveActive" />

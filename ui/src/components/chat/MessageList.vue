@@ -1,15 +1,34 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import MessageItem from './MessageItem.vue'
 import ToolCallItem from './ToolCallItem.vue'
+import DayDivider from './DayDivider.vue'
 import type { DisplayMessage } from '@/types'
 import type {FlatFileItem} from "@/composables/chat/useWorkspaceFiles.ts";
 import type { InteractionSubmitPayload } from '@/components/markdown/uip/types'
 
-defineProps<{
+const props = defineProps<{
   messages: DisplayMessage[]
   agentHasResult?: boolean
   toolCalls: Array<{ id: string; name: string; args: string; result?: string; elapsed?: number, needConfirm?: boolean, startTime?: number }>
 }>()
+
+/**
+ * 日期分隔：createdAt 的日期（前 10 位）与上一条不同处标记 dividerDay。
+ * 无时间的消息（流式占位等）不参与比较，避免误插。
+ */
+const wrappedMessages = computed(() => {
+  let prevDay: string | null = null
+  return props.messages.map((msg) => {
+    const day = (msg.createdAt || '').slice(0, 10)
+    let dividerDay: string | null = null
+    if (day.length === 10 && day !== prevDay) {
+      dividerDay = day
+      prevDay = day
+    }
+    return { msg, dividerDay }
+  })
+})
 
 defineEmits<{
   (e: 'toolContent', value: any): void
@@ -22,22 +41,23 @@ defineEmits<{
 
 <template>
   <div class="chat-main-messages">
-    <MessageItem
-      v-for="(msg, index) in messages"
-      @inputTagPreview="$emit('inputTagPreview', $event as FlatFileItem)"
-      @interaction-submit="$emit('interactionSubmit', $event)"
-      @uip-retry="$emit('uipRetry', $event)"
-      @vep-retry="$emit('vepRetry', $event)"
-      :id="msg.id"
-      :current-index="index"
-      :total-messages="messages.length"
-      :key="msg.id"
-      :role="msg.role"
-      :content="msg.content"
-      :created-at="msg.createdAt"
-      :agent-has-result="agentHasResult"
-      :is-streaming="msg.isStreaming"
-    />
+    <template v-for="(item, index) in wrappedMessages" :key="item.msg.id">
+      <DayDivider v-if="item.dividerDay" :day="item.dividerDay" />
+      <MessageItem
+        @inputTagPreview="$emit('inputTagPreview', $event as FlatFileItem)"
+        @interaction-submit="$emit('interactionSubmit', $event)"
+        @uip-retry="$emit('uipRetry', $event)"
+        @vep-retry="$emit('vepRetry', $event)"
+        :id="item.msg.id"
+        :current-index="index"
+        :total-messages="messages.length"
+        :role="item.msg.role"
+        :content="item.msg.content"
+        :created-at="item.msg.createdAt"
+        :agent-has-result="agentHasResult"
+        :is-streaming="item.msg.isStreaming"
+      />
+    </template>
     <TransitionGroup name="jelly">
       <ToolCallItem
         v-for="t in toolCalls"

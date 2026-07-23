@@ -330,6 +330,22 @@ public class AgentDefinitionServiceImpl extends ServiceImpl<AgentDefinitionMappe
                             .in(Workflow::getId, workflowIds));
         }
         return Collections.emptyList();
+    public String getAvatar(Long id) {
+        // 只取 avatar 单列，避免加载整行（含 JSON 大字段）
+        AgentDefinition agent = lambdaQuery()
+                .select(AgentDefinition::getAvatar)
+                .eq(AgentDefinition::getId, id)
+                .one();
+        return agent == null ? null : agent.getAvatar();
+    }
+
+    @Override
+    public Boolean updateAvatar(Long id, String avatar) {
+        // 显式 set：avatar 为 null/空时清除头像
+        return lambdaUpdate()
+                .eq(AgentDefinition::getId, id)
+                .set(AgentDefinition::getAvatar, (avatar == null || avatar.isEmpty()) ? null : avatar)
+                .update();
     }
 
     private List<String> parseModelType(JsonNode modelTypeJ) {

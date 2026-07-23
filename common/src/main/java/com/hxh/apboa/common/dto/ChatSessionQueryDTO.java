@@ -15,6 +15,8 @@ import lombok.Setter;
 @Setter
 @EqualsAndHashCode(callSuper = true)
 public class ChatSessionQueryDTO extends PageParams implements SerializableEnable {
+    /** 会话 ID 精确过滤（排查定位用） */
+    private Long id;
     private Long userId;
     private Long agentId;
     private Boolean isPinned;

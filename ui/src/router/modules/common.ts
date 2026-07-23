@@ -16,7 +16,8 @@ const commonRoutes: AppRouteRecordRaw[] = [
     redirect: RoutePaths.DASHBOARD,
   },
   {
-    path: `${RoutePaths.CHAT}/:agentId`,
+    // sessionId 可选：/chat/:agentId 为新会话欢迎页，带 sessionId 直达指定会话
+    path: `${RoutePaths.CHAT}/:agentId/:sessionId?`,
     name: RouteNames.CHAT,
     component: () => import('@/views/Chat/index.vue'),
     meta: {

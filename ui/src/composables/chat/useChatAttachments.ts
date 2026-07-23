@@ -7,6 +7,7 @@
 
 import { message } from 'ant-design-vue'
 import * as attachApi from '@/api/attach'
+import { isImageExtension, setCachedAttachUrl } from '@/utils/chat/attachImage'
 import type { UploadedFileItem } from '@/types'
 
 /**
@@ -112,12 +113,15 @@ export function useChatAttachments(opts: UseChatAttachmentsOptions) {
       if (!file) continue
       const tempId = `temp-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 9)}`
       tempIds.push(tempId)
+      const extension = getExtension(file.name)
       newList.push({
         id: tempId,
         name: file.name,
-        extension: getExtension(file.name),
+        extension,
         size: formatFileSize(file.size),
-        uploading: true
+        uploading: true,
+        // 图片生成本地 objectURL：选图即出预览，上传中/发送后均可复用
+        localUrl: isImageExtension(extension) ? URL.createObjectURL(file) : undefined
       })
     }
     opts.setFiles(newList)
@@ -148,25 +152,39 @@ export function useChatAttachments(opts: UseChatAttachmentsOptions) {
             if (!parseSuccess) {
               // 解析失败：删除后端附件并从列表移除
               attachApi.remove([data]).catch(() => {})
-              const filtered = opts.getFiles().filter((f) => f.id !== tempId)
-              opts.setFiles(filtered)
+              removeItemAndReleaseLocalUrl(tempId)
               continue
             }
           }
 
-          const updated = opts.getFiles().map((item) =>
-            item.id === tempId ? { ...item, id: data, uploading: false } : item
-          )
+          const updated = opts.getFiles().map((item) => {
+            if (item.id !== tempId) return item
+            // 图片：本地预览 objectURL 按真实附件 id 登记进模块缓存，
+            // 发送后消息气泡直接命中缓存零请求；所有权移交缓存，此处不再 revoke
+            if (item.localUrl) {
+              setCachedAttachUrl(data, item.localUrl)
+            }
+            return { ...item, id: data, uploading: false }
+          })
           opts.setFiles(updated)
         } else {
-          const filtered = opts.getFiles().filter((f) => f.id !== tempId)
-          opts.setFiles(filtered)
+          removeItemAndReleaseLocalUrl(tempId)
         }
       } catch {
-        const filtered = opts.getFiles().filter((f) => f.id !== tempId)
-        opts.setFiles(filtered)
+        removeItemAndReleaseLocalUrl(tempId)
       }
     }
+  }
+
+  /**
+   * 从列表移除指定项，并释放尚未移交缓存的本地预览 objectURL（上传未完成场景）
+   */
+  const removeItemAndReleaseLocalUrl = (id: string) => {
+    const target = opts.getFiles().find((f) => f.id === id)
+    if (target?.localUrl && target.id.startsWith('temp-')) {
+      URL.revokeObjectURL(target.localUrl)
+    }
+    opts.setFiles(opts.getFiles().filter((f) => f.id !== id))
   }
 
   /**
@@ -178,6 +196,10 @@ export function useChatAttachments(opts: UseChatAttachmentsOptions) {
     // 上传中的文件无需调用删除接口
     if (!item.uploading && !item.id.startsWith('temp-')) {
       await attachApi.remove([item.id])
+    }
+    // 上传中被移除：objectURL 尚未移交缓存，需在此释放；已完成的归缓存管理
+    if (item.localUrl && item.id.startsWith('temp-')) {
+      URL.revokeObjectURL(item.localUrl)
     }
     const newList = opts.getFiles().filter((f) => f.id !== item.id)
     opts.setFiles(newList)

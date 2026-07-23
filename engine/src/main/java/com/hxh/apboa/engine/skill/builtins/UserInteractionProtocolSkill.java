@@ -23,6 +23,7 @@ public class UserInteractionProtocolSkill implements IBuiltinSkill {
                 .description(
                         "Used to build user interaction interfaces and collect user input. " +
                         "When necessary information is missing during task execution, or users need to fill out forms, select processing methods, confirm operations or supplement business parameters, use this protocol to generate APIP interactive messages. " +
+                        "Also use it AFTER completing an analysis or forming conclusions: present the candidate conclusions, directions or next-step options as a choice interaction and let the user decide before proceeding. " +
                         "It supports three types of interactive components: form, choice and confirm. This skill shall only be applied when user participation in decision-making or data input is required. " +
                         "Do NOT use this protocol for scenarios that require no user interaction, such as general Q&A, knowledge explanation, content creation, code generation, solution analysis and text processing. Simply reply with natural language instead."
                 )
@@ -298,8 +299,20 @@ public class UserInteractionProtocolSkill implements IBuiltinSkill {
             ```
             
             # Choice
-            Used for quick selection scenarios.
-            
+            Used for quick selection and decision-making (ASK) scenarios.
+
+            ## When to Use (ASK Pattern)
+            Proactively ask the user to decide in the following situations:
+            - After completing an analysis: present the conclusions or candidate directions as options and let the user pick one before proceeding
+            - At key decision points where multiple viable approaches exist
+            - When a conclusion needs user approval before acting on it
+
+            ASK rules:
+            - Provide 2-6 options; each option SHOULD include a one-sentence `description` explaining its meaning or consequence
+            - Set `allowCustom: true` by default, so the user can always express an idea beyond the presets
+            - Use `multiple: false` when options are mutually exclusive directions; use `multiple: true` only when selections can be combined
+            - After the user responds, continue reasoning based on the selection (or the custom input)
+
             ## Basic Structure
             ```json
             {
@@ -336,7 +349,26 @@ public class UserInteractionProtocolSkill implements IBuiltinSkill {
             - `value`: Data submitted by the component
             - `label`: Text displayed on the page
             - Frontend must use `value` as the unique identifier
-            
+
+            ## Complete Example (ASK after analysis)
+            ```uip
+            {
+              "content": "The sales data analysis is complete. I identified three viable directions. Which one should we proceed with?",
+              "interaction": {
+                "id": "analysis_decision",
+                "type": "choice",
+                "question": "Please choose the next direction",
+                "multiple": false,
+                "allowCustom": true,
+                "options": [
+                  { "value": "expand_a", "label": "Expand Product Line A", "description": "Highest growth (+32%), but requires additional inventory investment" },
+                  { "value": "optimize_b", "label": "Optimize pricing of Product Line B", "description": "Stable demand; price elasticity suggests ~8% revenue upside" },
+                  { "value": "phase_out_c", "label": "Phase out Product Line C", "description": "Declining for 6 consecutive months; frees up resources" }
+                ]
+              }
+            }
+            ```
+
             # Confirm
             Used for final confirmation scenarios.
             
@@ -372,6 +404,7 @@ public class UserInteractionProtocolSkill implements IBuiltinSkill {
             8. Do not generate empty forms
             9. Do not generate empty options
             10. Do not generate empty `interaction` arrays
+            11. For decision-making scenarios (picking a direction, approving a conclusion, choosing among approaches), prefer `choice` over `form`, and set `allowCustom: true`
             
             Valid Example:
             ```json

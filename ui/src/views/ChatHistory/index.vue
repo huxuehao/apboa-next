@@ -44,6 +44,7 @@ const displayMessages = computed<DisplayMessage[]>(() => {
       id: String(m.id),
       role: m.role as any,
       content: (m.content || '') as string,
+      createdAt: m.createdAt,
       isStreaming: false,
     })
   }

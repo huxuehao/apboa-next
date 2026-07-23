@@ -24,12 +24,14 @@ import java.util.List;
 public class StorageProtocolServiceImpl extends ServiceImpl<StorageProtocolMapper, StorageProtocol> implements StorageProtocolService {
     @Override
     public boolean saveV2(StorageProtocol body) {
-        if(body.getValid() == 1) {
-            QueryWrapper<StorageProtocol> qw = new QueryWrapper<>();
-            qw.eq("valid", 1);
-            qw.ne("id", body.getId());
-            List<StorageProtocol> validList = list(qw);
-            if(!FuncUtils.isEmpty(validList)) {
+        if (Integer.valueOf(1).equals(body.getValid())) {
+            // 新增时 id 为 null，ne("id", null) 拼出 id <> NULL 恒不匹配，会击穿唯一有效检查
+            // 导致多条 valid=1 入库、上传全部报错；仅 id 非空（编辑复用）时才排除自身
+            LambdaQueryWrapper<StorageProtocol> qw = Wrappers
+                    .<StorageProtocol>lambdaQuery()
+                    .eq(StorageProtocol::getValid, 1)
+                    .ne(body.getId() != null, StorageProtocol::getId, body.getId());
+            if (!FuncUtils.isEmpty(list(qw))) {
                 body.setValid(0);
             }
         }
@@ -38,7 +40,7 @@ public class StorageProtocolServiceImpl extends ServiceImpl<StorageProtocolMappe
 
     @Override
     public boolean updateV2(StorageProtocol body) {
-        if(body.getValid() == 1) {
+        if (Integer.valueOf(1).equals(body.getValid())) {
             QueryWrapper<StorageProtocol> qw = new QueryWrapper<>();
             qw.eq("valid", 1);
             qw.ne("id", body.getId());

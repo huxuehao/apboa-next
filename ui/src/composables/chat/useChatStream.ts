@@ -2,7 +2,7 @@ import { ref } from 'vue'
 import { message } from 'ant-design-vue'
 import { useAgentClient } from '@/composables/useAgentClient'
 import { usePlanTracking } from '@/composables/chat/usePlanTracking'
-import { buildToolCallsContent } from '@/utils/chat/format'
+import { buildToolCallsContent, localNowDateTime } from '@/utils/chat/format'
 import type {ChatMessageVO, RawEvent} from '@/types'
 import { useAccountStore } from '@/stores'
 import { stopRun } from '@/api/agui'
@@ -115,7 +115,7 @@ export function useChatStream(
             parentId: '',
             path: '',
             depth: 0,
-            createdAt: ''
+            createdAt: localNowDateTime()
           } as ChatMessageVO)
         }
         // 无论是否回放，都清除流式状态
@@ -143,7 +143,7 @@ export function useChatStream(
             parentId: '',
             path: '',
             depth: 0,
-            createdAt: ''
+            createdAt: localNowDateTime()
           } as ChatMessageVO)
           // 保存完成后清除推理状态，利用 displayMessages 去重避免闪烁
           streamingMessageId.value = null
@@ -172,7 +172,7 @@ export function useChatStream(
             parentId: '',
             path: '',
             depth: 0,
-            createdAt: ''
+            createdAt: localNowDateTime()
           } as ChatMessageVO)
           // 保存完成后清除推理状态，利用 displayMessages 去重避免闪烁
           streamingMessageId.value = null
@@ -220,7 +220,7 @@ export function useChatStream(
                 parentId: '',
                 path: '',
                 depth: 0,
-                createdAt: ''
+                createdAt: localNowDateTime()
               } as ChatMessageVO)
             }
           }
@@ -252,7 +252,7 @@ export function useChatStream(
               parentId: '',
               path: '',
               depth: 0,
-              createdAt: ''
+              createdAt: localNowDateTime()
             } as ChatMessageVO)
             // 保存完成后清除推理状态，利用 displayMessages 去重避免闪烁
             streamingMessageId.value = null
@@ -333,7 +333,7 @@ export function useChatStream(
             parentId: '',
             path: '',
             depth: 0,
-            createdAt: ''
+            createdAt: localNowDateTime()
           } as ChatMessageVO)
         }
       }
@@ -348,7 +348,7 @@ export function useChatStream(
             parentId: '',
             path: '',
             depth: 0,
-            createdAt: ''
+            createdAt: localNowDateTime()
           } as ChatMessageVO)
         }
       }

@@ -6,6 +6,8 @@ import type { ChatSessionVO } from '@/types'
 defineProps<{
   collapsed: boolean
   agentName?: string
+  /** 智能体自定义头像（base64 data URL），未设置回退产品 logo */
+  agentAvatar?: string | null
   pinnedSessions: ChatSessionVO[]
   otherSessions: ChatSessionVO[]
   currentSessionId: string | null
@@ -80,7 +82,13 @@ const handleNewSession = () => {
     />
     <div class="chat-sidebar-header">
       <div class="chat-sidebar-brand">
-        <img src="@/assets/logo/logo_1.png" alt="logo" width="30px">
+        <img
+          v-if="agentAvatar"
+          :src="agentAvatar"
+          alt="头像"
+          class="chat-sidebar-logo chat-sidebar-agent-avatar"
+        />
+        <img v-else src="@/assets/images/logo/logo.png" alt="logo" class="chat-sidebar-logo" />
         <span class="chat-sidebar-name" :title="agentName || '智能体'">{{ agentName || '智能体' }}</span>
       </div>
       <AButton type="text" class="chat-sidebar-collapse-btn" :title="collapsed ? '展开' : '折叠'" @click="$emit('toggleCollapse')">

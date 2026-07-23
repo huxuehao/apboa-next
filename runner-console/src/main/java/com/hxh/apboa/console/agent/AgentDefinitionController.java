@@ -84,14 +84,14 @@ public class AgentDefinitionController {
     }
 
     /**
-     * 新增
+     * 新增（返回回填了 id 的 VO，供前端串行保存头像等子资源）
      */
     @PostMapping
     @RoleNeed({TenantRole.TENANT_ADMIN, TenantRole.TENANT_EDITOR})
-    public R<Boolean> save(@RequestBody AgentDefinitionVO vo) {
+    public R<AgentDefinitionVO> save(@RequestBody AgentDefinitionVO vo) {
         agentDefinitionService.saveAgentDefinition(vo);
         messagePublisher.publishAfterCommit(RedisChannelTopic.AGENT_REREGISTER_CHANNEL, String.valueOf(vo.getId()));
-        return R.data(true);
+        return R.data(vo);
     }
 
     /**
@@ -101,6 +101,25 @@ public class AgentDefinitionController {
     @RoleNeed({TenantRole.TENANT_ADMIN, TenantRole.TENANT_EDITOR})
     public R<Boolean> update(@RequestBody AgentDefinitionVO vo) {
         return R.data(agentDefinitionService.updateAgentDefinition(vo));
+    }
+
+    /**
+     * 获取头像（独立于 VO：base64 不随列表/详情接口返回）
+     */
+    @SkAccess
+    @ChatKeyAccess
+    @GetMapping("/{id}/avatar")
+    public R<String> getAvatar(@PathVariable("id") Long id) {
+        return R.data(agentDefinitionService.getAvatar(id));
+    }
+
+    /**
+     * 更新头像（body: {"avatar": base64 data URL}，空值清除）
+     */
+    @PutMapping("/{id}/avatar")
+    @RoleNeed({TenantRole.TENANT_ADMIN, TenantRole.TENANT_EDITOR})
+    public R<Boolean> updateAvatar(@PathVariable("id") Long id, @RequestBody Map<String, String> body) {
+        return R.data(agentDefinitionService.updateAvatar(id, body.get("avatar")));
     }
 
     /**

@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { LoadingOutlined, BulbOutlined, CopyOutlined, CheckOutlined, ToolOutlined, RightOutlined, DownOutlined } from '@ant-design/icons-vue'
+import { LoadingOutlined, BulbOutlined, CopyOutlined, CheckOutlined, ToolOutlined, RightOutlined, DownOutlined, CheckCircleFilled, CloseCircleFilled } from '@ant-design/icons-vue'
 import MediaPreview from '@/components/common/MediaPreview.vue'
 import type { UploadedFileItem } from '@/types'
 import MediaIcon from '@/components/common/MediaIcon.vue'
+import AttachImage from '@/components/common/AttachImage.vue'
+import { isImageExtension } from '@/utils/chat/attachImage'
 import MarkdownRenderer from "@/components/markdown/MarkdownRenderer.vue";
 import TaggedContentRenderer from './TaggedContentRenderer.vue';
+import ErrorMessageCard from './ErrorMessageCard.vue';
 import type { InteractionSubmitPayload } from '@/components/markdown/uip/types'
 import { useToolCallDisplayName } from '@/composables/chat/useToolCallDisplayName'
-import { formatElapsed } from '@/utils/chat/format'
+import { formatElapsed, fmtFullTime, fmtRelativeTime } from '@/utils/chat/format'
 
 const FILE_SEP = '@==##::::##==@'
 
@@ -33,44 +36,6 @@ function parseUserContent(content: string): { files: UploadedFileItem[]; text: s
 const getExtension = (fileName: string): string => {
   const lastDot = fileName.lastIndexOf('.')
   return lastDot > -1 ? fileName.slice(lastDot + 1).toLowerCase() : ''
-}
-
-/**
- * 格式化时间显示
- * 输入格式：YYYY-MM-DD HH:mm:ss
- * - 今天：显示 HH:mm
- * - 本年非今天：显示 MM-DD HH:mm
- * - 非本年：显示 YYYY-MM-DD HH:mm
- */
-const formatTime = (dateStr?: string): string => {
-  if (!dateStr) return ''
-
-  // 直接截取，避免不必要的 split 操作
-  const datePart = dateStr.slice(0, 10)
-  const timePart = dateStr.slice(11, 16) // HH:mm
-
-  if (datePart.length < 10) return ''
-
-  // 一次性解析日期部分
-  const year = datePart.slice(0, 4)
-  const month = datePart.slice(5, 7)
-  const day = datePart.slice(8, 10)
-
-  const now = new Date()
-  const currentYear = String(now.getFullYear())
-
-  // 今日判断：比较时间戳（最高效）
-  const todayStr = `${currentYear}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-
-  if (datePart === todayStr) {
-    return timePart
-  }
-
-  if (year === currentYear) {
-    return `${month}/${day} ${timePart}`
-  }
-
-  return `${year}/${month}/${day} ${timePart}`
 }
 
 const props = defineProps<{
@@ -98,7 +63,9 @@ const isTool = computed(() => props.role === 'tool')
 const isError = computed(() => props.role === 'error')
 
 const parsedUserContent = computed(() => parseUserContent(props.content))
-const formattedTime = computed(() => formatTime(props.createdAt))
+// 常态显示相对时间（刚刚 / X 分钟前 / 昨天 HH:mm…），悬停 Tooltip 展示完整时间
+const relativeTime = computed(() => fmtRelativeTime(props.createdAt))
+const fullTime = computed(() => fmtFullTime(props.createdAt))
 
 // 预览相关状态
 const previewVisible = ref(false)
@@ -241,19 +208,33 @@ const openPreview = (index: number) => {
 <template>
   <div class="chat-message" :class="[isUser ? 'chat-message-user' : 'chat-message-assistant']" :data-msg-id="isUser ? id : undefined">
     <template v-if="isUser">
-      <div class="chat-message-bubble chat-message-bubble_user" style="position: relative">
-        <div class="message-time">{{ formattedTime }}</div>
+      <div class="chat-message-bubble chat-message-bubble_user">
         <!-- 文件列表 -->
         <div v-if="parsedUserContent.files.length > 0" class="chat-message-files">
-          <div
-            v-for="(item, index) in parsedUserContent.files"
-            :key="item.id"
-            @click="openPreview(index)"
-            class="chat-message-file-item"
-          >
-            <MediaIcon :type="(item.extension ?? getExtension(item.name)) || 'FILE'" size="19"/>
-            <span class="chat-message-file-name" :title="item.name">{{ item.name }}</span>
-          </div>
+          <template v-for="(item, index) in parsedUserContent.files" :key="item.id">
+            <!-- 图片：保比例直接预览，点击放大 -->
+            <div
+              v-if="isImageExtension(item.extension || getExtension(item.name))"
+              class="chat-message-image-item"
+              @click="openPreview(index)"
+            >
+              <AttachImage
+                class="chat-message-image"
+                :attach-id="item.id"
+                :name="item.name"
+                :extension="item.extension || getExtension(item.name)"
+              />
+            </div>
+            <!-- 其他类型：保持文件名 chip -->
+            <div
+              v-else
+              @click="openPreview(index)"
+              class="chat-message-file-item"
+            >
+              <MediaIcon :type="(item.extension ?? getExtension(item.name)) || 'FILE'" size="19"/>
+              <span class="chat-message-file-name" :title="item.name">{{ item.name }}</span>
+            </div>
+          </template>
         </div>
         <!-- 文本内容（支持标签渲染） -->
         <span v-if="parsedUserContent.text" class="chat-message-user-content">
@@ -261,9 +242,14 @@ const openPreview = (index: number) => {
             @inputTagPreview="$emit('inputTagPreview', $event)"
             :content="parsedUserContent.text" />
         </span>
-        <!-- 复制按钮：悬浮显现于气泡左侧 -->
+      </div>
+      <!-- footer：相对时间（悬停看完整时间）+ 复制按钮，气泡外右下角 -->
+      <div class="chat-msg-footer">
+        <a-tooltip v-if="relativeTime" :title="fullTime">
+          <span class="chat-msg-time">{{ relativeTime }}</span>
+        </a-tooltip>
         <span
-          class="msg-copy-btn msg-copy-btn--user"
+          class="msg-copy-btn"
           :class="{ 'is-done': copied }"
           :title="copied ? '已复制' : '复制'"
           @click="handleCopy"
@@ -328,15 +314,38 @@ const openPreview = (index: number) => {
           </span>
         </div>
       </div>
+      <!-- footer：相对时间（悬停看完整时间）+ 复制按钮，气泡外左下角 -->
+      <div v-if="content" class="chat-msg-footer chat-msg-footer--assistant">
+        <a-tooltip v-if="relativeTime" :title="fullTime">
+          <span class="chat-msg-time">{{ relativeTime }}</span>
+        </a-tooltip>
+        <span
+          class="msg-copy-btn"
+          :class="{ 'is-done': copied }"
+          :title="copied ? '已复制' : '复制'"
+          @click="handleCopy"
+        >
+          <CheckOutlined v-if="copied" />
+          <CopyOutlined v-else />
+        </span>
+      </div>
     </template>
     <template v-else-if="isTool">
       <div class="chat-message-bubble">
         <div class="chat-tool-panel">
-          <!-- 可点击的头部：图标 + 标题（含工具名） + 状态耗时 + 展开/收起箭头 -->
+          <!-- 可点击的头部：行首状态圆标（形状+颜色双编码，扫视即辨） + 标题（含工具名） + 状态耗时 + 展开/收起箭头 -->
           <div class="chat-tool-header" @click="toolExpanded = !toolExpanded">
-            <span class="chat-tool-header-icon"><ToolOutlined /></span>
+            <span class="chat-tool-header-icon">
+              <template v-if="parsedToolCall">
+                <CloseCircleFilled v-if="toolFailed" class="chat-tool-status--fail" title="失败" />
+                <CheckCircleFilled v-else class="chat-tool-status--ok" title="完成" />
+              </template>
+              <ToolOutlined v-else />
+            </span>
+            <!-- 标题直接显示工具名（类型语义已由面板形态与圆标承担），解析失败降级回"工具调用" -->
             <span class="chat-tool-header-title">
-              工具调用<template v-if="parsedToolCall">：{{ resolveToolCallName(parsedToolCall.name) }}</template>
+              <template v-if="parsedToolCall">{{ resolveToolCallName(parsedToolCall.name) }}</template>
+              <template v-else>工具调用</template>
             </span>
             <span
               v-if="parsedToolCall"
@@ -395,9 +404,7 @@ const openPreview = (index: number) => {
     </template>
     <template v-else-if="isError">
       <div class="chat-message-bubble">
-        <div class="chat-md-content">
-          <span class="error-text">{{ content }}</span>
-        </div>
+        <ErrorMessageCard :content="content" />
       </div>
     </template>
     <!-- 媒体预览组件 -->
@@ -412,20 +419,6 @@ const openPreview = (index: number) => {
 
 <style scoped lang="scss">
 @use '@/styles/chat/index.scss' as *;
-
-.message-time {
-  position: absolute;
-  top: -18px;
-  right: 3px;
-  width: 150px;
-  text-align: end;
-  font-size: var(--font-size-xs);
-  color: #d2d2d2;
-}
-
-.error-text {
-  color: tomato;
-}
 
 .chat-message-files {
   display: flex;
@@ -449,6 +442,19 @@ const openPreview = (index: number) => {
   }
 }
 
+/* 图片附件：保比例预览（约束最大范围），点击放大 */
+.chat-message-image-item {
+  align-self: flex-start;
+  cursor: zoom-in;
+
+  :deep(.attach-image),
+  :deep(.attach-image-skeleton) {
+    max-width: min(320px, 100%);
+    max-height: 280px;
+    border: 1px solid rgba(0, 0, 0, 0.06);
+  }
+}
+
 .chat-message-file-name {
   flex: 1;
   min-width: 0;
@@ -458,8 +464,8 @@ const openPreview = (index: number) => {
 }
 
 /**
- * 复制按钮：悬浮显现 + 图标状态反馈
- * 常态隐藏，鼠标悬停消息气泡时渐显，点击后图标切换为对勾并保持2秒
+ * 复制按钮：常亮 + 图标状态反馈
+ * 点击后图标切换为对勾并保持2秒
  */
 .msg-copy-btn {
   display: inline-flex;
@@ -471,8 +477,7 @@ const openPreview = (index: number) => {
   font-size: 13px;
   color: #a0a4ab;
   cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.2s ease, color 0.15s ease, background-color 0.15s ease;
+  transition: color 0.15s ease, background-color 0.15s ease;
 
   &:hover {
     color: #4a4f57;
@@ -480,29 +485,6 @@ const openPreview = (index: number) => {
 
   &.is-done {
     color: #52c41a;
-    opacity: 1;
   }
-}
-
-.msg-copy-btn--user {
-  position: absolute;
-  right: 0;
-  bottom: -25px;
-}
-
-.msg-copy-btn--assistant {
-  position: absolute;
-  left: 10px;
-  bottom: -20px;
-}
-
-/* 确保气泡作为绝对定位参照 */
-.chat-message-assistant .chat-message-bubble {
-  position: relative;
-}
-
-/* 悬停消息气泡时显示复制按钮 */
-.chat-message-bubble:hover .msg-copy-btn {
-  opacity: 1;
 }
 </style>

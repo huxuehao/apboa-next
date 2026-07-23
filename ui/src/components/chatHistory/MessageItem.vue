@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { BulbOutlined, ToolOutlined, RightOutlined, DownOutlined  } from '@ant-design/icons-vue'
+import { BulbOutlined, ToolOutlined, RightOutlined, DownOutlined, CopyOutlined, CheckOutlined, CheckCircleFilled, CloseCircleFilled } from '@ant-design/icons-vue'
 import MediaPreview from '@/components/common/MediaPreview.vue'
 import type { UploadedFileItem } from '@/types'
 import MediaIcon from '@/components/common/MediaIcon.vue'
+import AttachImage from '@/components/common/AttachImage.vue'
+import { isImageExtension } from '@/utils/chat/attachImage'
 import MarkdownRenderer from "@/components/markdown/MarkdownRenderer.vue";
 import TaggedContentRenderer from '../chat/TaggedContentRenderer.vue';
+import ErrorMessageCard from '../chat/ErrorMessageCard.vue';
 import { useToolCallDisplayName } from '@/composables/chat/useToolCallDisplayName'
+import { formatElapsed, fmtFullTime, fmtRelativeTime } from '@/utils/chat/format'
 
 const FILE_SEP = '@==##::::##==@'
 
@@ -33,44 +37,6 @@ const getExtension = (fileName: string): string => {
   return lastDot > -1 ? fileName.slice(lastDot + 1).toLowerCase() : ''
 }
 
-/**
- * 格式化时间显示
- * 输入格式：YYYY-MM-DD HH:mm:ss
- * - 今天：显示 HH:mm
- * - 本年非今天：显示 MM-DD HH:mm
- * - 非本年：显示 YYYY-MM-DD HH:mm
- */
-const formatTime = (dateStr?: string): string => {
-  if (!dateStr) return ''
-
-  // 直接截取，避免不必要的 split 操作
-  const datePart = dateStr.slice(0, 10)
-  const timePart = dateStr.slice(11, 16) // HH:mm
-
-  if (datePart.length < 10) return ''
-
-  // 一次性解析日期部分
-  const year = datePart.slice(0, 4)
-  const month = datePart.slice(5, 7)
-  const day = datePart.slice(8, 10)
-
-  const now = new Date()
-  const currentYear = String(now.getFullYear())
-
-  // 今日判断：比较时间戳（最高效）
-  const todayStr = `${currentYear}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-
-  if (datePart === todayStr) {
-    return timePart
-  }
-
-  if (year === currentYear) {
-    return `${month}/${day} ${timePart}`
-  }
-
-  return `${year}/${month}/${day} ${timePart}`
-}
-
 const props = defineProps<{
   role: 'user' | 'assistant' | 'system' | 'tool' | 'error' | 'thinking'
   content: string
@@ -86,7 +52,9 @@ const isTool = computed(() => props.role === 'tool')
 const isError = computed(() => props.role === 'error')
 
 const parsedUserContent = computed(() => parseUserContent(props.content))
-const formattedTime = computed(() => formatTime(props.createdAt))
+// 常态显示相对时间（刚刚 / X 分钟前 / 昨天 HH:mm…），悬停 Tooltip 展示完整时间（与聊天页一致）
+const relativeTime = computed(() => fmtRelativeTime(props.createdAt))
+const fullTime = computed(() => fmtFullTime(props.createdAt))
 
 // 预览相关状态
 const previewVisible = ref(false)
@@ -119,6 +87,100 @@ const parsedToolCall = computed<ToolCallItem>(() => {
 })
 
 /**
+ * 工具是否失败（内容启发式：TOOL 消息无显式状态位，与 chat 版判定一致）：
+ * - agentscope 错误约定：ToolResultBlock.error 的 "Error:" 前缀 / 执行层 "Tool execution failed"
+ * - 内置工具结构化返回的 "status":"failed"（如 web_search）
+ */
+const toolFailed = computed(() => {
+  const r = parsedToolCall.value?.result
+  if (!r) return false
+  const t = String(r).trim()
+  return t.startsWith('Error:')
+    || t.includes('Tool execution failed')
+    || /"status"\s*:\s*"failed"/.test(t)
+})
+
+// 请求参数/响应结果小节折叠态（默认都展开，可各自收起）
+const argsExpanded = ref(true)
+const resultExpanded = ref(true)
+// 小节复制反馈（2 秒内显示对勾）
+const copiedSection = ref<'args' | 'result' | null>(null)
+
+/** JSON 美化：能解析则两空格缩进，否则原样返回（结果可能是纯文本） */
+function prettyJson(text?: string): string {
+  if (!text) return ''
+  try {
+    return JSON.stringify(JSON.parse(text), null, 2)
+  } catch {
+    return text
+  }
+}
+const prettyArgs = computed(() => prettyJson(parsedToolCall.value?.args))
+const prettyResult = computed(() => prettyJson(parsedToolCall.value?.result))
+
+/** 复制小节原始内容（未美化的原文，便于排查） */
+async function copySection(section: 'args' | 'result') {
+  const raw = section === 'args' ? parsedToolCall.value?.args : parsedToolCall.value?.result
+  if (!raw) return
+  try {
+    await navigator.clipboard.writeText(raw)
+    copiedSection.value = section
+    setTimeout(() => {
+      if (copiedSection.value === section) copiedSection.value = null
+    }, 2000)
+  } catch {
+    // 剪贴板不可用时静默
+  }
+}
+
+// 消息复制成功状态（2秒内）
+const copied = ref(false)
+
+/**
+ * 待复制的文本内容
+ * 用户消息：文件名列表 + 文本；AI消息：仅正文
+ */
+const copyText = computed(() => {
+  if (isUser.value) {
+    const { files, text } = parsedUserContent.value
+    if (files.length === 0) return text
+    const fileNames = files.map(f => f.name).join('\n')
+    return text ? `${fileNames}\n${text}` : fileNames
+  }
+  return props.content
+})
+
+/**
+ * 复制消息内容到剪贴板，失败时降级到 execCommand
+ */
+async function handleCopy() {
+  if (copied.value || !copyText.value) return
+  const text = copyText.value
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text)
+    } else {
+      throw new Error('clipboard unavailable')
+    }
+  } catch {
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    textarea.style.position = 'fixed'
+    textarea.style.opacity = '0'
+    document.body.appendChild(textarea)
+    textarea.select()
+    try {
+      document.execCommand('copy')
+    } catch {
+      // 复制失败静默处理
+    }
+    document.body.removeChild(textarea)
+  }
+  copied.value = true
+  setTimeout(() => { copied.value = false }, 2000)
+}
+
+/**
  * 打开文件预览
  */
 const openPreview = (index: number) => {
@@ -130,24 +192,53 @@ const openPreview = (index: number) => {
 <template>
   <div class="chat-message" :class="[isUser ? 'chat-message-user' : 'chat-message-assistant']">
     <template v-if="isUser">
-      <div class="chat-message-bubble chat-message-bubble_user" style="position: relative">
-        <div class="message-time">{{ formattedTime }}</div>
+      <div class="chat-message-bubble chat-message-bubble_user">
         <!-- 文件列表 -->
         <div v-if="parsedUserContent.files.length > 0" class="chat-message-files">
-          <div
-            v-for="(item, index) in parsedUserContent.files"
-            :key="item.id"
-            @click="openPreview(index)"
-            class="chat-message-file-item"
-          >
-            <MediaIcon :type="(item.extension ?? getExtension(item.name)) || 'FILE'" size="19"/>
-            <span class="chat-message-file-name" :title="item.name">{{ item.name }}</span>
-          </div>
+          <template v-for="(item, index) in parsedUserContent.files" :key="item.id">
+            <!-- 图片：保比例直接预览，点击放大 -->
+            <div
+              v-if="isImageExtension(item.extension || getExtension(item.name))"
+              class="chat-message-image-item"
+              @click="openPreview(index)"
+            >
+              <AttachImage
+                class="chat-message-image"
+                :attach-id="item.id"
+                :name="item.name"
+                :extension="item.extension || getExtension(item.name)"
+              />
+            </div>
+            <!-- 其他类型：保持文件名 chip -->
+            <div
+              v-else
+              @click="openPreview(index)"
+              class="chat-message-file-item"
+            >
+              <MediaIcon :type="(item.extension ?? getExtension(item.name)) || 'FILE'" size="19"/>
+              <span class="chat-message-file-name" :title="item.name">{{ item.name }}</span>
+            </div>
+          </template>
         </div>
         <!-- 文本内容（支持标签渲染） -->
         <span v-if="parsedUserContent.text" class="chat-message-user-content">
           <TaggedContentRenderer
             :content="parsedUserContent.text" />
+        </span>
+      </div>
+      <!-- footer：相对时间（悬停看完整时间）+ 复制按钮，气泡外右下角（与聊天页一致） -->
+      <div class="chat-msg-footer">
+        <a-tooltip v-if="relativeTime" :title="fullTime">
+          <span class="chat-msg-time">{{ relativeTime }}</span>
+        </a-tooltip>
+        <span
+          class="msg-copy-btn"
+          :class="{ 'is-done': copied }"
+          :title="copied ? '已复制' : '复制'"
+          @click="handleCopy"
+        >
+          <CheckOutlined v-if="copied" />
+          <CopyOutlined v-else />
         </span>
       </div>
     </template>
@@ -167,8 +258,10 @@ const openPreview = (index: number) => {
               <RightOutlined v-else />
             </span>
           </div>
+          <!-- 思考内容按 Markdown 渲染恢复结构（与聊天页一致），
+               不包 chat-md-content 类以继承灰色小字弱化样式 -->
           <div class="chat-reasoning-content" :class="{ 'is-expanded': reasoningExpanded }">
-            {{content}}
+            <MarkdownRenderer :content="content" :is-streaming="false" />
           </div>
         </div>
       </div>
@@ -183,15 +276,45 @@ const openPreview = (index: number) => {
             :disabled="true"/>
         </div>
       </div>
+      <!-- footer：相对时间（悬停看完整时间）+ 复制按钮，气泡外左下角（与聊天页一致） -->
+      <div v-if="content" class="chat-msg-footer chat-msg-footer--assistant">
+        <a-tooltip v-if="relativeTime" :title="fullTime">
+          <span class="chat-msg-time">{{ relativeTime }}</span>
+        </a-tooltip>
+        <span
+          class="msg-copy-btn"
+          :class="{ 'is-done': copied }"
+          :title="copied ? '已复制' : '复制'"
+          @click="handleCopy"
+        >
+          <CheckOutlined v-if="copied" />
+          <CopyOutlined v-else />
+        </span>
+      </div>
     </template>
     <template v-else-if="isTool">
       <div class="chat-message-bubble">
         <div class="chat-tool-panel">
-          <!-- 可点击的头部：图标 + 标题 + 展开/收起箭头 -->
+          <!-- 可点击的头部：行首状态圆标（形状+颜色双编码） + 标题（含工具名） + 状态耗时 + 展开/收起箭头（与聊天页一致） -->
           <div class="chat-tool-header" @click="toolExpanded = !toolExpanded">
-            <span class="chat-tool-header-icon"><ToolOutlined /></span>
+            <span class="chat-tool-header-icon">
+              <template v-if="parsedToolCall">
+                <CloseCircleFilled v-if="toolFailed" class="chat-tool-status--fail" title="失败" />
+                <CheckCircleFilled v-else class="chat-tool-status--ok" title="完成" />
+              </template>
+              <ToolOutlined v-else />
+            </span>
+            <!-- 标题直接显示工具名（类型语义已由面板形态与圆标承担），解析失败降级回"工具调用" -->
             <span class="chat-tool-header-title">
-              工具调用
+              <template v-if="parsedToolCall">{{ resolveToolCallName(parsedToolCall.name) }}</template>
+              <template v-else>工具调用</template>
+            </span>
+            <span
+              v-if="parsedToolCall"
+              class="chat-tool-header-status"
+              :class="toolFailed ? 'chat-tool-status--fail' : 'chat-tool-status--ok'"
+            >
+              {{ toolFailed ? '失败' : '完成' }} · {{ formatElapsed(parsedToolCall.totalTimes) }}
             </span>
             <span class="chat-tool-header-arrow">
               <DownOutlined v-if="toolExpanded" />
@@ -199,19 +322,40 @@ const openPreview = (index: number) => {
             </span>
           </div>
 
-          <!-- 展开后的工具调用列表 -->
+          <!-- 展开后的工具调用详情：请求参数 + 响应结果（可折叠、可复制、JSON 美化） -->
           <div class="chat-tool-body" :class="{ 'is-expanded': toolExpanded }">
-            <!-- JSON 解析成功：结构化展示每个工具调用 -->
             <template v-if="parsedToolCall">
-              <div class="chat-tool-item-header">
-                <span class="chat-tool-item-name">{{ resolveToolCallName(parsedToolCall.name) }}</span>
-                <span class="chat-tool-item-time">{{ parsedToolCall.totalTimes }}ms</span>
+              <div v-if="parsedToolCall.args && parsedToolCall.args !== '{}'" class="chat-tool-section">
+                <div class="chat-tool-section-header">
+                  <span class="chat-tool-section-label chat-tool-section-label--clickable" @click="argsExpanded = !argsExpanded">
+                    <span class="chat-tool-section-arrow">
+                      <DownOutlined v-if="argsExpanded" />
+                      <RightOutlined v-else />
+                    </span>
+                    请求参数
+                  </span>
+                  <span class="chat-tool-section-copy" :title="copiedSection === 'args' ? '已复制' : '复制'" @click.stop="copySection('args')">
+                    <CheckOutlined v-if="copiedSection === 'args'" />
+                    <CopyOutlined v-else />
+                  </span>
+                </div>
+                <pre v-show="argsExpanded" class="chat-tool-item-code">{{ prettyArgs }}</pre>
               </div>
-              <div v-if="parsedToolCall.args && parsedToolCall.args !== '{}'">
-                <pre class="chat-tool-item-code">{{ parsedToolCall.args }}</pre>
-              </div>
-              <div v-if="parsedToolCall.result">
-                <pre class="chat-tool-item-code">{{ parsedToolCall.result }}</pre>
+              <div v-if="parsedToolCall.result" class="chat-tool-section">
+                <div class="chat-tool-section-header">
+                  <span class="chat-tool-section-label chat-tool-section-label--clickable" @click="resultExpanded = !resultExpanded">
+                    <span class="chat-tool-section-arrow">
+                      <DownOutlined v-if="resultExpanded" />
+                      <RightOutlined v-else />
+                    </span>
+                    响应结果
+                  </span>
+                  <span class="chat-tool-section-copy" :title="copiedSection === 'result' ? '已复制' : '复制'" @click.stop="copySection('result')">
+                    <CheckOutlined v-if="copiedSection === 'result'" />
+                    <CopyOutlined v-else />
+                  </span>
+                </div>
+                <pre v-show="resultExpanded" class="chat-tool-item-code">{{ prettyResult }}</pre>
               </div>
             </template>
             <!-- JSON 解析失败：降级为原始文本 -->
@@ -222,9 +366,7 @@ const openPreview = (index: number) => {
     </template>
     <template v-else-if="isError">
       <div class="chat-message-bubble">
-        <div class="chat-md-content">
-          <span class="error-text">{{ content }}</span>
-        </div>
+        <ErrorMessageCard :content="content" />
       </div>
     </template>
     <!-- 媒体预览组件 -->
@@ -239,20 +381,6 @@ const openPreview = (index: number) => {
 
 <style scoped lang="scss">
 @use '@/styles/chat/index.scss' as *;
-
-.message-time {
-  position: absolute;
-  top: -18px;
-  right: 3px;
-  width: 150px;
-  text-align: end;
-  font-size: var(--font-size-xs);
-  color: #d2d2d2;
-}
-
-.error-text {
-  color: tomato;
-}
 
 .chat-message-files {
   display: flex;
@@ -276,11 +404,48 @@ const openPreview = (index: number) => {
   }
 }
 
+/* 图片附件：保比例预览（约束最大范围），点击放大 */
+.chat-message-image-item {
+  align-self: flex-start;
+  cursor: zoom-in;
+
+  :deep(.attach-image),
+  :deep(.attach-image-skeleton) {
+    max-width: min(320px, 100%);
+    max-height: 280px;
+    border: 1px solid rgba(0, 0, 0, 0.06);
+  }
+}
+
 .chat-message-file-name {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/**
+ * 复制按钮：常亮 + 图标状态反馈（与聊天页一致）
+ */
+.msg-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--border-radius-sm);
+  font-size: 13px;
+  color: #a0a4ab;
+  cursor: pointer;
+  transition: color 0.15s ease, background-color 0.15s ease;
+
+  &:hover {
+    color: #4a4f57;
+  }
+
+  &.is-done {
+    color: #52c41a;
+  }
 }
 </style>
