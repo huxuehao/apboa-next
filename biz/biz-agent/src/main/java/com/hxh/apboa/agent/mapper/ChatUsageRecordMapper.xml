@@ -149,7 +149,9 @@
           AND NOT EXISTS (SELECT 1 FROM chat_usage_record r WHERE r.message_id = m.id)
     </insert>
 
-    <!-- 智能体 TopN（按成本降序，未计价量多的排后补位）；agentLabel 取流水最新快照 -->
+    <!-- 消耗主体 TopN（按成本降序，未计价量多的排后补位）；agentLabel 取流水最新快照。
+         agent_id=0 是无 agent 归属的哨兵（工作流独立运行/定时任务等），按 label 快照分行，
+         否则不同工作流会被聚成一行且名字随最新一条走 -->
     <select id="costTopAgents" resultType="java.util.Map">
         SELECT agent_id                                                                                  AS agentId,
                SUBSTRING_INDEX(GROUP_CONCAT(agent_label ORDER BY id DESC SEPARATOR '\n'), '\n', 1)       AS agentLabel,
@@ -161,7 +163,7 @@
                IFNULL(SUM(CASE WHEN cost IS NULL THEN input_tokens + output_tokens ELSE 0 END), 0)       AS unpricedTokens
         FROM chat_usage_record
         WHERE created_at >= #{start} AND created_at &lt; #{endExclusive}
-        GROUP BY agent_id
+        GROUP BY agent_id, CASE WHEN agent_id = 0 THEN agent_label ELSE '' END
         ORDER BY cost DESC, unpricedTokens DESC
         LIMIT #{limit}
     </select>

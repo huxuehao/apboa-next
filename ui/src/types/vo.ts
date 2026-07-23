@@ -212,6 +212,10 @@ export interface AgentChatContextVO {
   enabledTools: ToolConfig[]
   enabledSkills: SkillPackage[]
   enabledMcp: EnabledMcpServerVO[]
+  /** 启用的子智能体（轻量列；agentCode 小写即 LLM 工具调用名，供 @ 引用） */
+  enabledSubAgents?: { id: string; agentCode: string; name: string; description?: string }[]
+  /** 启用且已发布的工作流（轻量列；name 即 LLM 工具调用名，供 @ 引用） */
+  enabledWorkflows?: { id: string; name: string; remark?: string }[]
 }
 
 /**
@@ -853,6 +857,22 @@ export interface CostRunItemVO {
   onCurrentPath: boolean
   userQuestion: string | null
   assistantSummary: string | null
+}
+
+/** 成本中心-模型配价行（LLM 模型价格 + 近30天用量合并视图） */
+export interface CostModelPricingRow {
+  modelConfigId: string
+  name: string
+  modelId: string
+  providerName: string | null
+  providerType: string | null
+  enabled: boolean
+  inputPrice: number | null
+  outputPrice: number | null
+  tokens30d: number
+  cost30d: number
+  unpricedTokens30d: number
+  runCount30d: number | string
 }
 
 /** 会话成本明细（实际发生口径：含废弃分支） */

@@ -2,6 +2,7 @@ package com.hxh.apboa.engine.log.telemetry;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.hxh.apboa.common.entity.ChatMessage;
+import com.hxh.apboa.common.entity.ChatUsageRecord;
 import com.hxh.apboa.common.util.JsonUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -68,15 +69,7 @@ public class UsageRecordWriter {
             }
 
             // 模型价格快照（模型刚好被删则整体为空：token 照记、cost 为 NULL）
-            PriceInfo price = jdbcTemplate.query(
-                    "SELECT mc.input_price, mc.output_price, mp.type AS provider_type "
-                            + "FROM model_config mc LEFT JOIN model_provider mp ON mc.provider_id = mp.id "
-                            + "WHERE mc.id = ?",
-                    rs -> rs.next()
-                            ? new PriceInfo(rs.getBigDecimal("input_price"), rs.getBigDecimal("output_price"), rs.getString("provider_type"))
-                            : new PriceInfo(null, null, null),
-                    modelConfigId
-            );
+            PriceInfo price = queryPrice(modelConfigId);
 
             BigDecimal cost = computeCost(inputTokens, outputTokens, price.inputPrice(), price.outputPrice());
 
@@ -127,16 +120,7 @@ public class UsageRecordWriter {
                         rs -> rs.next() ? rs.getString("name") : null,
                         effectiveAgentId
                 );
-                PriceInfo price = effectiveModelId > 0
-                        ? jdbcTemplate.query(
-                                "SELECT mc.input_price, mc.output_price, mp.type AS provider_type "
-                                        + "FROM model_config mc LEFT JOIN model_provider mp ON mc.provider_id = mp.id "
-                                        + "WHERE mc.id = ?",
-                                rs -> rs.next()
-                                        ? new PriceInfo(rs.getBigDecimal("input_price"), rs.getBigDecimal("output_price"), rs.getString("provider_type"))
-                                        : new PriceInfo(null, null, null),
-                                effectiveModelId)
-                        : new PriceInfo(null, null, null);
+                PriceInfo price = effectiveModelId > 0 ? queryPrice(effectiveModelId) : new PriceInfo(null, null, null);
                 BigDecimal cost = computeCost(inputTokens, outputTokens, price.inputPrice(), price.outputPrice());
 
                 jdbcTemplate.update(
@@ -156,6 +140,70 @@ public class UsageRecordWriter {
                 log.error("成本流水写入失败 bizType={} sessionId={}: {}", bizType, sessionId, ex.getMessage());
             }
         });
+    }
+
+    /**
+     * 工作流智能体节点记账（biz_type=WORKFLOW）：workflow 可独立运行、无会话可查租户归属，
+     * tenant 由执行上下文显式传入，session_id/message_id 置 NULL。异步执行不阻塞节点返回。
+     *
+     * <p>workflowInstanceId 是 workflow_run 表主键（不是 chat_session id，绝不能写 session_id 列），
+     * 仅用于日志定位；工作流名由调用方经变量上下文取得后组装进 agentLabel 传入——run 行在
+     * 外层事务内未提交，此处按 instanceId 反查 workflow_run 是读不到的。
+     *
+     * @param agentId    对话内触发时的主智能体 DB id（消耗计入其名下，随之受其月预算管控）；
+     *                   独立/调试运行为 null → agent_id=0
+     * @param agentLabel 归属快照：对话内为主智能体名，独立运行为「工作流：xxx」
+     * @param userId     发起人（独立运行为登录用户；对话内匿名会话合法为 null）
+     */
+    public void writeWorkflowRun(Long tenantId, String workflowInstanceId,
+                                 Long agentId, String agentLabel, Long userId,
+                                 Long modelConfigId, String channel,
+                                 long inputTokens, long outputTokens, int iterationCount, Long durationMs) {
+        java.util.concurrent.CompletableFuture.runAsync(() -> {
+            try {
+                if (tenantId == null) {
+                    log.warn("工作流成本流水跳过：实例 {} 无租户上下文", workflowInstanceId);
+                    return;
+                }
+                long effectiveModelId = modelConfigId != null ? modelConfigId : 0L;
+                // 模型名快照与主链 activeModelLabel 同源（model_config.name）
+                String modelLabel = effectiveModelId > 0
+                        ? jdbcTemplate.query("SELECT name FROM model_config WHERE id = ?",
+                                rs -> rs.next() ? rs.getString("name") : null, effectiveModelId)
+                        : null;
+                long effectiveAgentId = agentId != null ? agentId : 0L;
+                PriceInfo price = effectiveModelId > 0 ? queryPrice(effectiveModelId) : new PriceInfo(null, null, null);
+                BigDecimal cost = computeCost(inputTokens, outputTokens, price.inputPrice(), price.outputPrice());
+
+                jdbcTemplate.update(
+                        "INSERT INTO chat_usage_record (tenant_id, session_id, message_id, agent_id, agent_label, user_id, "
+                                + "model_config_id, model_label, provider_type, biz_type, channel, "
+                                + "input_tokens, output_tokens, iteration_count, duration_ms, "
+                                + "input_price, output_price, cost, created_at) "
+                                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        tenantId, null, null, effectiveAgentId, agentLabel, userId,
+                        effectiveModelId, modelLabel != null ? modelLabel : "unknown", price.providerType(),
+                        ChatUsageRecord.BIZ_WORKFLOW, channel,
+                        inputTokens, outputTokens, iterationCount, durationMs,
+                        price.inputPrice(), price.outputPrice(), cost, java.time.LocalDateTime.now()
+                );
+            } catch (Exception ex) {
+                log.error("工作流成本流水写入失败 instanceId={}: {}", workflowInstanceId, ex.getMessage());
+            }
+        });
+    }
+
+    /** 模型价格/供应商快照查询（模型已删则整体为空：token 照记、cost 为 NULL） */
+    private PriceInfo queryPrice(long modelConfigId) {
+        return jdbcTemplate.query(
+                "SELECT mc.input_price, mc.output_price, mp.type AS provider_type "
+                        + "FROM model_config mc LEFT JOIN model_provider mp ON mc.provider_id = mp.id "
+                        + "WHERE mc.id = ?",
+                rs -> rs.next()
+                        ? new PriceInfo(rs.getBigDecimal("input_price"), rs.getBigDecimal("output_price"), rs.getString("provider_type"))
+                        : new PriceInfo(null, null, null),
+                modelConfigId
+        );
     }
 
     /**

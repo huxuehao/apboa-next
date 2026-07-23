@@ -103,6 +103,8 @@ public class AgentNode extends EnhancedNode {
                                           String renderedUserPrompt) {
         AgentNodeRequest request = new AgentNodeRequest();
         request.setWorkflowInstanceId(context.getWorkflowInstanceId());
+        Object workflowName = context.getVariables().getVariable("workflowName");
+        request.setWorkflowName(workflowName != null ? workflowName.toString() : null);
         request.setNodeId(getId());
         request.setNodeName(getName());
         request.setModelConfigId(config.getModelConfigId());

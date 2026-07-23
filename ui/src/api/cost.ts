@@ -1,6 +1,6 @@
 import request from '@/utils/request'
 import type { ApiResponse, PageResult } from '@/types'
-import type { CostOverviewVO, CostSessionBillRow, CostSessionDetailVO } from '@/types'
+import type { CostModelPricingRow, CostOverviewVO, CostSessionBillRow, CostSessionDetailVO } from '@/types'
 
 const BASE = '/api/agent/cost'
 
@@ -49,4 +49,22 @@ export function recalculate(query: CostRangeQuery & { modelConfigId?: string }) 
  */
 export function backfill() {
   return request.post<ApiResponse<Record<string, number>>>(`${BASE}/backfill`)
+}
+
+/**
+ * 模型配价列表（LLM 价格 + 近30天用量，未配价在前）
+ * GET /agent/cost/model-pricing
+ */
+export function modelPricingList() {
+  return request.get<ApiResponse<CostModelPricingRow[]>>(`${BASE}/model-pricing`)
+}
+
+/**
+ * 轻量改价（只更新两个单价列）
+ * PUT /agent/cost/model-pricing/{modelConfigId}
+ */
+export function updateModelPricing(modelConfigId: string, inputPrice: number | null, outputPrice: number | null) {
+  return request.put<ApiResponse<unknown>>(`${BASE}/model-pricing/${modelConfigId}`, null, {
+    params: { inputPrice, outputPrice }
+  })
 }

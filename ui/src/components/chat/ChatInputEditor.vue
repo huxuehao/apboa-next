@@ -13,7 +13,9 @@ import { extractTextFromEditor, renderTaggedTextToHtml } from '@/utils/chat/tagS
 import type {
   AgentMcpToolItem,
   AgentSkillItem,
+  AgentSubAgentItem,
   AgentToolItem,
+  AgentWorkflowItem,
   MentionResourceItem
 } from '@/types/chat-mention'
 import {
@@ -74,6 +76,10 @@ const agentTools = ref<AgentToolItem[]>([])
 const agentSkills = ref<AgentSkillItem[]>([])
 /** Agent MCP 工具列表（按 server 分组拍平，带 server 标注） */
 const agentMcpTools = ref<AgentMcpToolItem[]>([])
+/** Agent 子智能体列表（agentCode 小写即 LLM 调用名） */
+const agentSubAgents = ref<AgentSubAgentItem[]>([])
+/** Agent 工作流列表（工作流名即 LLM 调用名） */
+const agentWorkflows = ref<AgentWorkflowItem[]>([])
 
 watch(() => props.agentId, async () => {
   const ctx = await fetchAgentChatContext(props.agentId)
@@ -104,6 +110,21 @@ watch(() => props.agentId, async () => {
         serverName: server.serverName
       }))
     )
+  }
+  if (ctx?.enabledSubAgents) {
+    // 子智能体以 Agent-as-Tool 注册，agentCode 小写即 LLM 调用名（= 标签 content）
+    agentSubAgents.value = ctx.enabledSubAgents.map((a) => ({
+      code: (a.agentCode || '').toLowerCase(),
+      name: a.name,
+      description: a.description
+    }))
+  }
+  if (ctx?.enabledWorkflows) {
+    // 工作流以 WorkflowTool 注册，工作流名即 LLM 调用名（= 标签 content = 展示名）
+    agentWorkflows.value = ctx.enabledWorkflows.map((w) => ({
+      name: w.name,
+      description: w.remark
+    }))
   }
 }, { immediate: true })
 
@@ -148,7 +169,9 @@ const renderTagToHtml = (tagName: string, tagContent: string): string => {
       workspaceFiles: flatFiles.value,
       agentTools: agentTools.value,
       agentSkills: agentSkills.value,
-      agentMcpTools: agentMcpTools.value
+      agentMcpTools: agentMcpTools.value,
+      agentSubAgents: agentSubAgents.value,
+      agentWorkflows: agentWorkflows.value
     })
     return `<span contenteditable="false" class="editor-tag editor-tag-${tagName}" data-tag="${tagName}" data-content="${escapeHtml(tagContent)}"><span class="editor-tag-inner"><span class="editor-tag-name">${escapeHtml(display)}</span></span></span>`
   }
@@ -755,6 +778,8 @@ watch(
       :agent-tools="agentTools"
       :agent-skills="agentSkills"
       :agent-mcp-tools="agentMcpTools"
+      :agent-sub-agents="agentSubAgents"
+      :agent-workflows="agentWorkflows"
       :keyword="mentionQuery"
       :recent-scope="mentionRecentScope"
       @select="insertResourceTag"

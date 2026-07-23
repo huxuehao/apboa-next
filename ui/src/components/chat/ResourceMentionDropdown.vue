@@ -20,7 +20,9 @@ import type { FlatFileItem } from '@/composables/chat/useWorkspaceFiles'
 import type {
   AgentMcpToolItem,
   AgentSkillItem,
+  AgentSubAgentItem,
   AgentToolItem,
+  AgentWorkflowItem,
   MentionResourceItem,
   ResourceKind
 } from '@/types/chat-mention'
@@ -49,6 +51,10 @@ const props = withDefaults(
     agentSkills?: AgentSkillItem[]
     /** Agent MCP 工具列表（按 server 分组拍平，带 server 标注） */
     agentMcpTools?: AgentMcpToolItem[]
+    /** Agent 子智能体列表 */
+    agentSubAgents?: AgentSubAgentItem[]
+    /** Agent 工作流列表 */
+    agentWorkflows?: AgentWorkflowItem[]
     /** 过滤关键词（来自 @ 后输入） */
     keyword?: string
     /** 最近使用隔离键（账号 + agent），为空时不持久化 */
@@ -59,6 +65,8 @@ const props = withDefaults(
     agentTools: () => [],
     agentSkills: () => [],
     agentMcpTools: () => [],
+    agentSubAgents: () => [],
+    agentWorkflows: () => [],
     keyword: '',
     recentScope: ''
   }
@@ -79,7 +87,9 @@ const { flatItems, folderSections } = useResourceCategories({
   workspaceFiles: computed(() => props.workspaceFiles),
   agentTools: computed(() => props.agentTools),
   agentSkills: computed(() => props.agentSkills),
-  agentMcpTools: computed(() => props.agentMcpTools)
+  agentMcpTools: computed(() => props.agentMcpTools),
+  agentSubAgents: computed(() => props.agentSubAgents),
+  agentWorkflows: computed(() => props.agentWorkflows)
 })
 
 /** 所有资源的统一扁平目录：全局搜索与最近使用共用。 */
@@ -304,9 +314,11 @@ function itemDomKey(item: MentionResourceItem): string {
  */
 function pickRawListByKind(
   kind: ResourceKind
-): Array<FlatFileItem | AgentToolItem | AgentSkillItem | AgentMcpToolItem> {
+): Array<FlatFileItem | AgentToolItem | AgentSkillItem | AgentMcpToolItem | AgentSubAgentItem | AgentWorkflowItem> {
   if (kind === 'workspace-file') return props.workspaceFiles
   if (kind === 'agent-tool') return props.agentTools
+  if (kind === 'agent-sub-agent') return props.agentSubAgents
+  if (kind === 'agent-workflow') return props.agentWorkflows
   if (kind === 'agent-skill') return props.agentSkills
   if (kind === 'agent-mcp') return props.agentMcpTools
   return []

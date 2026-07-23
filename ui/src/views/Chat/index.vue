@@ -4,6 +4,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { Modal, message } from 'ant-design-vue'
 import { useAccountStore, useChatStore } from '@/stores'
 import { formatSessionTitle } from '@/utils/chat/format'
+import { useToolCallDisplayName } from '@/composables/chat/useToolCallDisplayName'
+import { useSkillAliasMap } from '@/composables/chat/useSkillAliasMap'
 import { useAgentDetail } from '@/composables/chat/useAgentDetail'
 import { useVoiceInput, type VoiceInputState, type VoicePressAction } from '@/composables/chat/useVoiceInput'
 import { useTtsPlayback } from '@/composables/chat/useTtsPlayback'
@@ -622,6 +624,23 @@ const displayMessages = computed<DisplayMessage[]>(() => {
 
 // 重命名模态框
 const renameModalVisible = ref(false)
+const { resolveToolCallName } = useToolCallDisplayName()
+const { aliasMap: skillAliasMap } = useSkillAliasMap()
+
+/**
+ * 会话标题里的引用标签内容 → 显示名：文件取文件名、技能取别名、工作流名即显示名，
+ * 其余（工具 toolId / MCP 工具名 / 子智能体 agentCode）走统一显示名映射
+ */
+const resolveTitleTagDisplay = (tagName: string, content: string): string => {
+  if (tagName === 'workspace-file') {
+    const i = content.lastIndexOf('/')
+    return i > -1 ? content.slice(i + 1) : content
+  }
+  if (tagName === 'agent-skill') return skillAliasMap.value[content] || content
+  if (tagName === 'agent-workflow') return content
+  return resolveToolCallName(content)
+}
+
 const renameSessionRef = ref<any>(null)
 const renameTitle = ref('')
 const renameSubmitting = ref(false)
@@ -954,7 +973,7 @@ const handleSend = async () => {
   // 如果没有当前会话，先创建
   if (!currentSessionId.value) {
     const titleInput = text || '新对话'
-    const newSession = await createSession(formatSessionTitle(titleInput))
+    const newSession = await createSession(formatSessionTitle(titleInput, resolveTitleTagDisplay))
     if (!newSession) return
     lastCreatedSessionId = String(newSession.id)
     currentSessionId.value = String(newSession.id)
@@ -968,7 +987,7 @@ const handleSend = async () => {
   // 的脏会话，被 handleNewSession 的复用逻辑误命中跳进旧会话），幂等且与时序无关，
   // 保证不变量：有消息的会话标题必不是「新对话」
   if (currentSessionTitle.value === '新对话' && text) {
-    const title = formatSessionTitle(text)
+    const title = formatSessionTitle(text, resolveTitleTagDisplay)
     await updateSessionTitle(currentSessionId.value, title)
     currentSessionTitle.value = title
   }

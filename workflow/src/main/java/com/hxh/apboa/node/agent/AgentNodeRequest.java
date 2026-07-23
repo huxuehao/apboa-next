@@ -17,6 +17,10 @@ import java.util.Map;
 @Setter
 public class AgentNodeRequest {
     private String workflowInstanceId;
+    /**
+     * 工作流名（成本流水归属快照用；经变量上下文下传，可能为 null）
+     */
+    private String workflowName;
     private String nodeId;
     private String nodeName;
     private Long modelConfigId;

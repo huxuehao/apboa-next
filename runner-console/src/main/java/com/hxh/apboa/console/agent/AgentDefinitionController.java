@@ -102,6 +102,8 @@ public class AgentDefinitionController {
         vo.setEnabledTools(agentDefinitionService.getEnabledToolsOfAgent(id));
         vo.setEnabledSkills(agentDefinitionService.getEnabledSkillsOfAgent(id));
         vo.setEnabledMcp(agentDefinitionService.getEnabledMcpOfAgent(id));
+        vo.setEnabledSubAgents(agentDefinitionService.getEnabledSubAgentsOfAgent(id));
+        vo.setEnabledWorkflows(agentDefinitionService.getEnabledWorkflowsOfAgent(id));
         return R.data(vo);
     }
 

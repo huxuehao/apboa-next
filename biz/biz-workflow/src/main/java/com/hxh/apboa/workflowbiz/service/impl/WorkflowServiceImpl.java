@@ -233,7 +233,7 @@ public class WorkflowServiceImpl extends ServiceImpl<WorkflowMapper, Workflow> i
         workflow.setVersion(nextVersion);
         updateById(workflow);
         resourceBindingService.sync(String.valueOf(id), workflow.getConfig());
-        RunWorkflowCache.set(compiler.compile(String.valueOf(id), workflow.getConfig()));
+        RunWorkflowCache.set(nextVersion, compiler.compile(String.valueOf(id), workflow.getConfig()));
         return version;
     }
 

@@ -3,6 +3,7 @@ package com.hxh.apboa.workflowbiz.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.TextNode;
 import com.hxh.apboa.common.UserDetail;
 import com.hxh.apboa.common.entity.Workflow;
 import com.hxh.apboa.common.entity.WorkflowNodeExecution;
@@ -76,11 +77,13 @@ public class WorkflowRunServiceImpl extends ServiceImpl<WorkflowRunMapper, Workf
         if (config == null) {
             throw new RuntimeException("workflow config is empty");
         }
-        RunWorkflow runWorkflow = publishedOnly ? RunWorkflowCache.get(String.valueOf(workflow.getId())) : null;
+        RunWorkflow runWorkflow = publishedOnly
+                ? RunWorkflowCache.get(String.valueOf(workflow.getId()), publishedVersion.getVersion())
+                : null;
         if (runWorkflow == null) {
             runWorkflow = compiler.compile(String.valueOf(workflow.getId()), config);
             if (publishedOnly) {
-                RunWorkflowCache.set(runWorkflow);
+                RunWorkflowCache.set(publishedVersion.getVersion(), runWorkflow);
             }
         }
 
@@ -99,6 +102,9 @@ public class WorkflowRunServiceImpl extends ServiceImpl<WorkflowRunMapper, Workf
         if (request != null && request.getVariables() != null) {
             request.getVariables().forEach(context.getVariables()::storeVariable);
         }
+        // 工作流名下传（智能体节点成本流水的归属快照）：run 行在本事务内未提交，
+        // 节点执行期按 instanceId 反查 workflow_run 读不到，只能经变量上下文带入
+        context.getVariables().storeVariable("workflowName", workflow.getName());
 
         if (userDetail != null) {
             context.getVariables().storeVariable("tenantId", userDetail.getTenantId());
@@ -119,7 +125,7 @@ public class WorkflowRunServiceImpl extends ServiceImpl<WorkflowRunMapper, Workf
 
         List<WorkflowNodeExecution> executions = persistNodeExecutions(workflow, run, context);
         boolean nodeFailed = executions.stream().anyMatch(x -> x.getStatus() == NodeRunStatus.FAIL);
-        run.setOutputs(output);
+        run.setOutputs(toJsonSafeOutputs(output));
         run.setError(error);
         run.setEndTime(System.currentTimeMillis());
         run.setStatus(error == null && !nodeFailed ? WorkflowRunStatus.SUCCESS : WorkflowRunStatus.FAIL);
@@ -183,6 +189,16 @@ public class WorkflowRunServiceImpl extends ServiceImpl<WorkflowRunMapper, Workf
 
     private Long toMillis(Instant instant) {
         return instant == null ? null : instant.toEpochMilli();
+    }
+
+    /**
+     * workflow_run.outputs 是 JSON 列，而 END 节点文本模板（如 STRING 格式化器）会产出裸字符串；
+     * JsonUtils.toJsonStr 对 String 原样透传不做 JSON 编码，直接落库会因非法 JSON 报
+     * Data truncation 并回滚整个 run。字符串统一包装为 JSON 文本节点后再落库，
+     * 其余类型经 Jackson 序列化天然是合法 JSON。
+     */
+    private Object toJsonSafeOutputs(Object output) {
+        return output instanceof String s ? TextNode.valueOf(s) : output;
     }
 
     private String toJson(Object value) {

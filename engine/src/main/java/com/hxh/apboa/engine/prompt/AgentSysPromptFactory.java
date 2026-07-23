@@ -75,14 +75,12 @@ public class AgentSysPromptFactory {
             }
         }
 
-        if (hasWorkspace) {
-            String workspaceTagExplanation = """
+        // 资源引用标签语义（对话输入框 @ 引用面板的五类可引用资源，软引导非强制）。
+        // 独立于工作空间注入：历史上整块绑在 hasWorkspace 上，无执行环境的 agent
+        // 引用工具/技能/MCP 时模型收不到标签解释、纯靠猜标签含义（实测踩过）
+        String mentionTagExplanation = """
                 ===================================================
-                The user can reference files in the current directory via the <workspace-file>filename</workspace-file> tag.
-                When you see this tag, treat it as an instruction to locate the corresponding file in the current
-                directory and read its content to assist with answering or executing tasks.
-
-                The user can also explicitly request the use of a specific tool via the <agent-tool>toolName</agent-tool> tag.
+                The user can explicitly request the use of a specific tool via the <agent-tool>toolName</agent-tool> tag.
                 When you see this tag, treat it as a strong hint that the user wants you to invoke the corresponding tool
                 while completing the task. Prefer that tool unless it is clearly unsuitable for the request.
 
@@ -94,6 +92,25 @@ public class AgentSysPromptFactory {
                 The user can also explicitly request the use of a specific MCP tool via the <agent-mcp>toolName</agent-mcp> tag.
                 When you see this tag, treat it as a strong hint that the user wants you to invoke that MCP tool
                 while completing the task. Prefer that tool unless it is clearly unsuitable for the request.
+
+                The user can also explicitly request delegating to a specific sub-agent via the <agent-sub-agent>subAgentName</agent-sub-agent> tag.
+                When you see this tag, treat it as a strong hint that the user wants you to call the tool with that exact
+                name (the sub-agent is exposed to you as a tool) while completing the task. Prefer that sub-agent unless
+                it is clearly unsuitable for the request.
+
+                The user can also explicitly request running a specific workflow via the <agent-workflow>workflowName</agent-workflow> tag.
+                When you see this tag, treat it as a strong hint that the user wants you to invoke the tool with that exact
+                name (the workflow is exposed to you as a tool) while completing the task. Prefer that workflow unless
+                it is clearly unsuitable for the request.
+                """;
+        prompt = prompt + "\n\n" + mentionTagExplanation;
+
+        if (hasWorkspace) {
+            String workspaceTagExplanation = """
+                ===================================================
+                The user can reference files in the current directory via the <workspace-file>filename</workspace-file> tag.
+                When you see this tag, treat it as an instruction to locate the corresponding file in the current
+                directory and read its content to assist with answering or executing tasks.
 
                 workspace_path_and_execution_rules is your core skill, which specifies the precautions for using %s.
                 When using the above tools, you must strictly follow the rules defined in workspace_path_and_execution_rules.

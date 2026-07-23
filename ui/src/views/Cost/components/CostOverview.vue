@@ -168,7 +168,8 @@ const bizBars = computed(() => {
 const channelLabels: Record<string, string> = {
   WEB: '网页对话',
   CHAT_KEY: '外嵌页面',
-  SK_API: 'API 调用'
+  SK_API: 'API 调用',
+  STANDALONE: '独立运行'
 }
 
 const channelBars = computed(() => {
@@ -183,7 +184,7 @@ const channelBars = computed(() => {
 })
 
 const topAgentColumns = [
-  { title: '智能体', dataIndex: 'agentName', key: 'agentName', ellipsis: true },
+  { title: '主体', dataIndex: 'agentName', key: 'agentName', ellipsis: true },
   { title: '会话数', dataIndex: 'sessionCount', key: 'sessionCount', align: 'right' as const, width: 80 },
   { title: 'token（入/出）', key: 'tokens', align: 'right' as const, width: 150 },
   { title: '成本', key: 'cost', align: 'right' as const, width: 100 }
@@ -286,7 +287,7 @@ const topAgentColumns = [
       <div class="chart-grid bottom">
         <div class="panel">
           <div class="panel-head">
-            <span class="panel-title">智能体 Top10</span>
+            <span class="panel-title">消耗主体 Top10</span>
             <span class="panel-hint">按成本降序</span>
           </div>
           <ATable

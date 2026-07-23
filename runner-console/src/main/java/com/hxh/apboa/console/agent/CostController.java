@@ -7,6 +7,7 @@ import com.hxh.apboa.common.enums.TenantRole;
 import com.hxh.apboa.common.mp.support.MP;
 import com.hxh.apboa.common.mp.support.PageParams;
 import com.hxh.apboa.common.r.R;
+import com.hxh.apboa.common.vo.CostModelPricingVO;
 import com.hxh.apboa.common.vo.CostOverviewVO;
 import com.hxh.apboa.common.vo.CostSessionDetailVO;
 import lombok.RequiredArgsConstructor;
@@ -14,11 +15,14 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -90,5 +94,27 @@ public class CostController {
     @RoleNeed({TenantRole.TENANT_ADMIN})
     public R<Map<String, Integer>> backfill() {
         return R.data(costStatService.backfill());
+    }
+
+    /**
+     * 模型配价列表：LLM 模型价格 + 近30天用量合并视图（未配价在前、用量降序）
+     */
+    @GetMapping("/model-pricing")
+    @RoleNeed({TenantRole.TENANT_ADMIN, TenantRole.TENANT_EDITOR})
+    public R<List<CostModelPricingVO>> modelPricingList() {
+        return R.data(costStatService.modelPricingList());
+    }
+
+    /**
+     * 轻量改价：只更新两个单价列（元/百万token；两个都传空=清除配价）
+     */
+    @PutMapping("/model-pricing/{modelConfigId}")
+    @RoleNeed({TenantRole.TENANT_ADMIN, TenantRole.TENANT_EDITOR})
+    public R<Void> updateModelPricing(
+            @PathVariable("modelConfigId") Long modelConfigId,
+            @RequestParam(value = "inputPrice", required = false) BigDecimal inputPrice,
+            @RequestParam(value = "outputPrice", required = false) BigDecimal outputPrice) {
+        costStatService.updateModelPricing(modelConfigId, inputPrice, outputPrice);
+        return R.success("操作成功");
     }
 }

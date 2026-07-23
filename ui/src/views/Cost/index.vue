@@ -12,10 +12,11 @@ import * as agentApi from '@/api/agent'
 import CostOverview from './components/CostOverview.vue'
 import CostSessionBills from './components/CostSessionBills.vue'
 import CostSessionDetail from './components/CostSessionDetail.vue'
+import CostModelPricing from './components/CostModelPricing.vue'
 
 type RangePreset = '7d' | '30d' | 'month' | 'custom'
 
-const activeTab = ref<'overview' | 'sessions'>('overview')
+const activeTab = ref<'overview' | 'sessions' | 'pricing'>('overview')
 const rangePreset = ref<RangePreset>('30d')
 const customRange = ref<[Dayjs, Dayjs] | null>(null)
 const agentId = ref<string | undefined>(undefined)
@@ -78,23 +79,26 @@ function openDetail(sessionId: string) {
         <ATabs v-model:activeKey="activeTab" class="cost-tabs">
           <ATabPane key="overview" tab="概览看板" />
           <ATabPane key="sessions" tab="会话账单" />
+          <ATabPane key="pricing" tab="模型配价" />
         </ATabs>
         <div class="flex-1"></div>
-        <ASelect
-          v-model:value="agentId"
-          :options="agentOptions"
-          placeholder="全部智能体"
-          allow-clear
-          show-search
-          option-filter-prop="label"
-          class="agent-filter"
-        />
-        <ASegmented v-model:value="rangePreset" :options="presetOptions" />
-        <ARangePicker
-          v-if="rangePreset === 'custom'"
-          v-model:value="customRange"
-          :allow-clear="false"
-        />
+        <template v-if="activeTab !== 'pricing'">
+          <ASelect
+            v-model:value="agentId"
+            :options="agentOptions"
+            placeholder="全部智能体"
+            allow-clear
+            show-search
+            option-filter-prop="label"
+            class="agent-filter"
+          />
+          <ASegmented v-model:value="rangePreset" :options="presetOptions" />
+          <ARangePicker
+            v-if="rangePreset === 'custom'"
+            v-model:value="customRange"
+            :allow-clear="false"
+          />
+        </template>
       </div>
 
       <CostOverview
@@ -104,12 +108,13 @@ function openDetail(sessionId: string) {
         :agent-id="agentId"
       />
       <CostSessionBills
-        v-else
+        v-else-if="activeTab === 'sessions'"
         :start-date="dateQuery.startDate"
         :end-date="dateQuery.endDate"
         :agent-id="agentId"
         @open-detail="openDetail"
       />
+      <CostModelPricing v-else />
     </template>
   </div>
 </template>

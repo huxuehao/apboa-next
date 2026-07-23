@@ -10,10 +10,16 @@ import com.hxh.apboa.common.entity.AgentDefinition;
 import com.hxh.apboa.common.entity.ChatMessage;
 import com.hxh.apboa.common.entity.ChatSession;
 import com.hxh.apboa.common.entity.ChatUsageRecord;
+import com.hxh.apboa.common.entity.ModelConfig;
+import com.hxh.apboa.common.entity.ModelProvider;
+import com.hxh.apboa.common.enums.ModelCategory;
 import com.hxh.apboa.common.router.MessageTableRouter;
+import com.hxh.apboa.common.vo.CostModelPricingVO;
 import com.hxh.apboa.common.vo.CostOverviewVO;
 import com.hxh.apboa.common.vo.CostRunItemVO;
 import com.hxh.apboa.common.vo.CostSessionDetailVO;
+import com.hxh.apboa.model.service.ModelConfigService;
+import com.hxh.apboa.model.service.ModelProviderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -51,6 +57,8 @@ public class CostStatServiceImpl implements CostStatService {
     private final ChatSessionMapper chatSessionMapper;
     private final MessageTableRouter messageTableRouter;
     private final JdbcTemplate jdbcTemplate;
+    private final ModelConfigService modelConfigService;
+    private final ModelProviderService modelProviderService;
 
     @Override
     public CostOverviewVO overview(LocalDate startDate, LocalDate endDate, Long agentId) {
@@ -275,6 +283,72 @@ public class CostStatServiceImpl implements CostStatService {
                 start.format(DATE_FMT), end.plusDays(1).format(DATE_FMT), modelConfigId);
     }
 
+    @Override
+    public List<CostModelPricingVO> modelPricingList() {
+        List<ModelConfig> models = modelConfigService.lambdaQuery()
+                .select(ModelConfig::getId, ModelConfig::getProviderId, ModelConfig::getName,
+                        ModelConfig::getModelId, ModelConfig::getEnabled,
+                        ModelConfig::getInputPrice, ModelConfig::getOutputPrice)
+                .eq(ModelConfig::getCategory, ModelCategory.LLM)
+                .list();
+        if (models.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // 供应商名批查
+        List<Long> providerIds = models.stream().map(ModelConfig::getProviderId)
+                .filter(Objects::nonNull).distinct().collect(Collectors.toList());
+        Map<Long, ModelProvider> providerMap = providerIds.isEmpty() ? Map.of()
+                : modelProviderService.listByIds(providerIds).stream()
+                        .collect(Collectors.toMap(ModelProvider::getId, Function.identity(), (a, b) -> a));
+
+        // 近 30 天用量（复用概览的按模型聚合）
+        LocalDate end = LocalDate.now();
+        Map<Long, Map<String, Object>> usageMap = chatUsageRecordMapper
+                .costGroupByModel(end.minusDays(29).format(DATE_FMT), end.plusDays(1).format(DATE_FMT), null)
+                .stream()
+                .collect(Collectors.toMap(m -> asLong(m.get("modelConfigId")), Function.identity(), (a, b) -> a));
+
+        List<CostModelPricingVO> result = new ArrayList<>();
+        for (ModelConfig mc : models) {
+            ModelProvider provider = mc.getProviderId() != null ? providerMap.get(mc.getProviderId()) : null;
+            Map<String, Object> usage = usageMap.getOrDefault(mc.getId(), Map.of());
+            result.add(CostModelPricingVO.builder()
+                    .modelConfigId(mc.getId())
+                    .name(mc.getName())
+                    .modelId(mc.getModelId())
+                    .providerName(provider != null ? provider.getName() : null)
+                    .providerType(provider != null && provider.getType() != null ? provider.getType().name() : null)
+                    .enabled(mc.getEnabled())
+                    .inputPrice(mc.getInputPrice())
+                    .outputPrice(mc.getOutputPrice())
+                    .tokens30d(asLong(usage.get("inputTokens")) + asLong(usage.get("outputTokens")))
+                    .cost30d(usage.get("cost") instanceof BigDecimal b ? b : BigDecimal.ZERO)
+                    .unpricedTokens30d(asLong(usage.get("unpricedTokens")))
+                    .runCount30d(asLong(usage.get("runCount")))
+                    .build());
+        }
+        // 未配价在前（提醒补配），组内按近 30 天用量降序（量大的优先看到）
+        result.sort(java.util.Comparator
+                .comparing((CostModelPricingVO v) -> v.getInputPrice() != null && v.getOutputPrice() != null)
+                .thenComparing(CostModelPricingVO::getTokens30d, java.util.Comparator.reverseOrder()));
+        return result;
+    }
+
+    @Override
+    public void updateModelPricing(Long modelConfigId, BigDecimal inputPrice, BigDecimal outputPrice) {
+        ModelConfig model = modelConfigService.getById(modelConfigId);
+        if (model == null || model.getCategory() != ModelCategory.LLM) {
+            throw new RuntimeException("模型不存在或不是对话生成用途");
+        }
+        // 只动价格两列（配价页轻量入口，不回传整个 entity 防误覆盖其他配置）
+        modelConfigService.lambdaUpdate()
+                .eq(ModelConfig::getId, modelConfigId)
+                .set(ModelConfig::getInputPrice, inputPrice)
+                .set(ModelConfig::getOutputPrice, outputPrice)
+                .update();
+    }
+
     /** 归档表名白名单格式（与 MessageTableRouter 一致），防 ${table} 注入 */
     private static final java.util.regex.Pattern ARCHIVE_TABLE = java.util.regex.Pattern.compile("chat_message_\\d{6}");
 
@@ -416,9 +490,14 @@ public class CostStatServiceImpl implements CostStatService {
     }
 
     /**
-     * 智能体显示名回落链：现存最新名 > 流水快照名 > 「已删除智能体(#id尾4位)」
+     * 智能体显示名回落链：现存最新名 > 流水快照名 > 「已删除智能体(#id尾4位)」。
+     * agent_id=0 是无 agent 归属的哨兵（工作流独立运行/定时任务等），本就查不到
+     * 现存名，直接用快照 label，不能标「已删除」。
      */
     private String resolveAgentName(String currentName, Object snapshotLabel, Long agentId) {
+        if (agentId != null && agentId == 0L) {
+            return snapshotLabel instanceof String s && !s.isBlank() ? s : "独立运行";
+        }
         if (currentName != null && !currentName.isBlank()) {
             return currentName;
         }

@@ -41,6 +41,18 @@ public class RunStatAccumulator {
         return iterations > 0;
     }
 
+    public long getInputTokens() {
+        return inputTokens;
+    }
+
+    public long getOutputTokens() {
+        return outputTokens;
+    }
+
+    public int getIterations() {
+        return iterations;
+    }
+
     /** 构建 meta 字段 Map（落库序列化 / RUN_META 事件载荷共用） */
     public Map<String, Object> buildMeta() {
         Map<String, Object> meta = new HashMap<>();

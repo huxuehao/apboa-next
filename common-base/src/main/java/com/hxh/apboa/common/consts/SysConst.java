@@ -25,6 +25,8 @@ public class SysConst {
     public static final String CHANNEL_WEB = "WEB";
     public static final String CHANNEL_CHAT_KEY = "CHAT_KEY";
     public static final String CHANNEL_SK_API = "SK_API";
+    /** 非对话渠道：工作流独立/调试运行等无认证入口的消耗（区别于渠道标记上线前的 NULL=历史未标记） */
+    public static final String CHANNEL_STANDALONE = "STANDALONE";
 
     /**
      * token过期时间（6小时）

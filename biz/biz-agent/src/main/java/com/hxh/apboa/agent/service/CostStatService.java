@@ -1,10 +1,12 @@
 package com.hxh.apboa.agent.service;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.hxh.apboa.common.vo.CostModelPricingVO;
 import com.hxh.apboa.common.vo.CostOverviewVO;
 import com.hxh.apboa.common.vo.CostSessionDetailVO;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -45,6 +47,18 @@ public interface CostStatService {
      * @return 更新的流水行数
      */
     int recalculate(LocalDate startDate, LocalDate endDate, Long modelConfigId);
+
+    /**
+     * 模型配价列表：全部 LLM 模型（含禁用）的价格 + 近 30 天用量合并视图，
+     * 按「未配价在前、用量降序」排列，供配价页批量改价。
+     */
+    List<CostModelPricingVO> modelPricingList();
+
+    /**
+     * 轻量改价：只更新指定 LLM 模型的输入/输出单价两列（不动其他配置）。
+     * 模型不存在/非 LLM 抛异常。
+     */
+    void updateModelPricing(Long modelConfigId, java.math.BigDecimal inputPrice, java.math.BigDecimal outputPrice);
 
     /**
      * 存量消息回填流水：扫主表与全部归档表的 assistant 消息 meta，幂等去重后

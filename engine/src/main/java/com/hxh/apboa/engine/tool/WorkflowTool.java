@@ -142,6 +142,11 @@ public class WorkflowTool implements AgentTool {
         UserDetail userDetail = userDetailBuilder.build();
 
         return Mono.fromCallable(() -> {
+            // 把主 agent 上下文桥接到工作流执行线程：工具在独立调度线程上执行，主链的
+            // AgentContext（ThreadLocal）不随线程走，不桥接则 WorkflowAgentNodeExecutor 里
+            // 读不到外层上下文——MCP 断言无法带用户主体、成本流水也无法归属主 agent/渠道
+            AgentContext outerOnThread = AgentContext.getIfExists().orElse(null);
+            AgentContext.set(agentContext);
             try {
                 // 执行工作流
                 WorkflowRunResult run = workflowRunService.run(workflow.getId(), getRunRequest(param), userDetail);
@@ -156,6 +161,12 @@ public class WorkflowTool implements AgentTool {
                         param.getToolUseBlock().getName(),
                         TextBlock.builder().text(e.getMessage()).build()
                 );
+            } finally {
+                if (outerOnThread != null) {
+                    AgentContext.set(outerOnThread);
+                } else {
+                    AgentContext.clean();
+                }
             }
         });
     }

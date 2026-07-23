@@ -1,3 +1,5 @@
+import { RESOURCE_CATEGORY_REGISTRY } from '@/composables/chat/useResourceCategories'
+
 /**
  * 尝试将字符串格式化为 JSON（美化），失败则返回原文
  */
@@ -164,14 +166,30 @@ export function fmtRelativeTime(s: string | undefined | null): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
+/** 全部可引用资源的标签名（从类目注册表动态生成——新增资源类型自动覆盖，不再手写白名单漏项） */
+const MENTION_TAG_NAMES = Object.values(RESOURCE_CATEGORY_REGISTRY).map((m) => m.tagName)
+/** 成对标签（捕获标签名与内容，内容可换显示名） */
+const MENTION_TAG_PAIR = new RegExp(`<(${MENTION_TAG_NAMES.join('|')})>([\\s\\S]*?)</\\1>`, 'g')
+/** 残缺标签壳兜底（未闭合/被截断的裸壳） */
+const MENTION_TAG_SHELL = new RegExp(`</?(?:${MENTION_TAG_NAMES.join('|')})>`, 'g')
+
 /**
- * 根据用户输入生成会话标题（截取前50字符）
+ * 根据用户输入生成会话标题（截取前50字符）。
+ * 引用资源标签先行清洗：成对标签把内容交给 resolveTagDisplay 换成显示名
+ * （如子智能体 agentCode → 智能体名称；未提供 resolver 时保留原内容），
+ * 残缺壳兜底剥除。
  */
-export function formatSessionTitle(input: string | null): string {
+export function formatSessionTitle(
+  input: string | null,
+  resolveTagDisplay?: (tagName: string, content: string) => string
+): string {
   let t = (input || '').trim()
   if (!t) return '新对话'
 
-  t = t.replace(/<\/?(?:workspace-file|agent-tool|agent-skill|agent-mcp)>/g, '')
+  t = t.replace(MENTION_TAG_PAIR, (_, tagName: string, content: string) =>
+    resolveTagDisplay ? resolveTagDisplay(tagName, content) : content)
+  t = t.replace(MENTION_TAG_SHELL, '').trim()
+  if (!t) return '新对话'
 
   return t.length > 50 ? t.slice(0, 50) + '...' : t
 }
