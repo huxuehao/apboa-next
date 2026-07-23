@@ -11,6 +11,7 @@ import com.hxh.apboa.common.util.BeanUtils;
 import com.hxh.apboa.common.vo.HookConfigVO;
 import com.hxh.apboa.hook.service.HookConfigService;
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -66,6 +67,20 @@ public class HookConfigController {
     @RoleNeed({TenantRole.TENANT_ADMIN, TenantRole.TENANT_EDITOR})
     public R<Boolean> update(@RequestBody HookConfig entity) {
         return R.data(hookConfigService.doUpdate(entity));
+    }
+
+    /**
+     * 更新展示名称（仅改 name，允许内置 Hook；不影响生效与 class_path，启动同步不覆盖）
+     */
+    @PutMapping("/{id}/name")
+    @RoleNeed({TenantRole.TENANT_ADMIN, TenantRole.TENANT_EDITOR})
+    public R<Boolean> updateName(@PathVariable("id") Long id, @RequestBody NameRequest request) {
+        return R.data(hookConfigService.updateName(id, request.getName()));
+    }
+
+    @Data
+    public static class NameRequest {
+        private String name;
     }
 
     /**

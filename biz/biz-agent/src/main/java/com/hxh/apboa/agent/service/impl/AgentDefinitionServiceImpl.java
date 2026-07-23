@@ -306,7 +306,7 @@ public class AgentDefinitionServiceImpl extends ServiceImpl<AgentDefinitionMappe
         if (!skillPackageIds.isEmpty()) {
             return skillPackageService.list(
                     new LambdaQueryWrapper<SkillPackage>()
-                            .select(SkillPackage::getId, SkillPackage::getName, SkillPackage::getDescription)
+                            .select(SkillPackage::getId, SkillPackage::getName, SkillPackage::getDescription, SkillPackage::getAlias)
                             .eq(SkillPackage::getEnabled, true)
                             .in(SkillPackage::getId, skillPackageIds));
         }

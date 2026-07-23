@@ -133,8 +133,9 @@ const filteredDetailItems = computed<MentionResourceItem[]>(() => {
   if (!kw) return items
   return items.filter((item) => {
     const inName = item.name.toLowerCase().includes(kw)
+    const inAlias = (item.alias || '').toLowerCase().includes(kw)
     const inDesc = (item.description || '').toLowerCase().includes(kw)
-    return inName || inDesc
+    return inName || inAlias || inDesc
   })
 })
 
@@ -467,8 +468,8 @@ const transitionName = computed(() =>
                 @mouseenter="detailActiveIndex = index"
               >
                 <div class="dropdown-item-content detail-item-content">
-                  <span class="detail-item-name" :title="item.name">
-                    {{ item.name }}
+                  <span class="detail-item-name" :title="item.alias || item.name">
+                    {{ item.alias || item.name }}
                   </span>
                   <span
                     v-if="item.description"

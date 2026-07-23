@@ -1264,8 +1264,9 @@ $small-mobile-breakpoint: 375px;
               padding-bottom 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 
   &.is-expanded {
-    max-height: 500px;
+    max-height: 60vh;
     padding: 5px 20px;
+    overflow-y: auto;
   }
 }
 
@@ -1329,8 +1330,9 @@ $small-mobile-breakpoint: 375px;
               padding-bottom 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 
   &.is-expanded {
-    max-height: 500px;
+    max-height: 60vh;
     padding: 4px 0 4px 20px;
+    overflow-y: auto;
   }
 }
 

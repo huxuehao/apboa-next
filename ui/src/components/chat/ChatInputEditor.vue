@@ -21,6 +21,8 @@ import {
 } from '@/composables/chat/useResourceCategories'
 import { enabledToolsOfAgent, enabledSkillsOfAgent } from "@/api/agent"
 import type {SkillPackage, ToolConfig} from "@/types";
+import { useSkillAliasMap } from '@/composables/chat/useSkillAliasMap'
+import { useToolNameMap } from '@/composables/chat/useToolNameMap'
 
 const props = withDefaults(
   defineProps<{
@@ -76,6 +78,7 @@ watch(() => props.agentId, () => {
           description: item.description
         }
       })
+      useToolNameMap().setFromTools(toolRes.data.data)
     }
   })
   enabledSkillsOfAgent(props.agentId).then((skills) => {
@@ -84,9 +87,11 @@ watch(() => props.agentId, () => {
         return {
           id: item.name,
           name: item.name,
+          alias: item.alias,
           description: item.description
         }
       })
+      useSkillAliasMap().setFromSkills(skills.data.data)
     }
   })
 }, { immediate: true })

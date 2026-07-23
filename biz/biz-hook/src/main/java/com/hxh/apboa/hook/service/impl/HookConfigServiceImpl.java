@@ -176,14 +176,16 @@ public class HookConfigServiceImpl extends ServiceImpl<HookConfigMapper, HookCon
     }
 
     /**
-     * 更新内置Hook（刷新元数据，不改变租户归属）
+     * 更新内置Hook（刷新元数据，不改变租户归属）。
+     * 注意：不覆盖 name —— 内置 Hook 允许用户改名（见 updateName），启动同步只维护
+     * description/scope_type，避免把用户改的 name 冲掉。name 仅在首次 insert 时用代码值；
+     * 改 name 不影响生效（HooksFactory 按 class_path 反查）。
      */
     private void updateHookConfig(HookConfigWrapper configWrapper, Long recordId) {
         jdbcTemplate.update(
                 "UPDATE " + TableConst.HOOK
-                        + " SET name = ?, description = ?, scope_type = ?, updated_at = ?"
+                        + " SET description = ?, scope_type = ?, updated_at = ?"
                         + " WHERE id = ?",
-                configWrapper.getName(),
                 configWrapper.getDescription(),
                 configWrapper.getScopeType().name(),
                 LocalDateTime.now(),
@@ -232,6 +234,16 @@ public class HookConfigServiceImpl extends ServiceImpl<HookConfigMapper, HookCon
         boolean result = updateById(entity);
         publishAgentReregister(agentHookService.getAgentIds(List.of(entity.getId())));
         return result;
+    }
+
+    @Override
+    public boolean updateName(Long id, String name) {
+        // 仅改展示 name（允许内置 Hook）；name 不影响生效（HooksFactory 按 class_path 反查），
+        // 故无需触发关联智能体重新注册。启动同步不会覆盖此 name（见 updateHookConfig）。
+        return lambdaUpdate()
+                .set(HookConfig::getName, name)
+                .eq(HookConfig::getId, id)
+                .update();
     }
 
     private void publishAgentReregister(List<Long> agentIds) {

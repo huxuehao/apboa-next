@@ -98,10 +98,13 @@ export const RESOURCE_CATEGORY_REGISTRY: Record<ResourceKind, ResourceCategoryMe
     asFolder: true,
     order: 10,
     renderItemIcon: () => h(ToolOutlined),
-    // 工具直接以 name 作为 tagContent，便于消息侧无依赖渲染
+    // 工具以 toolId 作为 tagContent（值/发送用 toolId 不变），显示映射回工具名
     resolveTagContent: (item) => item.id,
     resolveTagDisplay: (item) => item.name,
-    resolveDisplayFromContent: (content) => content
+    resolveDisplayFromContent: (content, ctx) => {
+      const hit = ctx.agentTools?.find((t) => t.id === content)
+      return hit?.name || content
+    }
   },
   'agent-skill': {
     kind: 'agent-skill',
@@ -111,10 +114,13 @@ export const RESOURCE_CATEGORY_REGISTRY: Record<ResourceKind, ResourceCategoryMe
     asFolder: true,
     order: 20,
     renderItemIcon: () => h(AppstoreOutlined),
-    // 技能直接以 name 作为 tagContent
+    // 技能以 name 作为 tagContent（值/发送不变），显示优先用别名
     resolveTagContent: (item) => item.id,
-    resolveTagDisplay: (item) => item.name,
-    resolveDisplayFromContent: (content) => content
+    resolveTagDisplay: (item) => item.alias || item.name,
+    resolveDisplayFromContent: (content, ctx) => {
+      const hit = ctx.agentSkills?.find((s) => s.name === content)
+      return hit?.alias || content
+    }
   }
 }
 
@@ -157,6 +163,7 @@ export function toResourceItem(
     kind,
     id: r.id,
     name: r.name,
+    alias: (r as AgentSkillItem).alias,
     description: r.description,
     raw: r
   }

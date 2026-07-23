@@ -196,14 +196,17 @@ public class ToolServiceImpl extends ServiceImpl<ToolMapper, ToolConfig> impleme
     }
 
     /**
-     * 更新内置工具（刷新元数据，不改变租户归属）
+     * 更新内置工具（刷新元数据，不改变租户归属）。
+     * 注意：不覆盖 name —— 内置工具允许用户改名（UI 通用编辑，见 doUpdate 的 BUILTIN 分支），启动同步
+     * 只维护 tool_id/description/input_schema/scope_type，避免把用户改的 name 冲掉。name 仅在首次
+     * insert 时用代码值；tool_id 是调用/匹配用的稳定名（= @Tool 原始 name），随代码升级刷新。
+     * 改 name 不影响生效（ToolkitFactory 按 class_path 反查、need_confirm 按 tool_id 匹配）。
      */
     private void updateToolConfig(ToolInfoWrapper toolInfo, Long recordId) {
         jdbcTemplate.update(
                 "UPDATE " + TableConst.TOOL
-                        + " SET name = ?, tool_id = ?, description = ?, input_schema = ?, scope_type = ?, updated_at = ?"
+                        + " SET tool_id = ?, description = ?, input_schema = ?, scope_type = ?, updated_at = ?"
                         + " WHERE id = ?",
-                toolInfo.getName(),
                 toolInfo.getName(),
                 toolInfo.getDescription(),
                 JsonUtils.toJsonStr(toolInfo.getParams()),

@@ -38,6 +38,14 @@ export function update(entity: HookConfig) {
 }
 
 /**
+ * 更新展示名称（仅改 name，允许内置钩子；不影响生效，启动同步不覆盖）
+ * PUT /hook-config/{id}/name
+ */
+export function updateName(id: string, name: string) {
+  return request.put<ApiResponse<boolean>>(`/api/hook-config/${id}/name`, { name })
+}
+
+/**
  * 删除
  * DELETE /hook-config
  */

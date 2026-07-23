@@ -18,6 +18,7 @@ import * as skillApi from '@/api/skill'
 const props = defineProps<{
   skillId: string
   file: SkillFileTreeNode | null
+  readonly?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -43,6 +44,13 @@ const isDirty = computed(() => editorContent.value !== originalContent.value)
 const breadcrumb = computed(() => {
   if (!props.file) return ''
   return props.file.path.split('/').join(' / ')
+})
+
+// 根据文件扩展名决定语法高亮语言
+const editorLanguage = computed(() => {
+  const name = props.file?.name || ''
+  if (name.endsWith('.md')) return 'markdown'
+  return 'txt'
 })
 
 // 监听文件切换
@@ -116,7 +124,7 @@ function handleContentChange(newContent: string) {
  * 保存文件
  */
 async function handleSave() {
-  if (!props.file || saveStatus.value === 'saving') return
+  if (props.readonly || !props.file || saveStatus.value === 'saving') return
 
   saveStatus.value = 'saving'
   try {
@@ -203,8 +211,10 @@ function handleEditorSave() {
       <div class="editor-toolbar">
         <span class="breadcrumb">{{ breadcrumb }}</span>
         <div class="toolbar-actions">
+          <!-- 只读模式：仅提示，不可保存 -->
+          <span v-if="readonly" class="readonly-indicator">只读</span>
           <!-- 有变更时：放弃 + 保存 -->
-          <template v-if="isDirty">
+          <template v-else-if="isDirty">
             <Button type="text" size="small" @click="handleRevert">
               <template #icon><RollbackOutlined /></template>
               放弃更改
@@ -233,7 +243,8 @@ function handleEditorSave() {
           style="border-radius: 0;"
           :model-value="editorContent"
           :show-toolbar="false"
-          language="txt"
+          :language="editorLanguage"
+          :readonly="readonly"
           theme="light"
           height="calc(100vh - 60px)"
           @update:model-value="handleContentChange"
@@ -311,5 +322,13 @@ function handleEditorSave() {
   flex: 1;
   overflow: hidden;
   background: #fff;
+}
+
+.readonly-indicator {
+  font-size: 13px;
+  color: #999;
+  padding: 1.5px 8px;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
 }
 </style>

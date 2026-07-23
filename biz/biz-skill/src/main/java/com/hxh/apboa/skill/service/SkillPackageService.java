@@ -2,6 +2,7 @@ package com.hxh.apboa.skill.service;
 
 import com.hxh.apboa.common.entity.SkillPackage;
 import com.hxh.apboa.common.vo.SkillPackageVO;
+import com.hxh.apboa.common.wrapper.SkillConfigWrapper;
 import com.baomidou.mybatisplus.extension.service.IService;
 
 import java.util.List;
@@ -12,6 +13,14 @@ import java.util.List;
  * @author huxuehao
  */
 public interface SkillPackageService extends IService<SkillPackage> {
+
+    /**
+     * 同步内置技能包到数据库（按租户作用域分配，对齐 HookConfigService.SyncConfigToDatabase）
+     *
+     * @param configWrappers 内置技能信息列表（含 Scope 声明）
+     */
+    void syncBuiltinSkills(List<SkillConfigWrapper> configWrappers);
+
     List<Object> usedWithAgent(List<Long> ids);
 
     /**
@@ -38,4 +47,13 @@ public interface SkillPackageService extends IService<SkillPackage> {
      * @return 技能包VO
      */
     SkillPackageVO getDetail(Long id);
+
+    /**
+     * 仅更新展示别名（允许内置技能包；不影响 name/desc/content）
+     *
+     * @param id 技能包ID
+     * @param alias 别名（可空以清除）
+     * @return 是否成功
+     */
+    boolean updateAlias(Long id, String alias);
 }

@@ -618,8 +618,12 @@ DROP TABLE IF EXISTS `skill_package`;
 CREATE TABLE `skill_package` (
   `id` bigint NOT NULL,
   `name` varchar(500) NOT NULL COMMENT '技能包名称',
+  `alias` varchar(500) DEFAULT NULL COMMENT '展示别名（仅展示层，不影响 name 与发送给 agent 的值）',
   `description` text NOT NULL COMMENT '技能描述',
   `category` varchar(100) DEFAULT NULL COMMENT '技能分类',
+  `skill_type` varchar(20) NOT NULL DEFAULT 'CUSTOM' COMMENT '技能类型: BUILTIN=内置, CUSTOM=自定义',
+  `class_path` varchar(500) DEFAULT NULL COMMENT '内置技能实现类全名（skill_type=BUILTIN 时使用，供 SkillsRegister 反查）',
+  `scope_type` varchar(20) NOT NULL DEFAULT 'GLOBAL' COMMENT '作用域: GLOBAL=全局, TENANT=指定租户（仅内置有意义）',
   `enabled` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否可用',
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

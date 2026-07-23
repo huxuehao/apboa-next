@@ -28,4 +28,13 @@ public interface HookConfigService extends IService<HookConfig> {
      * @return 是否成功
      */
     boolean doUpdate(HookConfig entity);
+
+    /**
+     * 仅更新 Hook 的展示 name（允许内置 Hook；不影响生效，启动同步不覆盖）
+     *
+     * @param id   Hook配置ID
+     * @param name 新名称
+     * @return 是否成功
+     */
+    boolean updateName(Long id, String name);
 }

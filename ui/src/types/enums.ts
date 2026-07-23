@@ -41,6 +41,14 @@ export enum ToolType {
 }
 
 /**
+ * 技能包类型
+ */
+export enum SkillType {
+  BUILTIN = 'BUILTIN',
+  CUSTOM = 'CUSTOM'
+}
+
+/**
  * 代码语言
  */
 export enum CodeLanguage {

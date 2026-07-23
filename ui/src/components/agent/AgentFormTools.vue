@@ -93,11 +93,25 @@ const hooksByType = computed(() => {
 /**
  * 按分类分组的技能包
  */
-const skillsByCategory = computed(() => {
+const skillsByGroup = computed(() => {
   const groups: Record<string, SkillPackageVO[]> = {}
+  // 内置技能包单独一组（内置无 category，对齐钩子的内置/自定义分组）
+  const builtin = allSkills.value.filter(s => s.skillType === 'BUILTIN')
+  if (builtin.length > 0) {
+    groups['内置'] = builtin
+  }
+  // 自定义技能包按分类分组
   skillCategories.value.forEach(cat => {
-    groups[cat] = allSkills.value.filter(s => s.category === cat)
+    const custom = allSkills.value.filter(s => s.skillType !== 'BUILTIN' && s.category === cat)
+    if (custom.length > 0) {
+      groups[cat] = custom
+    }
   })
+  // 自定义但未设置分类的归为「未分类」，避免遗漏
+  const uncategorized = allSkills.value.filter(s => s.skillType !== 'BUILTIN' && !s.category)
+  if (uncategorized.length > 0) {
+    groups['未分类'] = uncategorized
+  }
   return groups
 })
 
@@ -473,14 +487,14 @@ defineExpose({
       </AFormItem>
 
       <AFormItem label="技能包">
-        <ACollapse v-if="skillCategories?.length > 0">
+        <ACollapse v-if="Object.keys(skillsByGroup).length > 0">
           <ACollapsePanel
-            v-for="category in skillCategories"
-            :key="category"
-            :header="`${category}（${countCommonElements(skillsByCategory[category]?.map(i => i.id) || [], formData.skill)}/${skillsByCategory[category]?.length}）`">
+            v-for="(skills, groupLabel) in skillsByGroup"
+            :key="groupLabel"
+            :header="`${groupLabel}（${countCommonElements(skills.map(i => i.id), formData.skill)}/${skills.length}）`">
             <div class="checkbox-grid">
               <ACheckbox
-                v-for="skill in skillsByCategory[category]"
+                v-for="skill in skills"
                 :checked="formData.skill.includes(skill.id as string)"
                 @change="(e: any) => handleSkillChange(skill.id as string, e.target.checked)"
                 :key="skill.id"
@@ -488,7 +502,7 @@ defineExpose({
                 class="checkbox-item"
               >
                 <div class="item-info">
-                  <div class="item-name text-ellipsis" :title="skill.name">{{ skill.name }}</div>
+                  <div class="item-name text-ellipsis" :title="skill.alias || skill.name">{{ skill.alias || skill.name }}</div>
                   <div class="item-desc text-placeholder text-xs text-ellipsis" :title="skill.description">{{ skill.description }}</div>
                 </div>
               </ACheckbox>

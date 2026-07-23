@@ -5,18 +5,25 @@
  *
  * @component
  */
+import { computed } from 'vue'
 import { AppstoreOutlined } from '@ant-design/icons-vue'
+import { useSkillAliasMap } from '@/composables/chat/useSkillAliasMap'
 
-defineProps<{
-  /** 技能名称（标签内容） */
+const props = defineProps<{
+  /** 技能名称（标签内容 = 值，发送给 agent 用） */
   content: string
 }>()
+
+const { aliasMap } = useSkillAliasMap()
+
+/** 展示文本：有别名映射则显示别名，否则回退原 name */
+const display = computed(() => aliasMap.value[props.content] || props.content)
 </script>
 
 <template>
   <span class="agent-skill-tag" :title="content">
     <AppstoreOutlined class="agent-skill-tag-icon" />
-    <span class="agent-skill-tag-name">{{ content }}</span>
+    <span class="agent-skill-tag-name">{{ display }}</span>
   </span>
 </template>
 

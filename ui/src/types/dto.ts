@@ -88,6 +88,7 @@ export interface SensitiveWordConfigDTO extends PageParams {
 export interface SkillPackageDTO extends PageParams {
   name?: string
   category?: string
+  skillType?: string
   enabled?: boolean
 }
 

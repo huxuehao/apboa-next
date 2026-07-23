@@ -32,8 +32,10 @@ export interface AgentToolItem {
 export interface AgentSkillItem {
   /** 技能唯一标识 */
   id: string
-  /** 技能名称 */
+  /** 技能名称（= 标签值，发送给 agent 用） */
   name: string
+  /** 展示别名（仅展示层，值仍用 name） */
+  alias?: string
   /** 技能描述 */
   description?: string
 }
@@ -49,6 +51,8 @@ export interface MentionResourceItem {
   id: string
   /** 主标题 */
   name: string
+  /** 展示别名（仅展示层，选中/插入仍用 id/name） */
+  alias?: string
   /** 副标题（描述、路径等） */
   description?: string
   /** 原始数据，便于业务侧二次处理 */

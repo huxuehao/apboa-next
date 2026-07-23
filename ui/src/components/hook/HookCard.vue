@@ -4,15 +4,18 @@
  * @author huxuehao
  */
 <script setup lang="ts">
-import { computed } from 'vue'
-import { EllipsisOutlined } from '@ant-design/icons-vue'
+import { computed, ref } from 'vue'
+import { EllipsisOutlined, LoginOutlined } from '@ant-design/icons-vue'
+import { message } from 'ant-design-vue'
 import hookAvatar from '@/assets/avatar/hook.png'
 import type { HookConfigVO } from '@/types'
+import * as hookApi from '@/api/hook'
 import {
   createViewItem,
   createEditItem,
   createEnableItem,
   createDeleteItem,
+  createRenameItem,
   createDivider,
 } from '@/composables/useCardMenuItems'
 
@@ -31,6 +34,7 @@ const emit = defineEmits<{
   edit: [id: string]
   enable: [id: string]
   delete: [id: string]
+  renamed: [id: string]
 }>()
 
 /**
@@ -45,6 +49,9 @@ const menuItems = computed(() => {
     items.push(createEditItem())
     items.push(createDivider())
     items.push(createDeleteItem())
+  } else {
+    // 内置钩子只读，但允许改展示名称（不影响生效，启动同步不覆盖）
+    items.push(createRenameItem())
   }
   return items
 })
@@ -71,6 +78,37 @@ const hookTypeText = computed(() => {
   return props.data.hookType === 'BUILTIN' ? '内置' : '自定义'
 })
 
+// 改名弹窗
+const renameModalVisible = ref(false)
+const renameValue = ref('')
+
+/**
+ * 打开改名弹窗
+ */
+function openRenameModal() {
+  renameValue.value = props.data.name || ''
+  renameModalVisible.value = true
+}
+
+/**
+ * 确认改名
+ */
+async function handleRenameConfirm() {
+  const name = renameValue.value.trim()
+  if (!name) {
+    message.warning('请输入名称')
+    return
+  }
+  try {
+    await hookApi.updateName(String(props.data.id), name)
+    message.success('改名成功')
+    renameModalVisible.value = false
+    emit('renamed', props.data.id as string)
+  } catch {
+    message.error('改名失败')
+  }
+}
+
 /**
  * 处理菜单点击
  */
@@ -87,6 +125,9 @@ function handleMenuClick({ key }: { key: string }) {
       break
     case 'delete':
       emit('delete', props.data.id as string)
+      break
+    case 'rename':
+      openRenameModal()
       break
   }
 }
@@ -118,6 +159,22 @@ function handleMenuClick({ key }: { key: string }) {
       <div class="card-time text-placeholder text-xs">更新于 {{ formattedTime }}</div>
     </div>
   </div>
+
+  <!-- 改名弹窗 -->
+  <a-modal
+    v-model:open="renameModalVisible"
+    title="修改名称"
+    :ok-text="'确定'"
+    :cancel-text="'取消'"
+    @ok="handleRenameConfirm"
+    destroyOnClose
+  >
+    <a-form layout="vertical">
+      <a-form-item label="展示名称（仅界面展示，不影响钩子实际生效）">
+        <a-input v-model:value="renameValue" placeholder="给这个钩子起个易懂的名字" allow-clear />
+      </a-form-item>
+    </a-form>
+  </a-modal>
 </template>
 
 <style scoped lang="scss">

@@ -12,11 +12,13 @@ import type { SkillPackageVO } from '@/types'
 import * as skillApi from '@/api/skill'
 import {
   createViewItem,
+  createViewContentItem,
   createEditItem,
   createEnableItem,
   createDeleteItem,
   createSetCategoryItem,
   createToolLinkItem,
+  createAliasItem,
   createDivider,
 } from '@/composables/useCardMenuItems'
 
@@ -33,11 +35,13 @@ const props = defineProps<{
  */
 const emit = defineEmits<{
   view: [id: string]
+  viewContent: [id: string]
   edit: [id: string]
   delete: [id: string]
   enable: [id: string]
   setCategory: [id: string, category: string]
   toolLink: [id: string]
+  aliasUpdated: [id: string]
 }>()
 
 /**
@@ -58,15 +62,31 @@ const formattedTime = computed(() => {
 /**
  * 操作菜单项
  */
-const menuItems = computed(() => [
-  createViewItem(),
-  createEditItem(),
-  createSetCategoryItem(),
-  createToolLinkItem(),
-  createEnableItem(props.data.enabled),
-  createDivider(),
-  createDeleteItem(),
-])
+const menuItems = computed(() => {
+  const items = [createViewItem()]
+  if (props.data.skillType === 'BUILTIN') {
+    // 内置技能包只读：查看元信息 + 查看正文内容 + 别名 + 启停
+    items.push(createViewContentItem())
+    items.push(createAliasItem())
+    items.push(createEnableItem(props.data.enabled))
+  } else {
+    items.push(createEnableItem(props.data.enabled))
+    items.push(createEditItem())
+    items.push(createSetCategoryItem())
+    items.push(createAliasItem())
+    items.push(createToolLinkItem())
+    items.push(createDivider())
+    items.push(createDeleteItem())
+  }
+  return items
+})
+
+/**
+ * 技能类型显示文本
+ */
+const skillTypeText = computed(() => {
+  return props.data.skillType === 'BUILTIN' ? '内置' : '自定义'
+})
 
 // 分类设置弹窗
 const categoryModalVisible = ref(false)
@@ -145,6 +165,26 @@ async function handleCategoryConfirm() {
   }
 }
 
+// 别名设置弹窗
+const aliasModalVisible = ref(false)
+const aliasValue = ref('')
+
+function openAliasModal() {
+  aliasValue.value = props.data.alias || ''
+  aliasModalVisible.value = true
+}
+
+async function handleAliasConfirm() {
+  try {
+    await skillApi.updateAlias(String(props.data.id), aliasValue.value.trim())
+    message.success('别名设置成功')
+    aliasModalVisible.value = false
+    emit('aliasUpdated', String(props.data.id))
+  } catch {
+    message.error('设置别名失败')
+  }
+}
+
 /**
  * 处理菜单点击
  */
@@ -153,11 +193,17 @@ function handleMenuClick({ key }: { key: string }) {
     case 'view':
       emit('view', props.data.id as string)
       break
+    case 'viewContent':
+      emit('viewContent', props.data.id as string)
+      break
     case 'edit':
       emit('edit', props.data.id as string)
       break
     case 'setCategory':
       openCategoryModal()
+      break
+    case 'alias':
+      openAliasModal()
       break
     case 'toolLink':
       emit('toolLink', props.data.id as string)
@@ -186,7 +232,7 @@ function handleMenuClick({ key }: { key: string }) {
           </span>
         </div>
       </ATooltip>
-      <div class="card-name flex-1 truncate" :title="data.name" @click="emit('view', data.id as string)">{{ data.name }}</div>
+      <div class="card-name flex-1 truncate" :title="data.alias || data.name" @click="emit('view', data.id as string)">{{ data.alias || data.name }}</div>
       <ADropdown :trigger="['hover']">
         <AButton type="text" size="small" v-permission="['TENANT_EDITOR','TENANT_ADMIN','TENANT_OWNER']">
           <EllipsisOutlined />
@@ -203,6 +249,7 @@ function handleMenuClick({ key }: { key: string }) {
 
     <div class="card-footer flex items-center justify-between">
       <div class="card-tags flex items-center gap-xs">
+        <ATag color="default" class="tag">{{ skillTypeText }}</ATag>
         <ATag color="default" class="tag">{{ data.category || '未设置标签' }}</ATag>
       </div>
       <div class="card-time text-placeholder text-xs">更新于 {{ formattedTime }}</div>
@@ -243,6 +290,22 @@ function handleMenuClick({ key }: { key: string }) {
             </a-space>
           </template>
         </a-select>
+      </a-form-item>
+    </a-form>
+  </a-modal>
+
+  <!-- 别名设置弹窗 -->
+  <a-modal
+    v-model:open="aliasModalVisible"
+    title="设置别名"
+    :ok-text="'确定'"
+    :cancel-text="'取消'"
+    @ok="handleAliasConfirm"
+    destroyOnClose
+  >
+    <a-form layout="vertical">
+      <a-form-item label="展示别名（仅用于界面展示，不影响技能实际名称与发送给智能体的值）">
+        <a-input v-model:value="aliasValue" placeholder="给这个技能起个友好的中文名，如「用户交互协议」" allow-clear />
       </a-form-item>
     </a-form>
   </a-modal>

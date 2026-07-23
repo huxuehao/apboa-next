@@ -4,6 +4,7 @@ import com.hxh.apboa.common.consts.SysConst;
 import com.hxh.apboa.common.entity.*;
 import com.hxh.apboa.common.enums.SkillFileType;
 import com.hxh.apboa.engine.agui.AgentContext;
+import com.hxh.apboa.engine.hook.builtins.IConfirmationHook;
 import com.hxh.apboa.engine.skill.builtins.UserInteractionProtocolSkill;
 import com.hxh.apboa.engine.skill.builtins.VisionEnhancementProtocolSkill;
 import com.hxh.apboa.engine.tool.ToolkitFactory;
@@ -85,10 +86,6 @@ public class SkillBoxFactory {
      */
         public SkillBox getSkillBox(AgentDefinition agentDefinition, Toolkit toolkit, CodeExecutionConfig codeExecutionConfig) {
         SkillBox skillBox = new SkillBox(toolkit);
-
-        // 用户交互技能
-        skillBox.registerSkill(UserInteractionProtocolSkill.getAgentSkill());
-        skillBox.registerSkill(VisionEnhancementProtocolSkill.getAgentSkill());
 
         configureCodeExecution(skillBox, codeExecutionConfig);
 

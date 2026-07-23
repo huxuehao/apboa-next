@@ -285,9 +285,17 @@ public class AguiAgentAdapter {
 
                         boolean hasStarted = state.hasStartedToolCall(toolCallId);
                         if (!hasStarted) {
+                            // 兜底补 ToolCallStart：常见于 HITL resume（每次 runWithMessages 新建 state，
+                            // pause 前发过的 Start 状态在 resume 后已丢失）、子 agent tool 结果冒泡等场景。
+                            // 从 ToolResultBlock 取真实 name（class 注释保证 messages 场景下 name required），
+                            // 避免前端渲染成硬编码 "unknown"。
+                            String name = toolResult.getName();
+                            if (name == null || name.isEmpty()) {
+                                name = "unknown";
+                            }
                             events.add(
                                     new AguiEvent.ToolCallStart(
-                                            state.threadId, state.runId, toolCallId, "unknown"));
+                                            state.threadId, state.runId, toolCallId, name));
                             state.startToolCall(toolCallId);
                         }
 

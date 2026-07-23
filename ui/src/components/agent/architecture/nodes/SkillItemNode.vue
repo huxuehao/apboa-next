@@ -34,8 +34,8 @@ const descriptionText = computed(() => {
       <div class="node-avatar">
         <AppstoreOutlined />
       </div>
-      <div class="node-name" :title="data.skill.name">
-        {{ data.skill.name }}
+      <div class="node-name" :title="data.skill.alias || data.skill.name">
+        {{ data.skill.alias || data.skill.name }}
       </div>
     </div>
 

@@ -1,16 +1,23 @@
 package com.hxh.apboa.engine.skill.builtins;
 
+import com.hxh.apboa.common.annotation.Scope;
+import com.hxh.apboa.common.enums.ScopeType;
+import com.hxh.apboa.engine.skill.IBuiltinSkill;
 import io.agentscope.core.skill.AgentSkill;
+import org.springframework.stereotype.Component;
 
 /**
- * 描述：用户交互协议SKILL
+ * 描述：用户交互协议SKILL（内置，全局）
  *
  * @author huxuehao
  **/
-public class UserInteractionProtocolSkill {
+@Component
+@Scope(ScopeType.GLOBAL)
+public class UserInteractionProtocolSkill implements IBuiltinSkill {
     private static final String SKILL_NAME = "user_interaction_protocol_rules";
 
-    public static AgentSkill getAgentSkill() {
+    @Override
+    public AgentSkill getAgentSkill() {
         return AgentSkill.builder()
                 .name(SKILL_NAME)
                 .description(

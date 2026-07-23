@@ -25,6 +25,7 @@ import * as skillApi from '@/api/skill'
 const props = defineProps<{
   skillId: string
   treeData: SkillFileTreeNode[]
+  readonly?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -97,6 +98,10 @@ function getNodeKey(node: SkillFileTreeNode): string {
  * 处理节点右键菜单
  */
 function handleContextMenu(e: MouseEvent, node: SkillFileTreeNode) {
+  // 只读模式：禁用右键菜单
+  if (props.readonly) {
+    return
+  }
   // SKILL.md 不显示任何右键菜单
   if (node.name === 'SKILL.md') {
     return
@@ -114,6 +119,8 @@ function handleContextMenu(e: MouseEvent, node: SkillFileTreeNode) {
  * 处理树空白区域右键菜单（根级创建）
  */
 function handleTreeContextMenu(e: MouseEvent) {
+  // 只读模式：禁用右键菜单
+  if (props.readonly) return
   // 只在点击容器空白区域时触发
   const target = e.target as HTMLElement
   if (target.closest('.ant-tree-node-content-wrapper')) return

@@ -23,6 +23,8 @@ public class RedisChannelTopic {
     public static final String LOCK_TOOLS_SYNC = "apboa:lock:tools:sync";
     /** 分布式锁：内置Hook同步到数据库 */
     public static final String LOCK_HOOKS_SYNC = "apboa:lock:hooks:sync";
+    /** 分布式锁：内置技能包同步到数据库 */
+    public static final String LOCK_SKILLS_SYNC = "apboa:lock:skills:sync";
     /** 分布式锁：技能包文件初始化同步 */
     public static final String LOCK_SKILL_INIT = "apboa:lock:skill:init";
     /** 分布式锁：聊天消息月度归档 */

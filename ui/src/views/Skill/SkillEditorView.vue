@@ -38,6 +38,9 @@ const skillInfo = reactive({
   tools: [] as string[],
 })
 
+// 是否只读（内置技能包只读查看，不可编辑）
+const isReadonly = ref(false)
+
 // 文件树数据
 const treeData = ref<SkillFileTreeNode[]>([])
 
@@ -170,6 +173,8 @@ async function loadSkillDetail() {
       skillInfo.category = vo.category
       skillInfo.enabled = vo.enabled
       skillInfo.tools = vo.tools || []
+      // 内置技能包只读查看
+      isReadonly.value = vo.skillType === 'BUILTIN'
     }
   } finally {
     loading.value = false
@@ -500,11 +505,12 @@ onBeforeUnmount(() => {
           <span v-if="!isNew" class="skill-name-text">{{ skillInfo.name }}</span>
           <span v-else>新建技能包</span>
         </span>
+        <a-tag v-if="isReadonly" color="default" style="margin-left: 4px; flex-shrink: 0">只读</a-tag>
         <span style="flex:1"></span>
-        <a-button v-if="!isNew" type="text" size="small" title="新建文件" @click="handleNewFile">
+        <a-button v-if="!isNew && !isReadonly" type="text" size="small" title="新建文件" @click="handleNewFile">
           <PlusOutlined />
         </a-button>
-        <a-button v-if="!isNew" type="text" size="small" title="新建文件夹" @click="handleNewFolder">
+        <a-button v-if="!isNew && !isReadonly" type="text" size="small" title="新建文件夹" @click="handleNewFolder">
           <FolderAddOutlined />
         </a-button>
         <a-button v-if="!isNew" type="text" size="small" title="下载技能包" @click="handleDownloadZip">
@@ -518,6 +524,7 @@ onBeforeUnmount(() => {
           ref="skillTreeRef"
           :skill-id="skillId"
           :tree-data="treeData"
+          :readonly="isReadonly"
           @select="handleFileSelect"
           @refresh="refreshTree"
           @file-deleted="handleFileDeleted"
@@ -525,7 +532,7 @@ onBeforeUnmount(() => {
       </div>
 
       <!-- 删除按钮 -->
-      <div class="panel-footer" v-if="!isNew">
+      <div class="panel-footer" v-if="!isNew && !isReadonly">
         <div class="footer-actions">
           <a-button type="text" size="small" @click="handleSyncToFile" :loading="syncing">
             <CloudUploadOutlined />
@@ -554,6 +561,7 @@ onBeforeUnmount(() => {
           ref="editorRef"
           :skill-id="skillId"
           :file="selectedFile"
+          :readonly="isReadonly"
           @dirty-change="handleDirtyChange"
           @saved="handleSaved"
         />

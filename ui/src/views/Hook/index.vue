@@ -127,6 +127,13 @@ function handleFormSuccess() {
 }
 
 /**
+ * 处理改名成功（刷新列表显示新名称）
+ */
+function handleRenamed() {
+  resetListAndRebuild()
+}
+
+/**
  * 处理查看详情
  */
 async function handleView(id: string) {
@@ -296,6 +303,7 @@ watch([selectedHookType, keyword], () => {
           @edit="handleEdit"
           @enable="handleEnable"
           @delete="handleDelete"
+          @renamed="handleRenamed"
         />
       </div>
 
