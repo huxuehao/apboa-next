@@ -10,6 +10,7 @@ import com.hxh.apboa.common.enums.McpToolExposureMode;
 import com.hxh.apboa.common.vo.AgentMcpBindingVO;
 import com.hxh.apboa.node.agent.McpConfig;
 import com.hxh.apboa.engine.hook.builtins.IConfirmationHook;
+import com.hxh.apboa.engine.identity.IdentityAssertionSigner;
 import com.hxh.apboa.mcp.config.impl.HttpMcpClientConfig;
 import com.hxh.apboa.mcp.config.impl.SseMcpClientConfig;
 import com.hxh.apboa.mcp.config.impl.StdioMcpClientConfig;
@@ -56,6 +57,7 @@ public class McpClientFactory {
     private final AgentMcpServerService agentMcpServerService;
     private final McpToolService mcpToolService;
     private final McpRuntimeDegradeService mcpRuntimeDegradeService;
+    private final IdentityAssertionSigner identityAssertionSigner;
     private final ObjectMapper objectMapper;
     private final Map<Long, SharedMcpClientContext> sharedContexts = new ConcurrentHashMap<>();
 
@@ -140,7 +142,9 @@ public class McpClientFactory {
                         toolSchema,
                         () -> getInitializedClient(mcpServer.getId()),
                         mcpRuntimeDegradeService,
-                        client -> invalidateContext(mcpServer.getId(), client)));
+                        client -> invalidateContext(mcpServer.getId(), client),
+                        mcpServer.getAudience(),
+                        identityAssertionSigner));
             });
         }
         return result;

@@ -81,7 +81,14 @@ export function selectTenant(data: SelectTenantRequest) {
 /**
  * 通过ChatKey换取Token
  * POST /auth/chat-key-token/{chatKey}
+ *
+ * @param userJwt 业务方后端用 embedSecret 签的嵌入用户凭证（可选）：
+ *                带上则平台验签后把 external 用户身份烙进会话 token；
+ *                验签失败接口报错（绝不静默降级为匿名）
  */
-export function chatKeyToken(chatKey: String) {
-  return request.post<ApiResponse<LoginResponse>>(`/api/auth/chat-key-token/${chatKey}`)
+export function chatKeyToken(chatKey: String, userJwt?: string) {
+  return request.post<ApiResponse<LoginResponse>>(
+    `/api/auth/chat-key-token/${chatKey}`,
+    userJwt ? { userJwt } : undefined
+  )
 }

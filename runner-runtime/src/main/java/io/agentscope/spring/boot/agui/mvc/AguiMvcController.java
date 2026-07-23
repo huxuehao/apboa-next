@@ -1,6 +1,8 @@
 package io.agentscope.spring.boot.agui.mvc;
 
+import com.hxh.apboa.common.vo.AccountVO;
 import com.hxh.apboa.engine.agui.AgentContext;
+import com.hxh.apboa.engine.agui.TrustedUserInfoResolver;
 import io.agentscope.core.agui.AguiException;
 import io.agentscope.core.agui.adapter.AguiAdapterConfig;
 import io.agentscope.core.agui.encoder.AguiEventEncoder;
@@ -101,11 +103,15 @@ public class AguiMvcController {
         String threadId = input.getThreadId();
         String runId = input.getRunId();
 
+        // 身份盖章：必须在 controller 同步线程提取认证身份——异步块内 postHandle 已清
+        // RequestHolder，且池化线程的 InheritableThreadLocal 可能残留其他请求（串号风险）
+        AccountVO trustedUserInfo = TrustedUserInfoResolver.fromCurrentRequest();
+
         executorService.submit(
                 () -> {
                     try {
-                        // 初始化上下文
-                        AgentContext.init(input, threadId);
+                        // 初始化上下文（userInfo 为服务端盖章值，不读 forwardedProps 自报）
+                        AgentContext.init(input, threadId, trustedUserInfo);
 
                         // Process request - returns both agent and event stream
                         AguiRequestProcessor.ProcessResult result =
@@ -160,6 +166,10 @@ public class AguiMvcController {
         SseEmitter emitter = new SseEmitter(sseTimeout);
         String runId = UUID.randomUUID().toString();
 
+        // 身份盖章（同 handleInternal）：resume 后续跑的 pending 工具同样需要断言身份，
+        // 操作者语义 = 当前提交确认决策的认证用户
+        AccountVO trustedUserInfo = TrustedUserInfoResolver.fromCurrentRequest();
+
         executorService.submit(
                 () -> {
                     try {
@@ -168,6 +178,7 @@ public class AguiMvcController {
                         agentContext.setThreadId(threadId);
                         agentContext.setRunId(runId);
                         agentContext.setMemoryActive(memoryActive);
+                        agentContext.setUserInfo(trustedUserInfo);
                         AgentContext.init(agentContext);
 
                         AguiRequestProcessor.ProcessResult result =

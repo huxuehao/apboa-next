@@ -91,12 +91,16 @@ public class AuthController {
     }
 
     /**
-     * 通过ChatKey换取Token
+     * 通过ChatKey换取Token。
+     * 可选 body 携带业务方签的嵌入用户凭证 userJwt（docs/identity-propagation-design.md §6.M6）：
+     * 无 body = 纯匿名（向后兼容）；带 userJwt 必须验签通过，否则 NotAuthException 拒绝
      */
     @PassAuth
     @PostMapping("/chat-key-token/{chatKey}")
-    public R<LoginResponse> chatKeyToken(@PathVariable("chatKey") String chatKey) {
-        return R.data(accountService.chatKeyToken(chatKey));
+    public R<LoginResponse> chatKeyToken(@PathVariable("chatKey") String chatKey,
+                                         @RequestBody(required = false) ChatKeyTokenRequest body) {
+        String userJwt = body != null ? body.getUserJwt() : null;
+        return R.data(accountService.chatKeyToken(chatKey, userJwt));
     }
 
     /**

@@ -1,7 +1,9 @@
 package com.hxh.apboa.engine.mcp;
 
+import com.hxh.apboa.common.util.FuncUtils;
 import com.hxh.apboa.common.util.TenantUtils;
 import com.hxh.apboa.engine.agui.AgentContext;
+import com.hxh.apboa.engine.identity.IdentityAssertionSigner;
 import com.hxh.apboa.mcp.service.McpRuntimeDegradeService;
 import io.agentscope.core.message.ToolResultBlock;
 import io.agentscope.core.tool.AgentTool;
@@ -32,6 +34,10 @@ public class LazyMcpAgentTool implements AgentTool {
     private final McpRuntimeDegradeService mcpRuntimeDegradeService;
     /** 会话失效时作废共享连接的回调（入参为失败时刻的 client 实例，作 CAS 比对令牌） */
     private final Consumer<McpClientWrapper> contextInvalidator;
+    /** 身份断言 audience（McpServer.audience）；空则不注入断言（M5 拍板：宁缺毋滥） */
+    private final String assertionAudience;
+    /** 断言签名器；audience 为空时可为 null */
+    private final IdentityAssertionSigner assertionSigner;
     private final Map<String, Object> parameters;
     private final Map<String, Object> outputSchema;
 
@@ -39,12 +45,16 @@ public class LazyMcpAgentTool implements AgentTool {
                             McpSchema.Tool toolSchema,
                             Supplier<Mono<McpClientWrapper>> initializedClientSupplier,
                             McpRuntimeDegradeService mcpRuntimeDegradeService,
-                            Consumer<McpClientWrapper> contextInvalidator) {
+                            Consumer<McpClientWrapper> contextInvalidator,
+                            String assertionAudience,
+                            IdentityAssertionSigner assertionSigner) {
         this.degradeContext = degradeContext;
         this.toolSchema = toolSchema;
         this.initializedClientSupplier = initializedClientSupplier;
         this.mcpRuntimeDegradeService = mcpRuntimeDegradeService;
         this.contextInvalidator = contextInvalidator;
+        this.assertionAudience = assertionAudience;
+        this.assertionSigner = assertionSigner;
         this.parameters = McpTool.convertMcpSchemaToParameters(toolSchema.inputSchema(), Set.of());
         this.outputSchema = toolSchema.outputSchema() != null
                 ? new HashMap<>(toolSchema.outputSchema())
@@ -82,6 +92,11 @@ public class LazyMcpAgentTool implements AgentTool {
         Long tenantId = agentContext.getTenantId();
         String tenantCode = agentContext.getTenantCode();
 
+        // 身份断言（docs/identity-propagation-design.md §6.M3）：配置了 audience 才签发注入，
+        // 经 Reactor Context 传给 runner-runtime 覆盖的 wrapper 构造 _meta（本类编译期
+        // 只见原版二参 callTool，见 IdentityAssertionSigner.MCP_CALL_META_CONTEXT_KEY 注释）
+        Map<String, Object> callMeta = buildCallMeta(agentContext);
+
         // 使用 defer 确保整个执行链都在租户上下文中
         return Mono.defer(() -> {
             // 设置租户上下文
@@ -118,7 +133,28 @@ public class LazyMcpAgentTool implements AgentTool {
                         return Mono.just(ToolResultBlock.error(unavailableMessage(e)));
                     })
                     .doFinally(signalType -> TenantUtils.clear());
-        });
+        }).contextWrite(ctx -> callMeta == null
+                ? ctx
+                : ctx.put(IdentityAssertionSigner.MCP_CALL_META_CONTEXT_KEY, callMeta));
+    }
+
+    /**
+     * 组装 tools/call 的 _meta：audience 已配置时现签一张身份断言（短命一次性，
+     * 会话失效重试共用同一张——重试在秒级内完成，远小于断言 TTL）。
+     * 签发失败不阻断工具调用：降级为不带断言（业务方侧自行决定拒绝或放行）。
+     */
+    private Map<String, Object> buildCallMeta(AgentContext agentContext) {
+        if (FuncUtils.isEmpty(assertionAudience) || assertionSigner == null) {
+            return null;
+        }
+        try {
+            String assertion = assertionSigner.sign(agentContext, getName(), assertionAudience);
+            return Map.of(IdentityAssertionSigner.MCP_META_ASSERTION_KEY, assertion);
+        } catch (Exception e) {
+            log.warn("Sign identity assertion failed for MCP tool '{}' (aud={}): {}",
+                    getName(), assertionAudience, e.getMessage());
+            return null;
+        }
     }
 
     /**

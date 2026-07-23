@@ -57,6 +57,8 @@ DROP TABLE IF EXISTS `agent_chat_key`;
 CREATE TABLE `agent_chat_key` (
   `agent_code` varchar(100) NOT NULL COMMENT '智能体code',
   `chat_key` varchar(100) NOT NULL COMMENT 'chat key',
+  `embed_secret` varchar(128) DEFAULT NULL COMMENT '嵌入身份密钥（业务方 HMAC 签 userJwt 用），空=未启用',
+  `embed_secret_prev` varchar(128) DEFAULT NULL COMMENT '上一代嵌入身份密钥（轮换双活）',
   `tenant_id` bigint NOT NULL
 ) COMMENT='智能体对话Key';
 
@@ -382,6 +384,7 @@ CREATE TABLE `mcp_server` (
   `timeout` int DEFAULT 30 COMMENT '超时时间（秒）',
   `protocol_config` text COMMENT '协议配置',
   `description` varchar(500) DEFAULT NULL COMMENT '描述',
+  `audience` varchar(200) DEFAULT NULL COMMENT '身份断言 audience（业务方验签的 aud 标识），空则不注入断言',
   `tool_schemas` mediumtext COMMENT 'Cached MCP tool schemas JSON',
   `activation_status` enum('NOT_ACTIVATED','ACTIVATING','ACTIVE','FAILED') NOT NULL DEFAULT 'NOT_ACTIVATED' COMMENT 'MCP 激活状态',
   `activation_message` varchar(500) DEFAULT NULL COMMENT '激活或同步说明',
@@ -779,6 +782,15 @@ CREATE TABLE `cache` (
   `last_health_check` datetime DEFAULT NULL COMMENT 'Last health check time',
   `last_check_message` varchar(500) DEFAULT NULL COMMENT 'Last health check message',
   `enabled` tinyint(1) NOT NULL DEFAULT 1 COMMENT 'Enabled',
+DROP TABLE IF EXISTS `identity_signing_key`;
+CREATE TABLE `identity_signing_key` (
+  `id` bigint NOT NULL,
+  `kid` varchar(64) NOT NULL COMMENT '密钥标识（JWT header kid）',
+  `algorithm` varchar(16) NOT NULL DEFAULT 'RS256' COMMENT '签名算法',
+  `private_pem` text NOT NULL COMMENT '私钥（PKCS#8 PEM），绝不出库到日志/前端',
+  `public_pem` text NOT NULL COMMENT '公钥（X.509 PEM）',
+  `status` varchar(16) NOT NULL DEFAULT 'ACTIVE' COMMENT '状态: ACTIVE=签名用, RETIRING=轮换观察期仅验签, RETIRED=下线',
+  `enabled` tinyint(1) NOT NULL DEFAULT '1' COMMENT '是否可用',
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   `created_by` bigint DEFAULT NULL,
@@ -1042,5 +1054,7 @@ CREATE TABLE `workflow_channel` (
 PRIMARY KEY (`workflow_id`, `channel_id`)
 ) COMMENT='工作流渠道绑定表';
 
+  UNIQUE KEY `uk_identity_signing_key_kid` (`kid`)
+) COMMENT='平台身份断言签名密钥';
 
 SET FOREIGN_KEY_CHECKS = 1;

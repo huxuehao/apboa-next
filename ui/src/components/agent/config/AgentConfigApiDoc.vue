@@ -22,8 +22,8 @@
 import { ref, computed, watch, nextTick } from 'vue'
 import { CopyOutlined, CheckOutlined, DownOutlined, RightOutlined, KeyOutlined, LinkOutlined, ThunderboltOutlined, SyncOutlined, GlobalOutlined, CodeOutlined, FolderOpenOutlined, SoundOutlined, FilePdfOutlined, PrinterOutlined, CloseOutlined, DownloadOutlined } from '@ant-design/icons-vue'
 import { message, Modal } from 'ant-design-vue'
-import { getChatKey } from '@/api/agentChatKey'
-import { renderApiDocPdf, buildStandaloneApiDocHtml, buildExportFileBaseName, formatDateTime, type ExportSection, type ExportEndpoint, type ExportFileFormat, type ExportOptions } from '@/utils/apiDocExport'
+import { getChatKey, getEmbedSecret, rotateEmbedSecret, disableEmbedSecret } from '@/api/agentChatKey'
+import { renderApiDocPdf, buildStandaloneApiDocHtml, buildExportFileBaseName, formatDateTime, renderEmbedIdentityFlowHtml, renderIdentityVerifyHtml, type ExportSection, type ExportEndpoint, type ExportFileFormat, type ExportOptions } from '@/utils/apiDocExport'
 
 const props = defineProps<{
   agentId?: string | number
@@ -82,6 +82,113 @@ function handleRefreshChatKey() {
 }
 
 /**
+ * 嵌入用户身份密钥（embedSecret，docs/identity-propagation-design.md §6.M6）。
+ * 仅平台登录用户可见；导出文档恒用占位符，密钥经安全渠道单独交付业务方
+ */
+const embedSecret = ref<string | null>(null)
+const embedSecretLoading = ref(false)
+const embedSecretVisible = ref(false)
+
+async function loadEmbedSecret() {
+  if (!props.agentId) return
+  try {
+    const res = await getEmbedSecret(props.agentId)
+    embedSecret.value = res.data.data || null
+  } catch (error) {
+    console.error('获取嵌入身份密钥失败:', error)
+  }
+}
+
+/**
+ * 生成/轮换嵌入身份密钥（旧密钥进入观察期，新旧双活可验签，业务方切换期不瞬断）
+ */
+function handleRotateEmbedSecret() {
+  const isRotate = !!embedSecret.value
+  Modal.confirm({
+    title: isRotate ? '轮换确认' : '生成确认',
+    content: isRotate
+      ? '轮换后新密钥立即生效，旧密钥进入观察期（仍可验签）；业务方后端改用新密钥后旧密钥自然失效。确定轮换吗？'
+      : '生成后，业务方后端可用该密钥为自己的登录用户签发 userJwt，实现嵌入场景的用户身份传递。确定生成吗？',
+    okText: isRotate ? '确定轮换' : '确定生成',
+    cancelText: '取消',
+    onOk: async () => {
+      if (!props.agentId) return
+      embedSecretLoading.value = true
+      try {
+        const res = await rotateEmbedSecret(props.agentId)
+        embedSecret.value = res.data.data
+        embedSecretVisible.value = true
+        message.success(isRotate ? '已轮换，请同步业务方后端' : '已生成')
+      } catch (error) {
+        console.error('生成嵌入身份密钥失败:', error)
+        message.error('操作失败')
+      } finally {
+        embedSecretLoading.value = false
+      }
+    }
+  })
+}
+
+/**
+ * 嵌入身份流程图（与导出文档共用同一份 HTML，双端一致；纯内联样式无运行时依赖）
+ */
+const embedIdentityFlowHtml = renderEmbedIdentityFlowHtml()
+
+/**
+ * 身份断言（工具方验签）章节内容——同上共用策略；受众是业务方 MCP/工具后端
+ */
+const identityVerifyHtml = renderIdentityVerifyHtml(
+  `${window.location.protocol}//${window.location.host}/.well-known/jwks.json`
+)
+
+/**
+ * 停用嵌入身份验证（治理闭环：生成 → 轮换 → 停用）
+ */
+function handleDisableEmbedSecret() {
+  Modal.confirm({
+    title: '停用确认',
+    content: '停用后，带 userJwt 的嵌入会话将被拒绝（401），业务方需先移除 data-user-jwt 属性，嵌入访客退回纯匿名。确定停用吗？',
+    okText: '确定停用',
+    cancelText: '取消',
+    okButtonProps: { danger: true },
+    onOk: async () => {
+      if (!props.agentId) return
+      embedSecretLoading.value = true
+      try {
+        await disableEmbedSecret(props.agentId)
+        embedSecret.value = null
+        embedSecretVisible.value = false
+        message.success('已停用嵌入身份验证')
+      } catch (error) {
+        console.error('停用嵌入身份密钥失败:', error)
+        message.error('操作失败')
+      } finally {
+        embedSecretLoading.value = false
+      }
+    }
+  })
+}
+
+/**
+ * 业务方后端签发 userJwt 的示例（密钥恒用占位符，绝不内联真实 secret）
+ */
+const userJwtNodeExample = `// Node（jsonwebtoken）：用户每次打开嵌入页时现签，有效期 5 分钟
+const jwt = require('jsonwebtoken')
+const userJwt = jwt.sign(
+  { sub: String(user.id), name: user.displayName },
+  EMBED_SECRET,  // ← 平台"嵌入用户身份"处生成，经安全渠道交付，只放服务端
+  { algorithm: 'HS256', expiresIn: '5m' }
+)`
+
+const userJwtJavaExample = `// Java（jjwt）
+String userJwt = Jwts.builder()
+        .subject(String.valueOf(user.getId()))
+        .claim("name", user.getDisplayName())
+        .expiration(new Date(System.currentTimeMillis() + 300_000))
+        .signWith(Keys.hmacShaKeyFor(embedSecret.getBytes(StandardCharsets.UTF_8)))
+        .compact();`
+
+/**
  * 监听agentId变化，自动加载chatKey
  */
 watch(
@@ -89,6 +196,7 @@ watch(
   (newVal) => {
     if (newVal) {
       loadChatKey()
+      loadEmbedSecret()
     }
   },
   { immediate: true }
@@ -116,7 +224,23 @@ const embedIframeCode = computed(() => {
 const embedBubbleCode = computed(() => {
   if (!externalChatUrl.value) return ''
   const scriptSrc = externalChatUrl.value.replace(/#\/.*$/, 'embed.js')
-  return `<script\n  src="${scriptSrc}"\n  data-chat-key="${chatKey.value || '{chatKey}'}"\n  defer\n><\/script>`
+  // 已启用嵌入身份时，片段联动追加 data-user-jwt 占位行
+  const userJwtLine = embedSecret.value
+    ? `\n  data-user-jwt="<你后端用 embedSecret 签发的 userJwt>"`
+    : ''
+  return `<script\n  src="${scriptSrc}"\n  data-chat-key="${chatKey.value || '{chatKey}'}"${userJwtLine}\n  defer\n><\/script>`
+})
+
+/**
+ * 网站嵌入 · 方式三 整页链接（唯一保留语音：作为独立页面打开，非 iframe，
+ * 不受跨源麦克风 / WebSocket 限制）。启用嵌入身份时带 ?userJwt= 占位（业务方
+ * 后端现签，打开后即从地址栏抹除）；未启用则是纯匿名链接。
+ */
+const embedFullPageUrl = computed(() => {
+  if (!externalChatUrl.value) return ''
+  return embedSecret.value
+    ? `${externalChatUrl.value}?userJwt=<你后端用 embedSecret 签发的 userJwt>`
+    : externalChatUrl.value
 })
 
 /**
@@ -759,6 +883,7 @@ const voiceEndpoints = [
 const exportSections = computed<ExportSection[]>(() => [
   { key: 'external-link', title: '外置对话链接', kind: 'external' },
   { key: 'embed', title: '网站嵌入', kind: 'embed' },
+  { key: 'identity', title: '身份断言（工具方验签）', kind: 'identity' },
   { key: 'access', title: '访问入口', kind: 'access' },
   { key: 'agui', title: '对话运行控制接口', kind: 'endpoints', items: aguiEndpoints as ExportEndpoint[] },
   { key: 'auth', title: '鉴权方式', kind: 'auth' },
@@ -788,17 +913,11 @@ const treeData = computed(() =>
   })),
 )
 
-function allExportKeys(): string[] {
-  const ks: string[] = []
-  exportSections.value.forEach((s) => {
-    ks.push(s.key)
-    ;(s.items || []).forEach((it) => ks.push(`${s.key}::${it.id}`))
-  })
-  return ks
-}
+/** 默认勾选范围：只勾接入文档三区块（外置链接/网站嵌入/身份断言），接口清单按需手动勾 */
+const DEFAULT_CHECKED_SECTIONS = ['external-link', 'embed', 'identity']
 
 function openExportModal() {
-  checkedKeys.value = allExportKeys()
+  checkedKeys.value = [...DEFAULT_CHECKED_SECTIONS]
   exportFormat.value = 'html'
   desensitize.value = true
   docTitleInput.value = 'API 接口文档'
@@ -842,6 +961,8 @@ function buildExportOptions(): ExportOptions {
     desensitize: desensitize.value,
     watermarkText: watermarkInput.value,
     generatedAt: formatDateTime(new Date()),
+    embedIdentityEnabled: !!embedSecret.value,
+    jwksUrl: `${window.location.protocol}//${window.location.host}/.well-known/jwks.json`,
   }
 }
 
@@ -979,6 +1100,12 @@ function closePreview() {
         <CodeOutlined style="margin-right: 8px;" />网站嵌入
       </div>
 
+      <div style="font-size: 12px; color: #546e7a; margin-bottom: 12px; line-height: 1.7;">
+        三种方式按需取舍：<b>① iframe / ② 悬浮气泡</b>嵌在你的网页里，身份随 <code>data-user-jwt</code>
+        （postMessage）传，但受浏览器跨源限制<b>没有语音</b>；<b>③ 整页链接</b>作为独立页面打开，身份随
+        URL 传，<b>保留语音输入 / 播报</b>。要语音选 ③，要嵌进页面选 ①/②。
+      </div>
+
       <div class="api-info-box info">
         <div style="margin-bottom: 4px; font-weight: 600;">方式一 · iframe 直接嵌入</div>
         <div style="font-size: 12px; color: #546e7a; margin-bottom: 8px;">
@@ -1023,6 +1150,117 @@ function closePreview() {
           可选属性：data-base-url、data-title、data-color、data-position（left|right）、data-width、data-height（默认 400×800）。
         </div>
       </div>
+
+      <div class="api-info-box info">
+        <div style="margin-bottom: 4px; font-weight: 600;">方式三 · 整页链接（唯一保留语音）</div>
+        <div style="font-size: 12px; color: #546e7a; margin-bottom: 8px;">
+          作为独立页面（新标签 / 跳转）打开，而非塞进 iframe——<b>唯一能同时用语音输入·播报和嵌入用户身份</b>的方式
+          （iframe / 悬浮受浏览器跨源限制，麦克风与语音播报被禁用）。启用身份时业务方后端把 userJwt 拼进链接，
+          打开后凭证即从地址栏抹除（5 分钟过期 + 建议 HTTPS）。
+        </div>
+        <div style="display: flex; align-items: flex-start; gap: 4px;">
+          <code style="font-size: 13px; word-break: break-all; white-space: pre-wrap; flex: 1;">{{ embedFullPageUrl || '（暂无对话链接）' }}</code>
+          <AButton
+            type="text"
+            size="small"
+            :disabled="!embedFullPageUrl"
+            @click="copyToClipboard(embedFullPageUrl, 'embed-fullpage')"
+          >
+            <template #icon>
+              <CheckOutlined v-if="copiedKey === 'embed-fullpage'" style="color: #52c41a;" />
+              <CopyOutlined v-else />
+            </template>
+          </AButton>
+        </div>
+      </div>
+
+      <!-- 嵌入用户身份（可选，docs/identity-propagation-design.md §6.M6/M7） -->
+      <div class="api-info-box warning">
+        <div style="margin-bottom: 4px; font-weight: 600;">嵌入用户身份（可选）</div>
+        <div style="font-size: 12px; color: #546e7a; margin-bottom: 8px;">
+          默认嵌入访客是匿名的。启用后：你的后端用下方密钥给登录用户签一张短命 userJwt（5 分钟），
+          平台验签后该用户的工具调用断言会携带 <code>external_sub</code>（你系统的用户 ID）——你的
+          MCP/工具侧按它做用户级权限。userJwt 有两条传递通道：<b>方式 ①/②</b>随 <code>data-user-jwt</code>
+          （postMessage）传；<b>方式 ③ 整页链接</b>随 URL <code>?userJwt=</code> 传（读后即从地址栏抹除）。
+          两者验签与断言完全一致，仅送达方式不同。
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+          <span style="font-size: 12px; color: #546e7a;">密钥状态：</span>
+          <ATag v-if="embedSecret" color="green">已启用</ATag>
+          <ATag v-else>未启用</ATag>
+          <template v-if="embedSecret">
+            <code style="font-size: 12px; flex: 1; word-break: break-all;">{{ embedSecretVisible ? embedSecret : '••••••••' + embedSecret.slice(-4) }}</code>
+            <AButton type="text" size="small" @click="embedSecretVisible = !embedSecretVisible">
+              {{ embedSecretVisible ? '隐藏' : '显示' }}
+            </AButton>
+            <AButton
+              type="text"
+              size="small"
+              @click="copyToClipboard(embedSecret, 'embed-secret')"
+            >
+              <template #icon>
+                <CheckOutlined v-if="copiedKey === 'embed-secret'" style="color: #52c41a;" />
+                <CopyOutlined v-else />
+              </template>
+            </AButton>
+          </template>
+          <AButton size="small" :loading="embedSecretLoading" @click="handleRotateEmbedSecret">
+            {{ embedSecret ? '轮换密钥' : '生成密钥' }}
+          </AButton>
+          <AButton
+            v-if="embedSecret"
+            size="small"
+            danger
+            :loading="embedSecretLoading"
+            @click="handleDisableEmbedSecret"
+          >
+            停用
+          </AButton>
+        </div>
+
+        <div style="font-size: 12px; color: #d46b08; margin-bottom: 8px;">
+          ⚠️ 密钥只放你的后端，绝不进前端代码/导出文档；用户登出或切换账号时必须调用
+          <code>window.apboaEmbed.reset()</code>，否则下一个用户会沿用上一个用户的身份。
+        </div>
+
+        <ACollapse ghost>
+          <ACollapsePanel key="node" header="后端签发 userJwt 示例 · Node">
+            <div style="display: flex; align-items: flex-start; gap: 4px;">
+              <code style="font-size: 12px; white-space: pre-wrap; flex: 1;">{{ userJwtNodeExample }}</code>
+              <AButton type="text" size="small" @click="copyToClipboard(userJwtNodeExample, 'userjwt-node')">
+                <template #icon>
+                  <CheckOutlined v-if="copiedKey === 'userjwt-node'" style="color: #52c41a;" />
+                  <CopyOutlined v-else />
+                </template>
+              </AButton>
+            </div>
+          </ACollapsePanel>
+          <ACollapsePanel key="java" header="后端签发 userJwt 示例 · Java">
+            <div style="display: flex; align-items: flex-start; gap: 4px;">
+              <code style="font-size: 12px; white-space: pre-wrap; flex: 1;">{{ userJwtJavaExample }}</code>
+              <AButton type="text" size="small" @click="copyToClipboard(userJwtJavaExample, 'userjwt-java')">
+                <template #icon>
+                  <CheckOutlined v-if="copiedKey === 'userjwt-java'" style="color: #52c41a;" />
+                  <CopyOutlined v-else />
+                </template>
+              </AButton>
+            </div>
+          </ACollapsePanel>
+          <ACollapsePanel key="flow" header="流程与信任架构（业务方 / 维护者必读）">
+            <!-- 与导出文档共用 renderEmbedIdentityFlowHtml，双端渲染一致 -->
+            <div v-html="embedIdentityFlowHtml"></div>
+          </ACollapsePanel>
+        </ACollapse>
+      </div>
+    </div>
+
+    <!-- 身份断言（工具方验签）：与导出文档共用 renderIdentityVerifyHtml，双端一致 -->
+    <div class="api-doc-section">
+      <div class="api-doc-title">
+        <KeyOutlined style="margin-right: 8px;" />身份断言（工具方验签）
+      </div>
+      <div v-html="identityVerifyHtml"></div>
     </div>
 
     <!-- 访问入口 -->
@@ -1584,14 +1822,15 @@ function closePreview() {
       </div>
 
       <div style="margin-bottom: 10px; font-size: 13px; color: var(--color-text-secondary);">
-        选择要导出的接口（默认全选）：
+        选择要导出的内容（默认勾选接入文档三区块，接口清单按需勾选）：
       </div>
+      <!-- 默认收起：接口叶子太多全展开又长又乱；勾选默认全选（父节点勾=子项全勾），展开只为微调 -->
       <ATree
         v-model:checkedKeys="checkedKeys"
         :tree-data="treeData"
         checkable
         :selectable="false"
-        :default-expand-all="true"
+        :default-expand-all="false"
         style="max-height: 360px; overflow: auto;"
       />
       <div style="margin-top: 16px; display: flex; align-items: center; gap: 8px;">

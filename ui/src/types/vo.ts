@@ -239,6 +239,8 @@ export interface McpServerVO {
   timeout: number
   protocolConfig: Record<string, unknown> | null
   description: string
+  /** 身份断言 audience（空则该 MCP 不注入断言） */
+  audience?: string | null
   healthStatus: HealthStatus
   lastHealthCheck: string
   activationStatus: McpActivationStatus

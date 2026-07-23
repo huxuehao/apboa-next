@@ -4,7 +4,6 @@ import { useAgentClient } from '@/composables/useAgentClient'
 import { usePlanTracking } from '@/composables/chat/usePlanTracking'
 import { buildToolCallsContent, localNowDateTime } from '@/utils/chat/format'
 import type {ChatMessageVO, RawEvent} from '@/types'
-import { useAccountStore } from '@/stores'
 import { stopRun, subagentResume, type SubPendingInfo } from '@/api/agui'
 
 let lastIdBig = BigInt(Date.now()) << 12n;
@@ -32,8 +31,6 @@ export function useChatStream(
   onMessageSaved?: (chatMsg: ChatMessageVO) => void,
   onRunMeta?: (meta: Record<string, unknown>) => void) {
 
-  const { userInfo } = useAccountStore()
-
   // 计划追踪
   const {
     currentPlan,
@@ -44,14 +41,15 @@ export function useChatStream(
     resetPlan
   } = usePlanTracking()
 
+  // userInfo 不再随 forwardedProps 上送：后端已改为服务端认证盖章
+  // （AgentContext 只认 AuthInterceptor 的 UserDetail，自报值一律不采信）
   const getForwardedProps = () => ({
     agentId: agentId.value,
     agentCode: agentDetail.value?.agentCode,
     fileIds: fileIds?.value ?? [],
     memoryActive: memoryActive?.value ?? false,
     planActive: planActive?.value ?? false,
-    toolProcessActive: toolProcessActive?.value ?? false,
-    userInfo: userInfo
+    toolProcessActive: toolProcessActive?.value ?? false
   })
 
   // 流式内容

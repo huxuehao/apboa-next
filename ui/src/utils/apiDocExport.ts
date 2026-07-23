@@ -31,8 +31,8 @@ export interface ExportEndpoint {
   responseExample?: string | null
 }
 
-/** 区块类型：external=外置链接 / access=对话入口 / auth=鉴权 / endpoints=接口数组 */
-export type ExportSectionKind = 'external' | 'embed' | 'access' | 'auth' | 'endpoints'
+/** 区块类型：external=外置链接 / access=对话入口 / auth=鉴权 / identity=身份断言（工具方验签）/ endpoints=接口数组 */
+export type ExportSectionKind = 'external' | 'embed' | 'access' | 'auth' | 'identity' | 'endpoints'
 
 export interface ExportSection {
   key: string
@@ -57,6 +57,10 @@ export interface ExportOptions {
   watermarkText: string
   /** 已格式化的生成时间，如 2026-07-05 14:30 */
   generatedAt: string
+  /** 是否已启用嵌入用户身份（embedSecret 已配置）——影响嵌入区块的身份传递说明 */
+  embedIdentityEnabled?: boolean
+  /** 平台 JWKS 公钥端点（身份断言验签用），如 https://host/.well-known/jwks.json */
+  jwksUrl?: string
 }
 
 export type ExportFileFormat = 'pdf' | 'html'
@@ -259,9 +263,47 @@ function renderEmbedSection(section: ExportSection, opts: ExportOptions): string
     `  data-chat-key="${chatKey}"\n` +
     `  defer\n` +
     `><\/script>`
+  // 已启用嵌入身份时：气泡代码带 data-user-jwt 占位，并追加身份传递接入说明
+  const identityEnabled = !!opts.embedIdentityEnabled
+  // 方式三·整页链接：启用身份时带 ?userJwt= 占位（业务方后端现签，打开后即抹除）
+  const fullPageUrl = desensitizeChatUrl(raw, opts.desensitize) +
+    (identityEnabled ? '?userJwt=<你后端用 embedSecret 签发的 userJwt>' : '')
+  const bubbleCodeFinal = identityEnabled
+    ? bubbleCode.replace(
+        `  data-chat-key="${chatKey}"\n`,
+        `  data-chat-key="${chatKey}"\n  data-user-jwt="<你后端用 embedSecret 签发的 userJwt>"\n`)
+    : bubbleCode
+  const userJwtExample =
+    `// Node（jsonwebtoken）：用户每次打开嵌入页时现签，有效期 5 分钟\n` +
+    `const jwt = require('jsonwebtoken')\n` +
+    `const userJwt = jwt.sign(\n` +
+    `  { sub: String(user.id), name: user.displayName },\n` +
+    `  EMBED_SECRET,  // ← 由平台方经安全渠道单独交付，只放服务端\n` +
+    `  { algorithm: 'HS256', expiresIn: '5m' }\n` +
+    `)`
+  const identityBox = identityEnabled
+    ? (
+      `<div class="info-box warning">` +
+      `<div class="box-title">嵌入用户身份传递（本智能体已启用）</div>` +
+      `<div class="box-text">三步接入：① 向平台方索取 embedSecret（本文档不包含密钥，请经安全渠道单独获取）；` +
+      `② 你的后端用它为当前登录用户签发短命 userJwt（示例如下）；` +
+      `③ 把 userJwt 传给平台——方式 ①/② 嵌入代码带 data-user-jwt，方式 ③ 整页链接带 URL ?userJwt=（读后即抹除）。此后该用户的工具调用断言会携带 external_sub（你系统的用户 ID），` +
+      `供你的 MCP/工具侧做用户级权限判定。</div>` +
+      renderCodeBlock('JavaScript', userJwtExample) +
+      `<div class="box-hint"><b>必须遵守：</b>用户登出或切换账号时调用 window.apboaEmbed.reset()，` +
+      `否则下一个用户会沿用上一个用户的身份；userJwt 验签失败会直接拒绝会话（不会静默降级为匿名）；` +
+      `不带 data-user-jwt 则为匿名访客（工具断言无 external_sub）。</div>` +
+      `</div>` +
+      `<div class="info-box info">` +
+      `<div class="box-title">流程与信任架构</div>` +
+      renderEmbedIdentityFlowHtml() +
+      `</div>`
+    )
+    : ''
   return (
     `<section class="doc-section">` +
     `<h1 id="${escapeHtml(sectionAnchorId(section))}" class="doc-h2">${escapeHtml(section.title)}</h1>` +
+    `<p style="font-size:13px;line-height:1.8;color:#546e7a;margin:6px 0 16px;">三种方式按需取舍：<b>① iframe / ② 悬浮气泡</b>嵌在你的网页里，身份随 <code>data-user-jwt</code>（postMessage）传，但受浏览器跨源限制<b>没有语音</b>；<b>③ 整页链接</b>作为独立页面打开，身份随 URL 传，<b>保留语音输入 / 播报</b>。要语音选 ③，要嵌进页面选 ①/②。</p>` +
     `<div class="info-box info">` +
     `<div class="box-title">方式一 · iframe 直接嵌入</div>` +
     `<div class="box-text">把智能体对话作为固定区域嵌入网页，始终可见；宽高可按容器调整。</div>` +
@@ -270,9 +312,235 @@ function renderEmbedSection(section: ExportSection, opts: ExportOptions): string
     `<div class="info-box success">` +
     `<div class="box-title">方式二 · 悬浮气泡</div>` +
     `<div class="box-text">在网站右下角生成悬浮按钮，点击弹出对话浮窗（内嵌上方 embed 页）。把下面一行放到页面 &lt;/body&gt; 之前即可。</div>` +
-    renderCodeBlock('HTML', bubbleCode) +
+    renderCodeBlock('HTML', bubbleCodeFinal) +
     `<div class="box-hint">可选属性：data-base-url（默认自动推导）、data-title、data-color、data-position（left | right）、data-width、data-height（默认 400×800）。</div>` +
     `</div>` +
+    `<div class="info-box info">` +
+    `<div class="box-title">方式三 · 整页链接（唯一保留语音）</div>` +
+    `<div class="box-text">作为独立页面（新标签 / 跳转）打开，而非塞进 iframe——唯一能同时用语音输入·播报和嵌入用户身份的方式（iframe / 悬浮受浏览器跨源限制，麦克风与语音播报被禁用）。启用身份时业务方后端把 userJwt 拼进链接，打开后凭证即从地址栏抹除（5 分钟过期 + 建议 HTTPS）。</div>` +
+    renderCodeBlock('URL', fullPageUrl) +
+    `</div>` +
+    identityBox +
+    `</section>`
+  )
+}
+
+/**
+ * 嵌入用户身份 · 流程图（页面内子块与导出文档共用，docs/identity-propagation-design.md §4bis）。
+ * 纯内联样式 HTML：导出文档是自包含的（禁外部依赖，不能带 mermaid 运行时），
+ * 页面内经 v-html 挂载同一份，双端渲染一致。
+ * 受众：业务方接入者 + 本系统维护者——看懂流程流转与信任架构。
+ */
+export function renderEmbedIdentityFlowHtml(): string {
+  // 四个角色的徽章配色（含深浅色安全的中性底）
+  const ROLES = {
+    biz: { label: '业务方后端', color: '#fa8c16' },
+    browser: { label: '用户浏览器', color: '#1677ff' },
+    apboa: { label: 'Apboa 平台', color: '#52c41a' },
+    tool: { label: '业务方 MCP/工具', color: '#722ed1' },
+  } as const
+  const steps: Array<{ role: keyof typeof ROLES; text: string }> = [
+    { role: 'biz', text: '用户在业务方系统登录。后端用 embedSecret（印章，只存服务端）给该用户现签一张 userJwt（通行证：sub=用户ID，5 分钟过期），渲染进页面 data-user-jwt' },
+    { role: 'browser', text: '页面加载 embed.js，右下角出现气泡。用户点开 → iframe 加载对话页' },
+    { role: 'browser', text: 'iframe 广播 ready，embed.js 经 postMessage 把 userJwt 一次性传入（targetOrigin=平台源，不进 URL / 浏览器历史）' },
+    { role: 'apboa', text: '换取会话：用该 chatKey 的 embedSecret 验 userJwt 签名与有效期。通过 → 签发会话 token 并烙入 external_sub/external_iss；失败 → 拒绝（绝不静默降级为匿名）' },
+    { role: 'browser', text: '用户对话。LLM 推理后决定调用某个工具' },
+    { role: 'apboa', text: '每次工具调用现签一张身份断言（平台私钥 RS256，5 分钟）：sub / tenant_id / external_sub / aud / tool_name…，注入 MCP 请求 _meta（不经过 LLM，提示词注入改不到）' },
+    { role: 'tool', text: '用平台 JWKS 公钥验签断言 → 校验 aud 是自己 + external_iss 是自己的 chatKey → 取 external_sub 查自己的权限表 → 放行或拒绝。权限判定全程在业务方，平台零参与' },
+    { role: 'browser', text: '登出或切换账号：业务方页面调用 window.apboaEmbed.reset() 清平台会话（否则串号）；同浏览器换人时嵌入页也会按 userJwt.sub 变化自动重新换取身份' },
+  ]
+  const stepRows = steps.map((s, i) => {
+    const role = ROLES[s.role]
+    return (
+      `<div style="display:flex;align-items:flex-start;gap:10px;padding:7px 0;border-bottom:1px dashed rgba(128,128,128,.25);">` +
+      `<span style="flex:0 0 22px;height:22px;border-radius:50%;background:${role.color};color:#fff;font-size:12px;font-weight:600;display:flex;align-items:center;justify-content:center;">${i + 1}</span>` +
+      `<span style="flex:0 0 108px;font-size:12px;font-weight:600;color:${role.color};padding-top:2px;">${escapeHtml(role.label)}</span>` +
+      `<span style="flex:1;font-size:12.5px;line-height:1.7;">${escapeHtml(s.text)}</span>` +
+      `</div>`
+    )
+  }).join('')
+
+  // ===== 泳道时序图（SVG，微信支付文档风格：角色生命线 + 横向消息箭头）=====
+  // 固定白底容器包裹，深浅色主题下都可读；文字全走 escapeHtml
+  // 首泳道 x 需 ≥ note 半宽(118) + 编号圆半径(9)，否则步骤 1 的说明框编号圆会被画布左缘裁掉
+  const LANES: Array<{ key: keyof typeof ROLES; x: number }> = [
+    { key: 'biz', x: 150 },
+    { key: 'browser', x: 395 },
+    { key: 'apboa', x: 640 },
+    { key: 'tool', x: 885 },
+  ]
+  const laneX = (k: keyof typeof ROLES) => LANES.find(l => l.key === k)!.x
+  // 每行都带 step（1~8），与下方"流程流转（8 步）"列表严格同号；
+  // 同一步骤对应多条线时共用同号，编号圆填色 = 该步骤在列表里的角色色
+  type SeqRow =
+    | { kind: 'msg'; step: number; from: keyof typeof ROLES; to: keyof typeof ROLES; text: string; dashed?: boolean }
+    | { kind: 'note'; step: number; at: keyof typeof ROLES; lines: string[] }
+  const seq: SeqRow[] = [
+    { kind: 'msg', step: 1, from: 'browser', to: 'biz', text: '用户登录业务方系统，请求页面' },
+    { kind: 'note', step: 1, at: 'biz', lines: ['用 embedSecret 给该用户', '现签 userJwt（5 分钟）'] },
+    { kind: 'msg', step: 1, from: 'biz', to: 'browser', text: '返回页面：embed.js + data-user-jwt', dashed: true },
+    { kind: 'note', step: 2, at: 'browser', lines: ['页面加载 embed.js 出现气泡', '用户点开，iframe 加载对话页'] },
+    { kind: 'note', step: 3, at: 'browser', lines: ['iframe 广播 ready，embed.js 经', 'postMessage 传 userJwt（不进 URL）'] },
+    { kind: 'msg', step: 4, from: 'browser', to: 'apboa', text: '换会话：chatKey + userJwt' },
+    { kind: 'note', step: 4, at: 'apboa', lines: ['embedSecret 验签', '通过→烙 external_sub；失败→401'] },
+    { kind: 'msg', step: 4, from: 'apboa', to: 'browser', text: '会话 token', dashed: true },
+    { kind: 'msg', step: 5, from: 'browser', to: 'apboa', text: '用户发起对话' },
+    { kind: 'note', step: 5, at: 'apboa', lines: ['LLM 推理', '决定调用某个工具'] },
+    { kind: 'note', step: 6, at: 'apboa', lines: ['平台私钥现签身份断言（5 分钟）', '含 external_sub / aud / tool_name'] },
+    { kind: 'msg', step: 6, from: 'apboa', to: 'tool', text: 'tools/call + _meta 身份断言' },
+    { kind: 'note', step: 7, at: 'tool', lines: ['JWKS 验签 + 验 aud/external_iss', '按 external_sub 查自己权限表'] },
+    { kind: 'msg', step: 7, from: 'tool', to: 'apboa', text: '业务数据 / 拒绝', dashed: true },
+    { kind: 'msg', step: 7, from: 'apboa', to: 'browser', text: '流式回复用户', dashed: true },
+    { kind: 'note', step: 8, at: 'browser', lines: ['登出/换账号：调 apboaEmbed.reset()', '同浏览器换人也会自动重换身份'] },
+  ]
+  const stepColor = (step: number) => ROLES[steps[step - 1]!.role].color
+  const stepBadge = (cx: number, cy: number, step: number) =>
+    `<circle cx="${cx}" cy="${cy}" r="9" fill="${stepColor(step)}"/>` +
+    `<text x="${cx}" y="${cy + 4}" text-anchor="middle" font-size="11" font-weight="600" fill="#fff">${step}</text>`
+  const ROW_H = 46
+  const TOP = 78
+  const svgH = TOP + seq.length * ROW_H + 24
+  let seqBody = ''
+  seq.forEach((row, i) => {
+    const y = TOP + i * ROW_H
+    if (row.kind === 'msg') {
+      const x1 = laneX(row.from)
+      const x2 = laneX(row.to)
+      const dir = x2 > x1 ? 1 : -1
+      const dash = row.dashed ? ` stroke-dasharray="6 4"` : ''
+      seqBody +=
+        `<line x1="${x1}" y1="${y}" x2="${x2 - dir * 8}" y2="${y}" stroke="#555" stroke-width="1.4"${dash} marker-end="url(#apb-arrow)"/>` +
+        `<text x="${(x1 + x2) / 2}" y="${y - 7}" text-anchor="middle" font-size="12" fill="#333">${escapeHtml(row.text)}</text>` +
+        stepBadge(x1 + dir * 16, y, row.step)
+    } else {
+      const cx = laneX(row.at)
+      const w = 236
+      seqBody +=
+        `<rect x="${cx - w / 2}" y="${y - 15}" width="${w}" height="38" rx="6" fill="#fffbe6" stroke="#faad14" stroke-width="1"/>` +
+        row.lines.map((ln, j) =>
+          `<text x="${cx}" y="${y + j * 15}" text-anchor="middle" font-size="11" fill="#7a5c00">${escapeHtml(ln)}</text>`
+        ).join('') +
+        stepBadge(cx - w / 2, y - 15, row.step)
+    }
+  })
+  const laneHeads = LANES.map(l => {
+    const role = ROLES[l.key]
+    return (
+      `<line x1="${l.x}" y1="46" x2="${l.x}" y2="${svgH - 12}" stroke="#bbb" stroke-width="1" stroke-dasharray="4 4"/>` +
+      `<rect x="${l.x - 76}" y="10" width="152" height="30" rx="6" fill="${role.color}"/>` +
+      `<text x="${l.x}" y="30" text-anchor="middle" font-size="13" font-weight="600" fill="#fff">${escapeHtml(role.label)}</text>`
+    )
+  }).join('')
+  const seqSvg =
+    `<div style="background:#fff;border:1px solid rgba(128,128,128,.25);border-radius:8px;padding:8px;overflow-x:auto;">` +
+    `<svg viewBox="0 0 1015 ${svgH}" xmlns="http://www.w3.org/2000/svg" style="width:100%;min-width:760px;display:block;">` +
+    `<defs><marker id="apb-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">` +
+    `<path d="M 0 0 L 10 5 L 0 10 z" fill="#555"/></marker></defs>` +
+    laneHeads + seqBody +
+    `</svg></div>`
+  const trustRows: Array<[string, string, string, string]> = [
+    ['embedSecret（印章）', 'HMAC 对称密钥', '业务方后端 + 平台（chatKey 配置）', '业务方签 userJwt；平台验。泄漏只影响该业务方自己，轮换双活不瞬断'],
+    ['平台签名密钥 + JWKS', 'RSA 非对称', '私钥仅平台；公钥公开（/.well-known/jwks.json）', '平台签工具调用断言；业务方 MCP/工具验。密钥轮换双 kid 并存，验签方无感'],
+  ]
+  const trustTable =
+    `<table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:8px;">` +
+    `<thead><tr>` +
+    ['密钥', '类型', '谁持有', '干什么用'].map(h => `<th style="text-align:left;padding:5px 8px;border:1px solid rgba(128,128,128,.3);">${h}</th>`).join('') +
+    `</tr></thead><tbody>` +
+    trustRows.map(cols =>
+      `<tr>` + cols.map(c => `<td style="padding:5px 8px;border:1px solid rgba(128,128,128,.3);line-height:1.6;">${escapeHtml(c)}</td>`).join('') + `</tr>`
+    ).join('') +
+    `</tbody></table>`
+  return (
+    `<div>` +
+    `<div style="font-weight:600;font-size:13px;margin-bottom:6px;">时序总览</div>` +
+    seqSvg +
+    `<div style="font-weight:600;font-size:13px;margin:14px 0 4px;">流程流转（8 步）</div>` +
+    stepRows +
+    `<div style="font-weight:600;font-size:13px;margin:12px 0 0;">两把钥匙 · 信任架构</div>` +
+    trustTable +
+    `<div style="font-size:12px;color:#8c8c8c;margin-top:8px;line-height:1.7;">` +
+    `设计立场：平台是"可信邮差"——只证明"这话确实是业务方说的 / 这次调用确实是该用户发起的"，` +
+    `不维护业务方的用户映射、不做用户级权限判定；数据面权限始终在业务方自己手里。</div>` +
+    `</div>`
+  )
+}
+
+/**
+ * 身份断言（工具方验签）内容：受众是业务方的 MCP / 工具后端开发者，
+ * docs/identity-integration-guide.md §1 的精简版。
+ * 与嵌入流程图同法：纯内联样式，API 页面（v-html）与导出文档共用同一份。
+ */
+export function renderIdentityVerifyHtml(jwksUrl: string): string {
+  const url = jwksUrl || '{平台地址}/.well-known/jwks.json'
+  const box = (accent: string, inner: string) =>
+    `<div style="border:1px solid rgba(128,128,128,.25);border-left:3px solid ${accent};border-radius:8px;padding:12px 14px;margin-bottom:12px;">${inner}</div>`
+  const title = (t: string) => `<div style="font-weight:600;font-size:13px;margin-bottom:6px;">${escapeHtml(t)}</div>`
+  const text = (t: string) => `<div style="font-size:12.5px;line-height:1.8;">${t}</div>`
+  const hint = (t: string) => `<div style="font-size:12px;color:#8c8c8c;margin-top:6px;line-height:1.7;">${t}</div>`
+  const claimsRows: Array<[string, string]> = [
+    ['iss', '固定 apboa-platform（签发方标识）'],
+    ['sub', '平台侧用户 ID；嵌入会话为会话级随机 ID，权限判定请勿依赖'],
+    ['tenant_id / tenant_role', '租户与租户内角色'],
+    ['agent_id / thread_id / tool_name', '审计溯源：哪个智能体、哪次会话、调的哪个工具'],
+    ['aud', '目标系统标识（平台 MCP 配置的 audience）——必须校验是自己'],
+    ['external_sub / external_iss / external_name', '嵌入用户身份：业务方声称的用户 ID、出处 chatKey、显示名。external_sub 仅在 external_iss 命名空间内有意义'],
+    ['iat / exp / jti', '签发/过期时间（有效期 5 分钟）与唯一编号'],
+  ]
+  const claimsTable =
+    `<table style="width:100%;border-collapse:collapse;font-size:12px;">` +
+    `<thead><tr>` +
+    ['字段', '说明'].map(h => `<th style="text-align:left;padding:5px 8px;border:1px solid rgba(128,128,128,.3);">${h}</th>`).join('') +
+    `</tr></thead><tbody>` +
+    claimsRows.map(([k, v]) =>
+      `<tr><td style="padding:5px 8px;border:1px solid rgba(128,128,128,.3);white-space:nowrap;"><code>${escapeHtml(k)}</code></td>` +
+      `<td style="padding:5px 8px;border:1px solid rgba(128,128,128,.3);line-height:1.6;">${escapeHtml(v)}</td></tr>`
+    ).join('') +
+    `</tbody></table>`
+  const verifyExample =
+    `import { createRemoteJWKSet, jwtVerify } from 'jose'\n\n` +
+    `const JWKS = createRemoteJWKSet(new URL('${url}'))\n\n` +
+    `async function verifyAssertion(jwt) {\n` +
+    `  const { payload } = await jwtVerify(jwt, JWKS, {\n` +
+    `    issuer: 'apboa-platform',\n` +
+    `    audience: '<你在平台登记的 audience>',\n` +
+    `    clockTolerance: 60,\n` +
+    `  })\n` +
+    `  if (payload.external_sub && payload.external_iss !== '<你的 chatKey>') {\n` +
+    `    throw new Error('external identity from unknown issuer')\n` +
+    `  }\n` +
+    `  return payload\n` +
+    `}`
+  const codeBlock =
+    `<pre style="background:rgba(128,128,128,.08);border-radius:6px;padding:10px 12px;font-size:12px;line-height:1.6;overflow-x:auto;margin:8px 0 0;">${escapeHtml(verifyExample)}</pre>`
+  return (
+    `<div>` +
+    box('#1677ff',
+      title('这是什么') +
+      text(`平台替用户调用你的 MCP / 工具时，会随请求附一张平台私钥签名的短命 JWT（身份断言）：` +
+        `MCP 在 tools/call 请求 _meta 的 <code>apboa.identityAssertion</code> 键；脚本工具按约定放请求头。` +
+        `你用平台公钥验签后取出用户身份，自行做权限判定——权限表在你手里，平台零参与。`) +
+      hint(`JWKS 公钥端点：<code>${escapeHtml(url)}</code>（启动时拉取缓存，建议每日刷新；平台轮换密钥时双 kid 并存，无需人工干预）。`)) +
+    box('#52c41a', title('断言字段') + claimsTable) +
+    box('#faad14',
+      title('验签五步（缺一不可）') +
+      text(`① 按断言 header 的 kid 从 JWKS 匹配公钥；② 验签名与过期（RS256，时钟容差 30~60 秒）；` +
+        `③ 验 iss = apboa-platform；④ <b>必须验 aud 是你自己</b>（防止发给别家系统的断言被重放到你这里）；` +
+        `⑤ 用到 external_sub 时<b>必须同时验 external_iss 是你的 chatKey</b>（别家的"用户42"不是你的"用户42"）。`) +
+      codeBlock +
+      hint(`未配置 audience 的 MCP 不会收到断言；没带断言的请求如何处置（拒绝 / 仅开放公开能力）由你自行决定。`)) +
+    `</div>`
+  )
+}
+
+/**
+ * 身份断言导出区块：section 壳 + 共用内容（renderIdentityVerifyHtml）
+ */
+function renderIdentitySection(section: ExportSection, opts: ExportOptions): string {
+  return (
+    `<section class="doc-section">` +
+    `<h1 id="${escapeHtml(sectionAnchorId(section))}" class="doc-h2">${escapeHtml(section.title)}</h1>` +
+    renderIdentityVerifyHtml(opts.jwksUrl || '') +
     `</section>`
   )
 }
@@ -373,6 +641,8 @@ function renderSection(section: ExportSection, opts: ExportOptions): string {
       return renderAccessSection(section, opts)
     case 'auth':
       return renderAuthSection(section)
+    case 'identity':
+      return renderIdentitySection(section, opts)
     case 'endpoints':
       return renderEndpointsSection(section)
     default:

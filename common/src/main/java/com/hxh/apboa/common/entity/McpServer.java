@@ -56,6 +56,12 @@ public class McpServer extends BaseTenantEntity {
     private String description;
 
     /**
+     * 身份断言 audience（业务方验签的 aud 标识，如 mcp:order-system）。
+     * 未配置时该 MCP 的工具调用不注入身份断言（docs/identity-propagation-design.md §6.M5）
+     */
+    private String audience;
+
+    /**
      * 缓存的工具目录 JSON
      */
     private String toolSchemas;

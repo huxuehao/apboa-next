@@ -138,6 +138,15 @@ public class McpServerServiceImpl extends ServiceImpl<McpServerMapper, McpServer
 
         updateById(entity);
 
+        // audience 支持显式置空：MP updateById 的 NOT_NULL 策略会忽略 null 字段，
+        // 导致"配置后无法撤销"。约定：空串 = 清空（关闭该 MCP 的断言注入），null = 不修改
+        if (entity.getAudience() != null && entity.getAudience().isBlank()) {
+            lambdaUpdate()
+                    .eq(McpServer::getId, entity.getId())
+                    .set(McpServer::getAudience, null)
+                    .update();
+        }
+
         McpServer updated = requireServer(entity.getId());
         boolean configChanged = !Objects.equals(oldConfigHash, mergedConfigHash);
         boolean shouldAutoActivate = current.getActivationStatus() == McpActivationStatus.ACTIVE

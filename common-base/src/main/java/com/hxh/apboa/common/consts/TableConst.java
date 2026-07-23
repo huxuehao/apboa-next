@@ -68,4 +68,5 @@ public class TableConst {
     public static final String WORKFLOW_PLUGIN = "workflow_plugin";
     public static final String WORKFLOW_RUN = "workflow_run";
     public static final String WORKFLOW_VERSION = "workflow_version";
+    public static final String IDENTITY_SIGNING_KEY = "identity_signing_key";
 }

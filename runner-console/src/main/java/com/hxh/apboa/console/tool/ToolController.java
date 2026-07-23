@@ -44,6 +44,11 @@ public class ToolController {
     @GetMapping("/{id}")
     public R<ToolVO> detail(@PathVariable("id") Long id) {
         ToolConfig entity = toolService.getById(id);
+        if (entity == null) {
+            // 工具不存在（已删除 / 传入陈旧或错误 id / 跨租户不可见）：返回友好错误，
+            // 否则 BeanUtils.copy(null) 返回 null，下一行 vo.setUsed 抛 NPE → 500
+            return R.fail("工具不存在");
+        }
 
         ToolVO vo = BeanUtils.copy(entity, ToolVO.class);
         vo.setUsed(toolService.usedWithAgent(List.of(id)));

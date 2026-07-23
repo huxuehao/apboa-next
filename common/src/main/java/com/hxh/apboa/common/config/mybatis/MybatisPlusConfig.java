@@ -27,7 +27,8 @@ public class MybatisPlusConfig {
             TableConst.AGENT_SCOPE_SESSIONS, // 会话表（B类，跨租户共享）由agentscope提供
             TableConst.SKILL_TOKEN,    // 内部服务鉴权 token（跨服务共享）
             TableConst.AGENT_CHAT_KEY,  // 会话密钥表（B类，跨租户共享）
-            TableConst.JOB_RECORD
+            TableConst.JOB_RECORD,
+            TableConst.IDENTITY_SIGNING_KEY // 身份断言签名密钥（全局资源，无 tenant_id 列）
     );
 
     @Bean

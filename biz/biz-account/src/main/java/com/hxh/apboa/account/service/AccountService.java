@@ -78,9 +78,11 @@ public interface AccountService extends IService<Account> {
      * 通过ChatKey换取Token
      *
      * @param chatKey 对话Key
+     * @param userJwt 业务方后端用 embedSecret 签的嵌入用户凭证（可空=纯匿名；
+     *                非空必须验签通过，否则拒绝——docs/identity-propagation-design.md §6.M6）
      * @return token，如果验证失败返回null
      */
-    LoginResponse chatKeyToken(String chatKey);
+    LoginResponse chatKeyToken(String chatKey, String userJwt);
 
     /**
      * 选择租户（多租户登录后选择进入的租户）

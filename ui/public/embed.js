@@ -11,6 +11,15 @@
  *   data-position   气泡位置 left | right，默认 right
  *   data-width      浮窗宽度 px，默认 400
  *   data-height     浮窗高度 px，默认 600
+ *   data-user-jwt   嵌入用户凭证（业务方后端用 embedSecret 签的短命 JWT，
+ *                   {sub:用户ID, name?:显示名, exp:建议5分钟}）。经 postMessage
+ *                   一次性传给 iframe（不进 URL/浏览器历史），平台验签后按
+ *                   业务方用户身份对话；不传 = 匿名访客
+ *
+ * 全局 API：
+ *   window.apboaEmbed.reset()   业务方用户登出/切换账号时必须调用——
+ *                               清除 iframe 内的平台会话，否则下一个用户
+ *                               会继续用上一个用户的身份（串号）
  */
 (function () {
   'use strict'
@@ -45,6 +54,7 @@
   // baseUrl 从脚本自身 src 推导，天然适配 dev(根路径) 与生产(/web/ 子路径)；可用 data-base-url 覆盖
   var baseUrl =
     script.getAttribute('data-base-url') || script.src.replace(/\/embed\.js(\?.*)?$/, '')
+  var userJwt = script.getAttribute('data-user-jwt') || ''
   var title = script.getAttribute('data-title') || '在线助手'
   var color = script.getAttribute('data-color') || '#0F74FF'
   var position = script.getAttribute('data-position') === 'left' ? 'left' : 'right'
@@ -129,4 +139,36 @@
     panel.classList.contains('open') ? close() : open()
   })
   root.querySelector('.close').addEventListener('click', close)
+
+  // ===== 嵌入用户身份传递（postMessage 握手，docs/identity-propagation-design.md §6.M7）=====
+  // iframe 内 ChatWrapper 加载后广播 ready，这里回发 userJwt。
+  // targetOrigin 固定为平台源：凭证只会发给自家 iframe，页面上其他 iframe 收不到
+  var platformOrigin = (function () {
+    try {
+      return new URL(baseUrl, window.location.href).origin
+    } catch (e) {
+      return '*'
+    }
+  })()
+
+  window.addEventListener('message', function (event) {
+    if (!iframe.contentWindow || event.source !== iframe.contentWindow) return
+    if (platformOrigin !== '*' && event.origin !== platformOrigin) return
+    if (event.data && event.data.type === 'apboa-embed-ready' && userJwt) {
+      iframe.contentWindow.postMessage(
+        { type: 'apboa-embed-user-jwt', userJwt: userJwt },
+        platformOrigin
+      )
+    }
+  })
+
+  // ===== 全局 API =====
+  // reset()：业务方用户登出/切换账号时必须调用，清 iframe 内平台会话防串号
+  window.apboaEmbed = {
+    reset: function () {
+      if (loaded && iframe.contentWindow) {
+        iframe.contentWindow.postMessage({ type: 'apboa-embed-reset' }, platformOrigin)
+      }
+    }
+  }
 })()
