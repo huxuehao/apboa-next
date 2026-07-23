@@ -55,6 +55,15 @@ const modelTypeLabels: Record<string, string> = {
 /** 语音识别用途卡片：生成参数与模态标签无意义，改为显示用途标识 */
 const isAsrCard = computed(() => props.data.category === ModelCategory.ASR)
 
+/** 对话生成用途卡片：成本计价只对 LLM 生效（老数据无 category 视为 LLM） */
+const isLlmCard = computed(() => (props.data.category ?? ModelCategory.LLM) === ModelCategory.LLM)
+
+/** 是否已配价（两个单价都填了才算；成本中心据此计费） */
+const isPriced = computed(() => props.data.inputPrice != null && props.data.outputPrice != null)
+
+/** 价格标签文案：¥输入/输出（元/百万token） */
+const priceLabel = computed(() => `¥${props.data.inputPrice}/${props.data.outputPrice}`)
+
 /**
  * 格式化更新时间
  */
@@ -221,6 +230,12 @@ const formattedTemperature = computed(() => {
           <ATag :bordered="false">
               {{ data.thinking ? '思考' : '非思考' }}
           </ATag>
+          <ATooltip v-if="isLlmCard && isPriced" title="输入/输出单价（元/百万 token），成本中心按此计费">
+            <ATag :bordered="false" color="blue">{{ priceLabel }}</ATag>
+          </ATooltip>
+          <ATooltip v-else-if="isLlmCard" title="未配置单价：成本中心只记 token 不计成本，请在编辑弹窗「成本计价」中补配">
+            <ATag :bordered="false" color="orange">未配价</ATag>
+          </ATooltip>
         </div>
         <div class="card-tags flex items-center gap-xs">
           <ATag v-for="t in (Array.isArray(data.modelType) ? data.modelType : (data.modelType ? [data.modelType] : []))"

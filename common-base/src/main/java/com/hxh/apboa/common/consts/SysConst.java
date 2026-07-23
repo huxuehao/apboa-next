@@ -20,6 +20,11 @@ public class SysConst {
      */
     public static final String LOGIN_USER_KEY = "LOGIN-USER-KEY";
     public static final String USER_DETAIL = "USER-DETAIL";
+    /** 请求认证渠道（request attribute）：WEB=普通登录 / CHAT_KEY=外嵌免登 / SK_API=API密钥，成本流水归因用 */
+    public static final String AUTH_CHANNEL = "AUTH-CHANNEL";
+    public static final String CHANNEL_WEB = "WEB";
+    public static final String CHANNEL_CHAT_KEY = "CHAT_KEY";
+    public static final String CHANNEL_SK_API = "SK_API";
 
     /**
      * token过期时间（6小时）

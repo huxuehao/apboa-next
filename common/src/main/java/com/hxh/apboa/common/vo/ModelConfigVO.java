@@ -6,6 +6,7 @@ import com.hxh.apboa.common.enums.ModelCategory;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -41,6 +42,10 @@ public class ModelConfigVO implements SerializableEnable {
     private String connectivityStatus;
     private String connectivityMessage;
     private LocalDateTime lastConnectivityCheck;
+    /** 输入单价（元/百万token；null=未配价，0=免费/本地） */
+    private BigDecimal inputPrice;
+    /** 输出单价（元/百万token；null=未配价，0=免费/本地） */
+    private BigDecimal outputPrice;
     private Boolean enabled;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

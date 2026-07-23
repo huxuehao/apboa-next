@@ -94,7 +94,8 @@ public class ReActAgentHelper {
                 AgentMetadataStore.put(agent.getAgentId(), "builtModelOverride",
                         SessionModelResolver.overrideKey(SessionModelResolver.resolveOverride(threadId)));
             }
-            // 消息级模型审计：本次构建实际选定的模型（ChatModelFactory 写入 ctx），
+            // 消息级模型审计：本次构建实际选定的模型（ChatModelFactory 写入 ctx 后在
+            // getModel 处即捕获，防 toolkit 阶段子智能体构建覆盖 ctx），
             // ChatLogHook 落 meta / Adapter 下发 RUN_META 按 agentId 读取
             AgentMetadataStore.put(agent.getAgentId(), "activeModelConfigId", ctx.getActiveModelConfigId());
             AgentMetadataStore.put(agent.getAgentId(), "activeModelLabel", ctx.getActiveModelLabel());
@@ -119,6 +120,13 @@ public class ReActAgentHelper {
      */
     public ReActAgent.Builder getReactAgentBuilder(AgentDefinition definition, boolean asSubAgent) {
         Model model = chatModelFactory.getModel(definition);
+        // 立即捕获本 agent 选定的模型标识：后续 getToolkit 构建子智能体时，子 agent 的
+        // getModel 会覆盖 AgentContext 的 activeModel（同一线程上下文），构建完再读就是
+        // 子模型——主消息的模型审计与成本流水都会记错（实测踩过）
+        Long capturedModelConfigId = AgentContext.getIfExists()
+                .map(AgentContext::getActiveModelConfigId).orElse(null);
+        String capturedModelLabel = AgentContext.getIfExists()
+                .map(AgentContext::getActiveModelLabel).orElse(null);
         Toolkit toolkit = toolkitFactory.getToolkit(definition);
         CodeExecutionConfig codeExecutionConfig = getCodeExecutionConfig(definition.getId());
         // 勾选技能包查一次传两处：系统提示词注入与 SkillBox 注册共用同一份清单
@@ -232,6 +240,13 @@ public class ReActAgentHelper {
                 .register(AgentContext.get())
                 .build();
         builder.toolExecutionContext(context);
+
+        // 把构建期捕获的模型标识写回上下文：toolkit 阶段子智能体构建会覆盖 ctx 的
+        // activeModel（同线程），此处恢复为本 agent 选定值，供 registerBuildMetadata 读取
+        AgentContext.getIfExists().ifPresent(ctx -> {
+            ctx.setActiveModelConfigId(capturedModelConfigId);
+            ctx.setActiveModelLabel(capturedModelLabel);
+        });
 
         return builder;
     }

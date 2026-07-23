@@ -11,6 +11,7 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
@@ -128,6 +129,16 @@ public class ModelConfig extends BaseTenantEntity {
      * 最后连接性检测时间
      */
     private LocalDateTime lastConnectivityCheck;
+
+    /**
+     * 输入单价（元/百万token；null=未配价，0=免费/本地）
+     */
+    private BigDecimal inputPrice;
+
+    /**
+     * 输出单价（元/百万token；null=未配价，0=免费/本地）
+     */
+    private BigDecimal outputPrice;
 
     public void fillModelConfigWrapper(ModelConfigWrapper configWrapper) {
         configWrapper.setModelCode(this.modelId);

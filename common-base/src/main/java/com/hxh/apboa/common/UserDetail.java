@@ -51,6 +51,14 @@ public class UserDetail implements Serializable {
     private String externalName;
 
     /**
+     * 认证渠道，签发时烙进 token（CHAT_KEY=外嵌免登；null=普通登录/旧 token）。
+     * AuthInterceptor 据此做 @ChatKeyAccess 白名单判定与成本流水渠道归因——
+     * 此前依赖 30 天过期的 chatkey: Redis 缓存，过期后 chatKey 永久 token
+     * 会被误当普通登录 token、白名单失效
+     */
+    private String authChannel;
+
+    /**
      * 租户简要信息（用于切换器展示）
      */
     @Data

@@ -135,6 +135,10 @@ public class AguiRequestProcessor {
     public ProcessResult process(RunAgentInput input, String headerAgentId, String pathAgentId) {
         String threadId = input.getThreadId();
 
+        // 登记本次 run 的认证渠道（成本流水归因：WEB/CHAT_KEY/SK_API），
+        // AuthInterceptor 打标、成本落库层按 threadId 读取
+        registerChannel(threadId);
+
         // Resolve agent ID
         String agentId = resolveAgentId(input, headerAgentId, pathAgentId);
 
@@ -223,6 +227,14 @@ public class AguiRequestProcessor {
         }
         TenantUtils.setCurrentTenant(Long.valueOf(tenantId.toString()), tenantCode.toString());
 
+        // 月度预算熔断：达到预算的智能体拒绝新 run（外嵌 chatKey 防盗刷的最后闸门），
+        // 以正常文本消息回复提示，前端零改动
+        Flux<AguiEvent> budgetRejectEvents = checkMonthlyBudget(threadId, input.getRunId());
+        if (budgetRejectEvents != null) {
+            TenantUtils.clear();
+            return new ProcessResult(agent, budgetRejectEvents);
+        }
+
         // 执行完成后保存session
         Flux<AguiEvent> events = adapter.run(effectiveInput)
                 .doFinally(signalType -> {
@@ -256,6 +268,8 @@ public class AguiRequestProcessor {
      * @param memoryActive 是否开启长期记忆（决定 resume 完成后保留还是删除 session）
      */
     public ProcessResult resume(String threadId, List<ResumeDecision> decisions, boolean memoryActive) {
+        // resume 续跑同样消耗 token，渠道一并登记
+        registerChannel(threadId);
         ResumeContext rc = loadResumeContext(threadId);
         if (rc == null) {
             throw new IllegalStateException("找不到会话或暂停态: " + threadId);
@@ -502,6 +516,77 @@ public class AguiRequestProcessor {
      * @param sessionId threadId
      * @param jdbcTemplate jdbcTemplate
      */
+    /**
+     * 登记本次请求的认证渠道到会话（MVC 同线程内从 RequestHolder 取认证层打的标记；
+     * 取不到时不覆盖已有登记，流水渠道回落 NULL 显示「未标记」）
+     */
+    private void registerChannel(String threadId) {
+        try {
+            jakarta.servlet.http.HttpServletRequest request = com.hxh.apboa.common.util.RequestHolder.getRequest();
+            if (request != null && request.getAttribute(com.hxh.apboa.common.consts.SysConst.AUTH_CHANNEL) instanceof String channel) {
+                com.hxh.apboa.engine.log.telemetry.ChatChannelHolder.put(threadId, channel);
+            }
+        } catch (Exception e) {
+            logger.debug("渠道登记失败 threadId={}: {}", threadId, e.getMessage());
+        }
+    }
+
+    /**
+     * 月度预算检查：会话归属智能体配置了 monthly_budget 且当月已计价成本（chat_usage_record
+     * 聚合，含对话/子智能体等全部场景）达到预算时，返回一段拒绝提示事件流；未配预算或未超额
+     * 返回 null 放行。查询走两条主键/索引 SQL，run 建立频度下开销可忽略。
+     * 未配价模型的用量 cost 为 NULL 不计入——启用预算前应先为相关模型配价。
+     */
+    private Flux<AguiEvent> checkMonthlyBudget(String threadId, String runId) {
+        try {
+            Map<String, Object> budgetRow = jdbcTemplate.query(
+                    "SELECT d.id AS agent_id, d.monthly_budget FROM agent_definition d "
+                            + "JOIN chat_session s ON s.agent_id = d.id WHERE s.id = ?",
+                    rs -> rs.next()
+                            ? Map.of("agentId", rs.getLong("agent_id"),
+                                     "budget", java.util.Optional.ofNullable(rs.getBigDecimal("monthly_budget")))
+                            : null,
+                    Long.valueOf(threadId)
+            );
+            if (budgetRow == null) {
+                return null;
+            }
+            @SuppressWarnings("unchecked")
+            java.util.Optional<java.math.BigDecimal> budgetOpt = (java.util.Optional<java.math.BigDecimal>) budgetRow.get("budget");
+            if (budgetOpt.isEmpty()) {
+                return null;
+            }
+            java.math.BigDecimal budget = budgetOpt.get();
+            // 月初基准必须应用侧生成：流水 created_at 是应用时区（北京），mysql NOW() 在
+            // 容器里常为 UTC，用 DATE_FORMAT(NOW(),..) 会在每月 1 日 0~8 点错切上月账
+            String monthStart = java.time.LocalDate.now().withDayOfMonth(1).toString();
+            java.math.BigDecimal spent = jdbcTemplate.queryForObject(
+                    "SELECT IFNULL(SUM(cost), 0) FROM chat_usage_record "
+                            + "WHERE agent_id = ? AND created_at >= ?",
+                    java.math.BigDecimal.class,
+                    budgetRow.get("agentId"), monthStart
+            );
+            if (spent == null || spent.compareTo(budget) < 0) {
+                return null;
+            }
+            logger.warn("智能体 {} 月度预算熔断：已用 {} / 预算 {}，拒绝 run {}", budgetRow.get("agentId"), spent, budget, runId);
+            String messageId = "budget-" + UUID.randomUUID();
+            String text = String.format("本智能体本月的成本预算已用完（已用 ¥%.2f / 预算 ¥%.2f），暂时无法继续对话。请联系管理员调整预算或等下月自动恢复。",
+                    spent, budget);
+            return Flux.just(
+                    new AguiEvent.RunStarted(threadId, runId),
+                    new AguiEvent.TextMessageStart(threadId, runId, messageId, "assistant"),
+                    new AguiEvent.TextMessageContent(threadId, runId, messageId, text),
+                    new AguiEvent.TextMessageEnd(threadId, runId, messageId),
+                    new AguiEvent.RunFinished(threadId, runId)
+            );
+        } catch (Exception e) {
+            // 预算检查自身故障不拦业务：放行并告警
+            logger.error("月度预算检查失败 threadId={}: {}", threadId, e.getMessage());
+            return null;
+        }
+    }
+
     private AgentDefinition getAgentDefinition(String sessionId, JdbcTemplate jdbcTemplate) {
         if (sessionId == null || sessionId.isEmpty()) {
             return null;

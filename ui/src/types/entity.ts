@@ -286,6 +286,10 @@ export interface ModelConfig extends BaseEntity {
   repeatPenalty: number
   seed: string
   extendConfig: Record<string, any> | null
+  /** 输入单价（元/百万token；null=未配价，0=免费/本地） */
+  inputPrice?: number | null
+  /** 输出单价（元/百万token；null=未配价，0=免费/本地） */
+  outputPrice?: number | null
 }
 
 /**

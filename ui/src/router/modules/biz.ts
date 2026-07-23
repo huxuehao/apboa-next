@@ -289,6 +289,12 @@ const bizRoutes: AppRouteRecordRaw[] = [
         component: () => import('@/views/Review/Workflow.vue'),
         meta: {
           title: '审查工作流',
+      {
+        path: RoutePaths.COST,
+        name: RouteNames.COST,
+        component: () => import('@/views/Cost/index.vue'),
+        meta: {
+          title: '成本中心',
           hidden: false
         },
       }

@@ -282,6 +282,8 @@ public class ToolkitFactory {
                 .ifPresent(parentThreadId -> {
                     AgentMetadataStore.put(sub.getAgentId(), "subParentThreadId", parentThreadId);
                     AgentMetadataStore.put(sub.getAgentId(), "subToolName", definition.getAgentCode().toLowerCase());
+                    // 成本流水记账主体：子智能体的库表 id（ChatLogHook 子调用结束时取用）
+                    AgentMetadataStore.put(sub.getAgentId(), "subAgentDbId", definition.getId());
                 });
         return sub;
     }

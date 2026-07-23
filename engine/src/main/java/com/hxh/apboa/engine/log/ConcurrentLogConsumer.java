@@ -1,6 +1,7 @@
 package com.hxh.apboa.engine.log;
 
 import com.hxh.apboa.common.entity.ChatMessage;
+import com.hxh.apboa.engine.log.telemetry.UsageRecordWriter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
@@ -37,9 +38,11 @@ public class ConcurrentLogConsumer {
 
     private final BlockingQueue<ChatMessage> queue;
     private final JdbcTemplate jdbcTemplate;
+    private final UsageRecordWriter usageRecordWriter;
 
-    public ConcurrentLogConsumer(JdbcTemplate jdbcTemplate) {
+    public ConcurrentLogConsumer(JdbcTemplate jdbcTemplate, UsageRecordWriter usageRecordWriter) {
         this.jdbcTemplate = jdbcTemplate;
+        this.usageRecordWriter = usageRecordWriter;
         this.queue = ConcurrentLogProducer.getQueue();
     }
 
@@ -171,6 +174,9 @@ public class ConcurrentLogConsumer {
                         "UPDATE chat_session SET current_message_id = ? WHERE id = ?",
                         newId, message.getSessionId()
                 );
+
+                // 4. assistant 正文消息成本记账（内部自过滤角色与 meta，失败不影响消息）
+                usageRecordWriter.writeChatRun(message, newId);
             } catch (Exception ex) {
                 log.error("日志插入失败: {}", ex.getMessage());
             }

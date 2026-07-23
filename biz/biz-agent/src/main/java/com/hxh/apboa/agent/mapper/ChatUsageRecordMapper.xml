@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hxh.apboa.agent.mapper.ChatUsageRecordMapper">
+
+    <sql id="timeAndAgentFilter">
+        created_at >= #{start} AND created_at &lt; #{endExclusive}
+        <if test="agentId != null">AND agent_id = #{agentId}</if>
+    </sql>
+
+    <!-- 汇总卡：金额为已计价口径；未配价行只计入 unpricedTokens -->
+    <select id="costSummary" resultType="java.util.Map">
+        SELECT IFNULL(SUM(cost), 0)                                                                     AS totalCost,
+               IFNULL(SUM(CASE WHEN cost IS NOT NULL THEN input_tokens * input_price / 1000000 END), 0)  AS inputCost,
+               IFNULL(SUM(CASE WHEN cost IS NOT NULL THEN output_tokens * output_price / 1000000 END), 0) AS outputCost,
+               IFNULL(SUM(input_tokens), 0)                                                             AS inputTokens,
+               IFNULL(SUM(output_tokens), 0)                                                            AS outputTokens,
+               COUNT(*)                                                                                 AS runCount,
+               COUNT(DISTINCT session_id)                                                               AS sessionCount,
+               IFNULL(SUM(CASE WHEN cost IS NULL THEN input_tokens + output_tokens ELSE 0 END), 0)      AS unpricedTokens
+        FROM chat_usage_record
+        WHERE <include refid="timeAndAgentFilter"/>
+    </select>
+
+    <!-- 日趋势 -->
+    <select id="costTrendByDay" resultType="java.util.Map">
+        SELECT DATE(created_at)                                                                          AS date,
+               IFNULL(SUM(CASE WHEN cost IS NOT NULL THEN input_tokens * input_price / 1000000 END), 0)  AS inputCost,
+               IFNULL(SUM(CASE WHEN cost IS NOT NULL THEN output_tokens * output_price / 1000000 END), 0) AS outputCost,
+               IFNULL(SUM(cost), 0)                                                                      AS cost
+        FROM chat_usage_record
+        WHERE <include refid="timeAndAgentFilter"/>
+        GROUP BY DATE(created_at)
+        ORDER BY DATE(created_at)
+    </select>
+
+    <!-- 按模型分布：同模型改名后取最新 label（按流水最新一条） -->
+    <select id="costGroupByModel" resultType="java.util.Map">
+        SELECT model_config_id                                                                           AS modelConfigId,
+               SUBSTRING_INDEX(GROUP_CONCAT(model_label ORDER BY id DESC SEPARATOR '\n'), '\n', 1)       AS modelLabel,
+               IFNULL(SUM(input_tokens), 0)                                                              AS inputTokens,
+               IFNULL(SUM(output_tokens), 0)                                                             AS outputTokens,
+               IFNULL(SUM(cost), 0)                                                                      AS cost,
+               IFNULL(SUM(CASE WHEN cost IS NULL THEN input_tokens + output_tokens ELSE 0 END), 0)       AS unpricedTokens,
+               COUNT(*)                                                                                  AS runCount
+        FROM chat_usage_record
+        WHERE <include refid="timeAndAgentFilter"/>
+        GROUP BY model_config_id
+        ORDER BY cost DESC, unpricedTokens DESC
+    </select>
+
+    <!-- 按场景分布 -->
+    <select id="costGroupByBizType" resultType="java.util.Map">
+        SELECT biz_type                                                                                  AS bizType,
+               IFNULL(SUM(cost), 0)                                                                      AS cost,
+               IFNULL(SUM(input_tokens), 0)                                                              AS inputTokens,
+               IFNULL(SUM(output_tokens), 0)                                                             AS outputTokens,
+               COUNT(*)                                                                                  AS runCount
+        FROM chat_usage_record
+        WHERE <include refid="timeAndAgentFilter"/>
+        GROUP BY biz_type
+        ORDER BY cost DESC
+    </select>
+
+    <!-- 按渠道分布（channel NULL = 渠道标记上线前的历史流水，前端显示「未标记」） -->
+    <select id="costGroupByChannel" resultType="java.util.Map">
+        SELECT channel                                                                                   AS channel,
+               IFNULL(SUM(cost), 0)                                                                      AS cost,
+               IFNULL(SUM(input_tokens), 0)                                                              AS inputTokens,
+               IFNULL(SUM(output_tokens), 0)                                                             AS outputTokens,
+               COUNT(*)                                                                                  AS runCount
+        FROM chat_usage_record
+        WHERE <include refid="timeAndAgentFilter"/>
+        GROUP BY channel
+        ORDER BY cost DESC
+    </select>
+
+    <!-- 会话账单分页：按 session 聚合；models 为该会话用过的模型 label 去重串 -->
+    <select id="pageSessionBills" resultType="java.util.Map">
+        SELECT session_id                                                                               AS sessionId,
+               MAX(agent_id)                                                                            AS agentId,
+               SUBSTRING_INDEX(GROUP_CONCAT(agent_label ORDER BY id DESC SEPARATOR '\n'), '\n', 1)      AS agentLabel,
+               MAX(user_id)                                                                             AS userId,
+               COUNT(*)                                                                                 AS runCount,
+               IFNULL(SUM(input_tokens), 0)                                                             AS inputTokens,
+               IFNULL(SUM(output_tokens), 0)                                                            AS outputTokens,
+               IFNULL(SUM(cost), 0)                                                                     AS cost,
+               SUM(CASE WHEN cost IS NULL THEN 1 ELSE 0 END)                                            AS unpricedRuns,
+               GROUP_CONCAT(DISTINCT model_label ORDER BY model_label SEPARATOR ',')                    AS models,
+               MAX(created_at)                                                                          AS lastActiveAt
+        FROM chat_usage_record
+        WHERE session_id IS NOT NULL
+          AND created_at >= #{start} AND created_at &lt; #{endExclusive}
+        <if test="agentId != null">AND agent_id = #{agentId}</if>
+        GROUP BY session_id
+        <choose>
+            <when test="orderByCost">ORDER BY cost DESC, lastActiveAt DESC</when>
+            <otherwise>ORDER BY lastActiveAt DESC</otherwise>
+        </choose>
+    </select>
+
+    <!-- 重算历史成本：按模型当前价刷新快照（价格未配/模型已删的行不动） -->
+    <update id="recalculateCost">
+        UPDATE chat_usage_record r
+        INNER JOIN model_config mc ON r.model_config_id = mc.id
+        SET r.input_price  = mc.input_price,
+            r.output_price = mc.output_price,
+            r.cost         = (r.input_tokens * mc.input_price + r.output_tokens * mc.output_price) / 1000000
+        WHERE mc.input_price IS NOT NULL AND mc.output_price IS NOT NULL
+          AND r.created_at >= #{start} AND r.created_at &lt; #{endExclusive}
+        <if test="modelConfigId != null">AND r.model_config_id = #{modelConfigId}</if>
+    </update>
+
+    <!-- 存量回填：meta 抽字段，价格按模型当前价估算；表名 ${} 由 service 白名单校验 -->
+    <insert id="backfillFromMessages">
+        INSERT INTO chat_usage_record (tenant_id, session_id, message_id, agent_id, agent_label, user_id,
+            model_config_id, model_label, provider_type, biz_type, channel,
+            input_tokens, output_tokens, iteration_count, duration_ms,
+            input_price, output_price, cost, created_at)
+        SELECT m.tenant_id,
+               m.session_id,
+               m.id,
+               s.agent_id,
+               ad.name,
+               s.user_id,
+               IFNULL(CAST(JSON_UNQUOTE(JSON_EXTRACT(m.meta, '$.modelConfigId')) AS UNSIGNED), 0),
+               IFNULL(JSON_UNQUOTE(JSON_EXTRACT(m.meta, '$.modelLabel')), 'unknown'),
+               mp.type,
+               'CHAT',
+               NULL,
+               IFNULL(CAST(JSON_EXTRACT(m.meta, '$.inputTokens') AS UNSIGNED), 0),
+               IFNULL(CAST(JSON_EXTRACT(m.meta, '$.outputTokens') AS UNSIGNED), 0),
+               IFNULL(CAST(JSON_EXTRACT(m.meta, '$.iterationCount') AS UNSIGNED), 1),
+               CAST(JSON_EXTRACT(m.meta, '$.durationMs') AS UNSIGNED),
+               mc.input_price,
+               mc.output_price,
+               CASE WHEN mc.input_price IS NOT NULL AND mc.output_price IS NOT NULL
+                    THEN (IFNULL(CAST(JSON_EXTRACT(m.meta, '$.inputTokens') AS UNSIGNED), 0) * mc.input_price
+                        + IFNULL(CAST(JSON_EXTRACT(m.meta, '$.outputTokens') AS UNSIGNED), 0) * mc.output_price) / 1000000
+                    END,
+               m.created_at
+        FROM ${table} m
+        INNER JOIN chat_session s ON m.session_id = s.id
+        LEFT JOIN agent_definition ad ON ad.id = s.agent_id
+        LEFT JOIN model_config mc ON mc.id = CAST(JSON_UNQUOTE(JSON_EXTRACT(m.meta, '$.modelConfigId')) AS UNSIGNED)
+        LEFT JOIN model_provider mp ON mp.id = mc.provider_id
+        WHERE m.role = 'assistant'
+          AND m.meta IS NOT NULL AND JSON_VALID(m.meta)
+          AND JSON_EXTRACT(m.meta, '$.inputTokens') IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM chat_usage_record r WHERE r.message_id = m.id)
+    </insert>
+
+    <!-- 智能体 TopN（按成本降序，未计价量多的排后补位）；agentLabel 取流水最新快照 -->
+    <select id="costTopAgents" resultType="java.util.Map">
+        SELECT agent_id                                                                                  AS agentId,
+               SUBSTRING_INDEX(GROUP_CONCAT(agent_label ORDER BY id DESC SEPARATOR '\n'), '\n', 1)       AS agentLabel,
+               COUNT(DISTINCT session_id)                                                                AS sessionCount,
+               COUNT(*)                                                                                  AS runCount,
+               IFNULL(SUM(input_tokens), 0)                                                              AS inputTokens,
+               IFNULL(SUM(output_tokens), 0)                                                             AS outputTokens,
+               IFNULL(SUM(cost), 0)                                                                      AS cost,
+               IFNULL(SUM(CASE WHEN cost IS NULL THEN input_tokens + output_tokens ELSE 0 END), 0)       AS unpricedTokens
+        FROM chat_usage_record
+        WHERE created_at >= #{start} AND created_at &lt; #{endExclusive}
+        GROUP BY agent_id
+        ORDER BY cost DESC, unpricedTokens DESC
+        LIMIT #{limit}
+    </select>
+
+</mapper>

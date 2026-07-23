@@ -11,6 +11,8 @@ import io.agentscope.core.model.StructuredOutputReminder;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.math.BigDecimal;
+
 /**
  * 智能体定义
  *
@@ -128,6 +130,11 @@ public class AgentDefinition extends BaseTenantEntity {
      * React最大迭代次数
      */
     private Integer maxIterations;
+
+    /**
+     * 月度成本预算（元）；null=不限额，当月已计价成本达到即拒绝新对话
+     */
+    private BigDecimal monthlyBudget;
 
     /**
      * 是否启用计划

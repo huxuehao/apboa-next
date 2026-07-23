@@ -84,6 +84,7 @@ const formData = ref({
   advanced: {
     enablePlanning: false,
     maxIterations: 50,
+    monthlyBudget: null as number | null,
     maxSubtasks: 10,
     requirePlanConfirmation: false,
     enableMemory: true,
@@ -207,6 +208,7 @@ function initFormData() {
   formData.value.advanced = {
     enablePlanning: data.enablePlanning,
     maxIterations: data.maxIterations || 50,
+    monthlyBudget: data.monthlyBudget ?? null,
     maxSubtasks: data.maxSubtasks || 10,
     requirePlanConfirmation: data.requirePlanConfirmation,
     enableMemory: data.enableMemory,
@@ -302,6 +304,7 @@ async function handleSubmit() {
       hook: formData.value.tools.hook,
       enablePlanning: formData.value.advanced.enablePlanning,
       maxIterations: formData.value.advanced.maxIterations,
+      monthlyBudget: formData.value.advanced.monthlyBudget,
       maxSubtasks: formData.value.advanced.maxSubtasks,
       requirePlanConfirmation: formData.value.advanced.requirePlanConfirmation && formData.value.advanced.enableMemory,
       showToolProcess: formData.value.advanced.showToolProcess,

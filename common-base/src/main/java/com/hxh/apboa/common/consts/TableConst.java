@@ -24,6 +24,7 @@ public class TableConst {
     public static final String HOOK = "hook_config";
     public static final String CHAT_SESSION = "chat_session";
     public static final String CHAT_MESSAGE = "chat_message";
+    public static final String CHAT_USAGE_RECORD = "chat_usage_record";
     public static final String ATTACH_LOG = "attach_log";
     public static final String ATTACH_CHUNK = "attach_chunk";
     public static final String ATTACH = "attach";

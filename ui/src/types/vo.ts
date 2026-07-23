@@ -173,6 +173,8 @@ export interface AgentDefinitionVO {
   sensitiveWordConfigId: string
   sensitiveFilterEnabled: boolean
   maxIterations: number
+  /** 月度成本预算（元）；null=不限额，当月已计价成本达到即拒绝新对话 */
+  monthlyBudget?: number | null
   enablePlanning: boolean
   maxSubtasks: number
   requirePlanConfirmation: boolean
@@ -370,6 +372,10 @@ export interface ModelConfigVO {
   connectivityStatus?: string
   connectivityMessage?: string
   lastConnectivityCheck?: string
+  /** 输入单价（元/百万token；null=未配价，0=免费/本地） */
+  inputPrice?: number | null
+  /** 输出单价（元/百万token；null=未配价，0=免费/本地） */
+  outputPrice?: number | null
   enabled: boolean
   createdAt: string
   updatedAt: string
@@ -756,4 +762,114 @@ export interface ChatDisplayNameVO {
   tools: Record<string, string>
   /** MCP toolName -> 「MCP服务名 · 工具名」 */
   mcpTools: Record<string, string>
+}
+
+/* ======================== 成本中心 ======================== */
+
+/** 成本日趋势点 */
+export interface CostTrendPoint {
+  date: string
+  inputCost: number
+  outputCost: number
+  cost: number
+}
+
+/** 按模型成本分布行 */
+export interface CostModelRow {
+  modelConfigId: string
+  modelLabel: string
+  inputTokens: number
+  outputTokens: number
+  cost: number
+  unpricedTokens: number
+  runCount: number | string
+}
+
+/** 智能体 TopN 行 */
+export interface CostAgentRow {
+  agentId: string
+  agentName: string
+  sessionCount: number | string
+  runCount: number | string
+  inputTokens: number
+  outputTokens: number
+  cost: number
+  unpricedTokens: number
+}
+
+/** 成本概览（金额元、已计价口径；未配价用量单列） */
+export interface CostOverviewVO {
+  totalCost: number
+  inputCost: number
+  outputCost: number
+  inputTokens: number | string
+  outputTokens: number | string
+  runCount: number | string
+  sessionCount: number | string
+  unpricedTokens: number | string
+  trend: CostTrendPoint[]
+  byModel: CostModelRow[]
+  byBizType: { bizType: string; cost: number; inputTokens: number; outputTokens: number; runCount: number | string }[]
+  /** 按渠道分布：channel null=渠道标记上线前的历史流水 */
+  byChannel: { channel: string | null; cost: number; inputTokens: number; outputTokens: number; runCount: number | string }[]
+  topAgents: CostAgentRow[]
+  unpricedModels: CostModelRow[]
+}
+
+/** 会话账单行（后端按会话聚合的 Map） */
+export interface CostSessionBillRow {
+  sessionId: string
+  title: string
+  agentId: string
+  agentName: string
+  userId: string
+  userName: string
+  runCount: number | string
+  /** 被重新生成顶替的废弃轮次数 */
+  discardedRuns: number | string
+  inputTokens: number
+  outputTokens: number
+  cost: number
+  unpricedRuns: number | string
+  /** 该会话用过的模型 label 逗号串 */
+  models: string
+  lastActiveAt: string
+}
+
+/** 会话明细的单轮条目 */
+export interface CostRunItemVO {
+  recordId: string
+  messageId: number | null
+  createdAt: string
+  modelConfigId: string
+  modelLabel: string
+  iterationCount: number
+  inputTokens: number
+  outputTokens: number
+  durationMs: number | null
+  /** null=未计价 */
+  cost: number | null
+  /** false=被重新生成顶替的废弃分支 */
+  onCurrentPath: boolean
+  userQuestion: string | null
+  assistantSummary: string | null
+}
+
+/** 会话成本明细（实际发生口径：含废弃分支） */
+export interface CostSessionDetailVO {
+  sessionId: string
+  title: string
+  agentId: string
+  agentName: string
+  userId: string
+  userName: string
+  totalCost: number
+  inputTokens: number
+  outputTokens: number
+  runCount: number
+  discardedRunCount: number
+  discardedCost: number
+  unpricedRunCount: number
+  byModel: { modelLabel: string; runCount: number; cost: number }[]
+  runs: CostRunItemVO[]
 }

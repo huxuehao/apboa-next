@@ -554,7 +554,9 @@ public class AccountServiceImpl extends ServiceImpl<AccountMapper, Account> impl
                     .name(agent.getName())
                     .username(agent.getAgentCode())
                     .tenantId(tenant.getId())
-                    .tenantCode(tenant.getCode());
+                    .tenantCode(tenant.getCode())
+                    // 渠道烙进 token：白名单判定与成本归因不再依赖易过期的 chatkey: 缓存
+                    .authChannel(SysConst.CHANNEL_CHAT_KEY);
             if (externalClaims != null) {
                 // 烙进会话 token（UserDetail 即 subject JSON），后续每次请求自动带出
                 userDetailBuilder

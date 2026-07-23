@@ -6,7 +6,8 @@
 <script setup lang="ts">
 import { ref, watch, computed, h } from 'vue'
 import { message, Modal } from 'ant-design-vue'
-import { EyeOutlined, InfoCircleOutlined } from '@ant-design/icons-vue'
+import { EyeOutlined, InfoCircleOutlined, ThunderboltOutlined } from '@ant-design/icons-vue'
+import { matchOfficialPrice } from './officialModelPrices'
 import type { ModelConfigVO, ModelConfig, ModelProviderVO } from '@/types'
 import { ModelCategory, ModelType, ModelProviderType } from '@/types'
 import * as modelApi from '@/api/model'
@@ -76,6 +77,8 @@ const formData = ref<{
   seed: string
   extendConfig: ExtendConfigData | null
   ttsVoice: string
+  inputPrice: number | null
+  outputPrice: number | null
 }>({
   category: ModelCategory.LLM,
   name: '',
@@ -94,7 +97,9 @@ const formData = ref<{
   repeatPenalty: 1.0,
   seed: '',
   extendConfig: null,
-  ttsVoice: DEFAULT_TTS_VOICE
+  ttsVoice: DEFAULT_TTS_VOICE,
+  inputPrice: null,
+  outputPrice: null
 })
 
 const isEdit = computed(() => !!props.data?.id)
@@ -189,7 +194,9 @@ watch(
           seed: props.data.seed || '',
           extendConfig: ec && typeof ec === 'object' ? { headers: ec.headers || {}, queryParams: ec.queryParams || {}, bodyParams: ec.bodyParams || {}, fixedSystemMessage: ec.fixedSystemMessage ?? false, thinkingParams: ec.thinkingParams } : null,
           // DASH_SCOPE TTS 的音色从 bodyParams.voice 回填到结构化下拉
-          ttsVoice: (ec && typeof ec === 'object' && ec.bodyParams && typeof (ec.bodyParams as Record<string, unknown>).voice === 'string') ? String((ec.bodyParams as Record<string, unknown>).voice) : DEFAULT_TTS_VOICE
+          ttsVoice: (ec && typeof ec === 'object' && ec.bodyParams && typeof (ec.bodyParams as Record<string, unknown>).voice === 'string') ? String((ec.bodyParams as Record<string, unknown>).voice) : DEFAULT_TTS_VOICE,
+          inputPrice: props.data.inputPrice ?? null,
+          outputPrice: props.data.outputPrice ?? null
         }
       } else {
         resetForm()
@@ -264,9 +271,32 @@ function resetForm() {
     repeatPenalty: 1.0,
     seed: '',
     extendConfig: null,
-    ttsVoice: DEFAULT_TTS_VOICE
+    ttsVoice: DEFAULT_TTS_VOICE,
+    inputPrice: null,
+    outputPrice: null
   }
   formRef.value?.resetFields()
+}
+
+/**
+ * 按官网价填充成本计价：Ollama 本地模型直接填 0；其余按 modelId 前缀匹配
+ * 内置官网价快照（快照有时效，填充后建议与官网核对）；未收录提示手动填写
+ */
+function fillOfficialPrice() {
+  if (props.providerType === ModelProviderType.OLLAMA) {
+    formData.value.inputPrice = 0
+    formData.value.outputPrice = 0
+    message.success('本地模型（Ollama）已填 0 元')
+    return
+  }
+  const hit = matchOfficialPrice(formData.value.modelId)
+  if (!hit) {
+    message.info(`未收录「${formData.value.modelId || '（未填模型ID）'}」的官网价，请到供应商官网查询后手动填写`)
+    return
+  }
+  formData.value.inputPrice = hit.input
+  formData.value.outputPrice = hit.output
+  message.success(`已按官网价快照填充：输入 ¥${hit.input} / 输出 ¥${hit.output}（每百万 token）——价格可能调整，建议与官网核对`)
 }
 
 /**
@@ -321,7 +351,9 @@ async function handleSubmit() {
           topK: formData.value.topK,
           repeatPenalty: formData.value.repeatPenalty,
           seed: formData.value.seed,
-          extendConfig: formData.value.extendConfig || undefined
+          extendConfig: formData.value.extendConfig || undefined,
+          inputPrice: formData.value.inputPrice,
+          outputPrice: formData.value.outputPrice
         }) as ModelConfig
 
     if (isEdit.value && props.data) {
@@ -625,6 +657,43 @@ function showVoiceProtocol() {
             style="width: 100%"
             placeholder="请输入随机种子，留空表示随机" />
         </AFormItem>
+      </div>
+
+      <div v-if="isLlm" class="form-section">
+        <div class="section-title" style="display: flex; align-items: center; justify-content: space-between;">
+          <span>成本计价</span>
+          <AButton type="text" size="small" @click="fillOfficialPrice">
+            <ThunderboltOutlined /> 按官网价填充
+          </AButton>
+        </div>
+        <ARow :gutter="24">
+          <ACol :span="12">
+            <AFormItem label="输入单价（元/百万 token）" name="inputPrice">
+              <AInputNumber
+                v-model:value="formData.inputPrice"
+                style="width: 100%"
+                :min="0"
+                :precision="4"
+                placeholder="留空=未配价"
+              />
+            </AFormItem>
+          </ACol>
+          <ACol :span="12">
+            <AFormItem label="输出单价（元/百万 token）" name="outputPrice">
+              <AInputNumber
+                v-model:value="formData.outputPrice"
+                style="width: 100%"
+                :min="0"
+                :precision="4"
+                placeholder="留空=未配价"
+              />
+            </AFormItem>
+          </ACol>
+        </ARow>
+        <div class="text-placeholder text-xs">
+          供成本中心按人民币计算对话成本，可直接抄供应商官网报价；本地/免费模型填 0。
+          留空=未配价：用量照记 token 但不计成本。改价只影响之后的新账单。
+        </div>
       </div>
 
       <!-- DASH_SCOPE 语音合成：内置固定音色下拉 -->

@@ -25,6 +25,7 @@ import {
   LoginOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  AccountBookOutlined,
 } from '@ant-design/icons-vue'
 
 interface Props {
@@ -48,6 +49,8 @@ const iconMap: Record<string, Component> = {
   prompt: FileTextOutlined,
   model: ApiOutlined,
   agent: RobotOutlined,
+  cost: AccountBookOutlined,
+  workflow: ApartmentOutlined,
   tool: ToolOutlined,
   hook: LoginOutlined,
   skill: AppstoreOutlined,

@@ -17,6 +17,8 @@ const props = defineProps<{
   modelValue: {
     enablePlanning: boolean
     maxIterations: number
+    /** 月度成本预算（元）；null=不限额，当月已计价成本达到即拒绝新对话 */
+    monthlyBudget: number | null
     maxSubtasks: number
     requirePlanConfirmation: boolean
     enableMemory: boolean
@@ -178,6 +180,29 @@ defineExpose({
           <CodeExecutionConfigSelect v-model="formData.codeExecutionConfigId"/>
           <div class="text-placeholder text-xs mt-xs">
             如果您希望 Skill 中的脚本可以被正常执行，那么请确保已正确配置此项
+          </div>
+        </AFormItem>
+      </ACol>
+    </ARow>
+
+    <!-- 月度成本预算 -->
+    <ARow :gutter="16">
+      <ACol :span="12">
+        <AFormItem name="monthlyBudget">
+          <template #label>
+            <ATooltip title="当月已计价成本（成本中心口径，含子智能体消耗）达到预算后，本智能体拒绝新对话并提示用户；外嵌页面防盗刷的最后闸门">
+              <span>月度成本预算（元）</span><InfoCircleOutlined class="text-secondary cursor-pointer" />
+            </ATooltip>
+          </template>
+          <AInputNumber
+            v-model:value="formData.monthlyBudget"
+            :min="0"
+            :precision="2"
+            style="width: 50%"
+            placeholder="留空=不限额"
+          />
+          <div class="text-placeholder text-xs mt-xs">
+            消耗看「成本中心」；未配价模型的用量不计成本、不受预算约束，启用前请先为模型配价
           </div>
         </AFormItem>
       </ACol>

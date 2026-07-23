@@ -1,12 +1,16 @@
 package com.hxh.apboa.engine.log;
 
+import com.hxh.apboa.common.ApboaSpringContextHolder;
 import com.hxh.apboa.common.entity.ChatMessage;
 import com.hxh.apboa.common.util.AgentMetadataStore;
 import com.hxh.apboa.common.util.BeanUtils;
 import com.hxh.apboa.common.util.JsonUtils;
 import com.hxh.apboa.engine.hook.builtins.IConfirmationHook;
+import com.hxh.apboa.engine.log.telemetry.ChatChannelHolder;
 import com.hxh.apboa.engine.log.telemetry.RunStatAccumulator;
 import com.hxh.apboa.engine.log.telemetry.RunTelemetryExtractor;
+import com.hxh.apboa.engine.log.telemetry.UsageRecordWriter;
+import io.agentscope.core.model.ChatUsage;
 import org.springframework.jdbc.core.JdbcTemplate;
 import io.agentscope.core.agent.AgentBase;
 import io.agentscope.core.hook.*;
@@ -111,6 +115,12 @@ public class ChatLogHook implements Hook {
     private static final Map<String, List<Map<String, Object>>> SUB_STEPS_MAP = new ConcurrentHashMap<>();
     private static final Map<String, Map<String, Object>> SUB_TOOL_PENDING = new ConcurrentHashMap<>();
     private static final Map<String, Deque<List<Map<String, Object>>>> SUB_DONE_MAP = new ConcurrentHashMap<>();
+
+    /**
+     * 子智能体 run 级 usage 累计，key = 子 agentId，值 = {inputTokens, outputTokens, 轮数, 首轮时间戳}；
+     * 子调用结束（出正文或错误）时写成本流水（biz_type=SUB_AGENT）并清理
+     */
+    private static final Map<String, long[]> SUB_USAGE_MAP = new ConcurrentHashMap<>();
     @Override
     public <T extends HookEvent> Mono<T> onEvent(T event) {
         // 首轮推理发起前建立 run 统计起点（后续轮的 Pre 事件因 key 已存在而无操作）
@@ -390,6 +400,16 @@ public class ChatLogHook implements Hook {
         }
 
         if (event instanceof PostReasoningEvent postReasoningEvent) {
+            // 子 run 级 usage 累计（与主 agent 的 RunStatAccumulator 同源：框架流式聚合器写入 Msg）
+            ChatUsage subUsage = postReasoningEvent.getReasoningMessage().getChatUsage();
+            long[] acc = SUB_USAGE_MAP.computeIfAbsent(agentId,
+                    k -> new long[]{0, 0, 0, System.currentTimeMillis()});
+            if (subUsage != null) {
+                acc[0] += subUsage.getInputTokens();
+                acc[1] += subUsage.getOutputTokens();
+            }
+            acc[2]++;
+
             // 遍历/截断/步骤构造走共享提取器（与实时侧 SUBAGENT_STEP 同构），配对计时状态自持
             boolean hasFinalText = RunTelemetryExtractor.visitReasoning(
                     postReasoningEvent.getReasoningMessage(),
@@ -526,6 +546,7 @@ public class ChatLogHook implements Hook {
 
     /** 子智能体本次调用结束：步骤列表按 主threadId|工具名 入队，等主 agent 的 tool 消息落库时认领 */
     private void finishSubProcess(String agentId, String parentThreadId) {
+        writeSubAgentUsage(agentId, parentThreadId);
         List<Map<String, Object>> steps = SUB_STEPS_MAP.remove(agentId);
         // 清理该子 agent 未配对的工具 pending（异常中断残留），并去掉内部字段 _start
         SUB_TOOL_PENDING.keySet().removeIf(k -> k.startsWith(agentId + "|"));
@@ -548,6 +569,35 @@ public class ChatLogHook implements Hook {
     private List<Map<String, Object>> pollSubProcess(String threadId, String toolName) {
         Deque<List<Map<String, Object>>> queue = SUB_DONE_MAP.get(threadId + "|" + toolName);
         return queue == null ? null : queue.pollFirst();
+    }
+
+    /**
+     * 子调用结束时写成本流水（biz_type=SUB_AGENT，挂主会话）：token 累计自
+     * SUB_USAGE_MAP、记账主体为子智能体库表 id、模型取子 agent 构建期登记的标识。
+     * 与步骤认领无关（关闭工具过程展示也照记账），失败仅告警
+     */
+    private void writeSubAgentUsage(String agentId, String parentThreadId) {
+        long[] acc = SUB_USAGE_MAP.remove(agentId);
+        if (acc == null || (acc[0] == 0 && acc[1] == 0)) {
+            return;
+        }
+        try {
+            Long subAgentDbId = AgentMetadataStore.get(agentId, "subAgentDbId");
+            Object modelConfigId = AgentMetadataStore.get(agentId, "activeModelConfigId");
+            Object modelLabel = AgentMetadataStore.get(agentId, "activeModelLabel");
+            ApboaSpringContextHolder.getBean(UsageRecordWriter.class).writeSessionRun(
+                    "SUB_AGENT",
+                    Long.valueOf(parentThreadId),
+                    subAgentDbId,
+                    modelConfigId != null ? Long.valueOf(String.valueOf(modelConfigId)) : null,
+                    modelLabel != null ? String.valueOf(modelLabel) : null,
+                    ChatChannelHolder.get(parentThreadId),
+                    acc[0], acc[1], (int) acc[2],
+                    System.currentTimeMillis() - acc[3]
+            );
+        } catch (Exception e) {
+            log.warn("子智能体成本流水写入失败 agentId={} parentThreadId={}: {}", agentId, parentThreadId, e.getMessage());
+        }
     }
 
     // 构建聊天消息
@@ -584,6 +634,12 @@ public class ChatLogHook implements Hook {
         }
         if (modelLabel != null) {
             meta.put("modelLabel", modelLabel);
+        }
+        // 本次 run 的认证渠道（WEB/CHAT_KEY/SK_API，AguiRequestProcessor 登记）：
+        // 随 meta 透传给成本流水；前端不消费该字段
+        String channel = ChatChannelHolder.get(extractThreadId(event));
+        if (channel != null) {
+            meta.put("channel", channel);
         }
         return JsonUtils.toJsonStr(meta);
     }

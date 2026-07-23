@@ -95,6 +95,7 @@ CREATE TABLE `agent_definition` (
   `sensitive_word_config_id` bigint DEFAULT NULL COMMENT '敏感词配置ID',
   `sensitive_filter_enabled` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否启用敏感词过滤',
   `max_iterations` int DEFAULT 10 COMMENT 'React最大迭代次数',
+  `monthly_budget` decimal(12,2) DEFAULT NULL COMMENT '月度成本预算（元）；NULL=不限额，达到即拒绝新对话',
   `enable_planning` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否启用计划',
   `show_tool_process` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否显示工具调用过程',
   `max_subtasks` int DEFAULT 10 COMMENT '最大子任务数',
@@ -307,6 +308,36 @@ CREATE TABLE `chat_session` (
 
 -- chat_message 月度归档方案：归档表通过 ChatMessageArchiveTask 定时创建：CREATE TABLE chat_message_yyyyMM LIKE chat_message;
 
+DROP TABLE IF EXISTS `chat_usage_record`;
+CREATE TABLE `chat_usage_record` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '流水ID',
+  `session_id` bigint DEFAULT NULL COMMENT '会话ID，非对话消耗（workflow/定时任务）为NULL',
+  `message_id` int DEFAULT NULL COMMENT '对应assistant正文消息ID，审计钻取回链',
+  `agent_id` bigint NOT NULL COMMENT '智能体ID',
+  `agent_label` varchar(100) DEFAULT NULL COMMENT '智能体名称快照（删除后审计仍可读）',
+  `user_id` bigint DEFAULT NULL COMMENT '发起人ID',
+  `model_config_id` bigint NOT NULL COMMENT '模型配置ID',
+  `model_label` varchar(100) NOT NULL COMMENT '模型名快照（模型删改后流水仍自洽）',
+  `provider_type` varchar(50) DEFAULT NULL COMMENT '供应商类型快照',
+  `biz_type` varchar(20) NOT NULL DEFAULT 'CHAT' COMMENT '场景：CHAT/WORKFLOW/SCHEDULED_JOB/SUB_AGENT',
+  `channel` varchar(20) DEFAULT NULL COMMENT '渠道：WEB/CHAT_KEY/SK_API',
+  `input_tokens` bigint NOT NULL DEFAULT 0 COMMENT '输入token（run内累计）',
+  `output_tokens` bigint NOT NULL DEFAULT 0 COMMENT '输出token（run内累计）',
+  `iteration_count` int NOT NULL DEFAULT 1 COMMENT 'run内LLM调用轮数',
+  `duration_ms` bigint DEFAULT NULL COMMENT 'run墙钟耗时毫秒',
+  `input_price` decimal(12,4) DEFAULT NULL COMMENT '记账时输入单价快照（元/百万token）',
+  `output_price` decimal(12,4) DEFAULT NULL COMMENT '记账时输出单价快照（元/百万token）',
+  `cost` decimal(16,8) DEFAULT NULL COMMENT '成本额（元）；NULL=记账时模型未配价',
+  `created_at` datetime NOT NULL COMMENT '创建时间',
+  `tenant_id` bigint NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_tenant_time` (`tenant_id`, `created_at`),
+  KEY `idx_session` (`session_id`),
+  KEY `idx_agent_time` (`agent_id`, `created_at`),
+  KEY `idx_model_time` (`model_config_id`, `created_at`),
+  KEY `idx_user_time` (`user_id`, `created_at`)
+) COMMENT='LLM用量成本流水表';
+
 DROP TABLE IF EXISTS `code_execution_config`;
 CREATE TABLE `code_execution_config` (
   `id` bigint NOT NULL COMMENT '主键',
@@ -469,6 +500,8 @@ CREATE TABLE `model_config` (
   `connectivity_status` enum('NOT_CHECKED','CHECKING','CONNECTED','FAILED') NOT NULL DEFAULT 'NOT_CHECKED' COMMENT '连接性检测状态',
   `connectivity_message` varchar(500) DEFAULT NULL COMMENT '连接性检测消息',
   `last_connectivity_check` datetime DEFAULT NULL COMMENT '最后连接性检测时间',
+  `input_price` decimal(12,4) DEFAULT NULL COMMENT '输入单价（元/百万token；NULL=未配价，0=免费/本地）',
+  `output_price` decimal(12,4) DEFAULT NULL COMMENT '输出单价（元/百万token；NULL=未配价，0=免费/本地）',
   `enabled` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否可用',
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

@@ -11,6 +11,7 @@ import io.agentscope.core.model.StructuredOutputReminder;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -55,6 +56,8 @@ public class AgentDefinitionVO implements SerializableEnable {
     private Long sensitiveWordConfigId;
     private Boolean sensitiveFilterEnabled;
     private Integer maxIterations;
+    /** 月度成本预算（元）；null=不限额，当月已计价成本达到即拒绝新对话 */
+    private BigDecimal monthlyBudget;
     private Boolean enablePlanning;
     private Integer maxSubtasks;
     private Boolean requirePlanConfirmation;

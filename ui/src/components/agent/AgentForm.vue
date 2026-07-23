@@ -89,6 +89,7 @@ const formData = ref({
   advanced: {
     enablePlanning: false,
     maxIterations: 50,
+    monthlyBudget: null as number | null,
     maxSubtasks: 10,
     requirePlanConfirmation: false,
     enableMemory: true,
@@ -221,6 +222,7 @@ watch(
         formData.value.advanced = {
           enablePlanning: props.data.enablePlanning,
           maxIterations: props.data.maxIterations || 50,
+          monthlyBudget: props.data.monthlyBudget ?? null,
           maxSubtasks: props.data.maxSubtasks || 10,
           requirePlanConfirmation: props.data.requirePlanConfirmation,
           enableMemory: props.data.enableMemory,
@@ -288,6 +290,7 @@ function resetForm() {
     advanced: {
       enablePlanning: false,
       maxIterations: 50,
+      monthlyBudget: null,
       maxSubtasks: 10,
       requirePlanConfirmation: false,
       enableMemory: true,
@@ -378,6 +381,7 @@ async function handleSubmit() {
       hook: formData.value.tools.hook,
       enablePlanning: formData.value.advanced.enablePlanning,
       maxIterations: formData.value.advanced.maxIterations,
+      monthlyBudget: formData.value.advanced.monthlyBudget,
       maxSubtasks: formData.value.advanced.maxSubtasks,
       requirePlanConfirmation: formData.value.advanced.requirePlanConfirmation && formData.value.advanced.enableMemory,
       showToolProcess: formData.value.advanced.showToolProcess,

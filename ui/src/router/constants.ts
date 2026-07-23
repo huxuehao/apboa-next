@@ -33,6 +33,9 @@ export const RouteNames = {
   MODEL: 'Model',
   MODEL_PROVIDER_CONFIG: 'ModelProviderConfig',
 
+  // 成本中心
+  COST: 'Cost',
+
   // 提示词管理
   PROMPT: 'Prompt',
 
@@ -114,6 +117,9 @@ export const RoutePaths = {
   // 模型管理
   MODEL: 'model',
   MODEL_PROVIDER_CONFIG: '/model/:providerId/config',
+
+  // 成本中心
+  COST: 'cost',
 
   // 提示词管理
   PROMPT: 'prompt',
