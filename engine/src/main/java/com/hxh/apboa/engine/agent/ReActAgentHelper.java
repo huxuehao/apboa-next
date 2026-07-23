@@ -80,32 +80,15 @@ public class ReActAgentHelper {
      *                   SubAgentTool 挂起-唤醒冒泡到主会话界面（PendingSubConfirmRegistry）
      */
     public ReActAgent getReActAgent(AgentDefinition definition, boolean asSubAgent) {
-        // 构建reActAgent
         ReActAgent agent = getReactAgentBuilder(definition, asSubAgent).build();
-
-        // 记录构建时的会话级覆盖值（思考 "1"/"0"/"follow"、模型 modelConfigId/"follow"），
-        // 供 AguiRequestProcessor 每次 run 对比 Redis 当前值——变化则重建 agent
-        // （模型与 thinking 都在构建期固化，无法动态改）
-        AgentContext.getIfExists().ifPresent(ctx -> {
-            String threadId = ctx.getThreadId();
-            if (threadId != null && !threadId.isEmpty()) {
-                AgentMetadataStore.put(agent.getAgentId(), "builtThinkingOverride",
-                        ThinkingModeResolver.overrideKey(ThinkingModeResolver.resolveOverride(threadId)));
-                AgentMetadataStore.put(agent.getAgentId(), "builtModelOverride",
-                        SessionModelResolver.overrideKey(SessionModelResolver.resolveOverride(threadId)));
-            }
-            // 消息级模型审计：本次构建实际选定的模型（ChatModelFactory 写入 ctx 后在
-            // getModel 处即捕获，防 toolkit 阶段子智能体构建覆盖 ctx），
-            // ChatLogHook 落 meta / Adapter 下发 RUN_META 按 agentId 读取
-            AgentMetadataStore.put(agent.getAgentId(), "activeModelConfigId", ctx.getActiveModelConfigId());
-            AgentMetadataStore.put(agent.getAgentId(), "activeModelLabel", ctx.getActiveModelLabel());
-        });
-
+        registerBuildMetadata(agent);
         return agent;
     }
 
     /**
-     * 获取 ReActAgent.Builder
+     * 获取 ReActAgent.Builder（上游自动化调度经 IAgentFactory.getAgentBuilder 使用：
+     * 拿 Builder 定制后自行 build。build 后必须调 registerBuildMetadata 登记模型审计
+     * 元数据，否则 ChatLogHook 落 meta 缺 modelConfigId、成本流水不入账）
      * @param definition  agent 定义
      */
     public ReActAgent.Builder getReactAgentBuilder(AgentDefinition definition) {
@@ -114,9 +97,8 @@ public class ReActAgentHelper {
 
     /**
      * 获取 ReActAgent.Builder
-     *
      * @param definition  agent 定义
-     * @param asSubAgent 是否作为子智能体构建（剥离确认 Hook，见 getReActAgent 重载说明）
+     * @param asSubAgent 是否作为子智能体构建
      */
     public ReActAgent.Builder getReactAgentBuilder(AgentDefinition definition, boolean asSubAgent) {
         Model model = chatModelFactory.getModel(definition);
@@ -249,6 +231,29 @@ public class ReActAgentHelper {
         });
 
         return builder;
+    }
+
+    /**
+     * build 后登记构建期元数据：会话级覆盖值（思考 "1"/"0"/"follow"、模型 modelConfigId/"follow"，
+     * 供 AguiRequestProcessor 每次 run 对比 Redis 当前值——变化则重建 agent）与消息级模型审计
+     * （ChatLogHook 落 meta / 成本流水 / Adapter 下发 RUN_META 按 agentId 读取）。
+     * getReActAgent 内部已调用；走 getReactAgentBuilder 自行 build 的链路（如定时任务
+     * AgentScheduler）必须补调，否则该 run 的消息 meta 缺模型标识、成本不入账。
+     */
+    public void registerBuildMetadata(ReActAgent agent) {
+        AgentContext.getIfExists().ifPresent(ctx -> {
+            String threadId = ctx.getThreadId();
+            if (threadId != null && !threadId.isEmpty()) {
+                AgentMetadataStore.put(agent.getAgentId(), "builtThinkingOverride",
+                        ThinkingModeResolver.overrideKey(ThinkingModeResolver.resolveOverride(threadId)));
+                AgentMetadataStore.put(agent.getAgentId(), "builtModelOverride",
+                        SessionModelResolver.overrideKey(SessionModelResolver.resolveOverride(threadId)));
+            }
+            // 消息级模型审计：本次构建实际选定的模型（ChatModelFactory 写入 ctx 后在
+            // getModel 处即捕获并于构建完成时写回 ctx，防 toolkit 阶段子智能体构建覆盖）
+            AgentMetadataStore.put(agent.getAgentId(), "activeModelConfigId", ctx.getActiveModelConfigId());
+            AgentMetadataStore.put(agent.getAgentId(), "activeModelLabel", ctx.getActiveModelLabel());
+        });
     }
 
     /**

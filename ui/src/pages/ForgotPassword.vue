@@ -10,7 +10,6 @@ import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import type { FormInstance, Rule } from 'ant-design-vue/es/form'
 import { AuthContainer } from '@/components/auth'
-import { LeftOutlined } from '@ant-design/icons-vue'
 
 interface ForgotPasswordForm {
   email: string
@@ -106,20 +105,13 @@ const handleResetPassword = async () => {
 const goToLogin = () => {
   router.push('/login')
 }
+
 </script>
 
 <template>
-  <AuthContainer>
-    <!-- 返回登录 -->
-    <div class="forgot-back" @click="goToLogin">
-      <LeftOutlined />
-      <span>返回登录</span>
-    </div>
-
-    <!-- 标题区 -->
-    <h2 class="auth-card-title" style="margin-top: 16px;">重置密码</h2>
+  <AuthContainer :show-back="true" back-to="/login">
+    <h2 class="auth-card-title">重置密码</h2>
     <p class="auth-card-subtitle">通过邮箱验证重置你的密码</p>
-
     <AForm
       ref="formRef"
       :model="formState"

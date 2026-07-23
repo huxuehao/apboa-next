@@ -41,7 +41,6 @@ public class AgentDefinitionController {
 
     private final AgentDefinitionService agentDefinitionService;
     private final ModelConfigService modelConfigService;
-    private final IJobInfoMapper iJobInfoMapper;
     private final AgentStudioMapper agentStudioMapper;
     private final AgentLongTermMemoryMapper agentLongTermMemoryMapper;
     private final MessagePublisher messagePublisher;
@@ -112,13 +111,6 @@ public class AgentDefinitionController {
         vo.setUsed(agentDefinitionService.usedWithAgent(List.of(id)));
         vo.setThinkingSwitchSupported(resolveThinkingSwitchSupported(vo.getModelConfigId()));
         vo.setModelOptions(buildModelOptions(vo));
-        List<JobInfo> agent = iJobInfoMapper.selectList(
-                new LambdaQueryWrapper<JobInfo>()
-                        .eq(JobInfo::getType, "AGENT")
-                        .eq(JobInfo::getBizId, String.valueOf(id)));
-        if (agent.size() == 1) {
-            vo.setJobInfo(agent.getFirst());
-        }
         return vo;
     }
 

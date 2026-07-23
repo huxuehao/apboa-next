@@ -12,7 +12,7 @@ import { message } from 'ant-design-vue'
 import type { McpServerVO, McpToolVO } from '@/types'
 import { McpActivationStatus, McpFailureSource } from '@/types'
 import * as mcpApi from '@/api/mcp'
-import ToolDebugDrawer from '@/components/mcp/ToolDebugDrawer.vue'
+import McpDebugView from '@/components/mcp/McpDebugView.vue'
 import mcpToolAvatar from '@/assets/avatar/mcp-tool.png'
 import SimpleSwitch from '@/components/common/SimpleSwitch.vue'
 
@@ -32,6 +32,7 @@ const debugTool = ref<McpToolVO | null>(null)
 
 // 正在切换启停状态的工具
 const togglingMap = ref(new Map<string | number, boolean>())
+const confirmToggling = ref(new Set<string | number>())
 
 const readonly = computed(() => {
   return server.value?.activationStatus === McpActivationStatus.FAILED
@@ -107,10 +108,39 @@ async function handleToggleEnabled(tool: McpToolVO, checked: boolean) {
   }
 }
 
+/** 切换工具调用前是否需要人工确认（保留 psh 的 HITL 治理能力） */
+async function handleToggleNeedConfirm(tool: McpToolVO, checked: boolean) {
+  if (!server.value) return
+  confirmToggling.value.add(tool.id)
+  try {
+    const response = await mcpApi.updateToolsNeedConfirm(
+      server.value.id as string,
+      [tool.id as string],
+      checked
+    )
+    const target = tools.value.find(t => t.id === tool.id)
+    if (target) {
+      target.needConfirm = checked
+    }
+    if (response.data.data) {
+      server.value = response.data.data as McpServerVO
+    }
+    message.success('工具人工确认策略已更新')
+  } finally {
+    confirmToggling.value.delete(tool.id)
+  }
+}
+
 /** 进入工具调试 */
 function handleDebugTool(tool: McpToolVO) {
   debugTool.value = tool
   debugOpen.value = true
+}
+
+/** 关闭调试视图 */
+function handleDebugClose() {
+  debugOpen.value = false
+  debugTool.value = null
 }
 
 onMounted(() => {
@@ -129,7 +159,7 @@ onMounted(() => {
       </div>
       <h3 class="intro-title">{{ server?.name || 'MCP 工具' }} - 工具治理</h3>
       <p class="intro-desc text-secondary">
-        管理当前 MCP 服务下的工具目录，控制工具的全局可用状态。运行时只会注册"全局可用"且未消失的工具。
+        管理当前 MCP 服务下的工具目录、全局可用状态和调用前人工确认策略。运行时只会注册“全局可用”且未消失的工具。
       </p>
     </section>
 
@@ -187,17 +217,28 @@ onMounted(() => {
                 {{ tool.description || '暂无描述' }}
               </div>
               <div class="card-footer">
-                <div class="card-tags">
-                  <ATag v-if="tool.missing" color="warning" :bordered="false">已消失</ATag>
-                  <ATag v-else-if="tool.enabled" color="default" :bordered="false">全局可用</ATag>
-                  <ATag v-else color="default" :bordered="false">全局禁用</ATag>
+                <div class="footer-row">
+                  <div class="card-tags">
+                    <ATag v-if="tool.missing" color="warning" :bordered="false">已消失</ATag>
+                    <ATag v-else-if="tool.enabled" color="default" :bordered="false">全局可用</ATag>
+                    <ATag v-else color="default" :bordered="false">全局禁用</ATag>
+                  </div>
+                  <SimpleSwitch
+                    :checked="tool.enabled"
+                    :loading="togglingMap.has(tool.id)"
+                    :disabled="loading || readonly || togglingMap.has(tool.id)"
+                    @change="(checked: boolean) => handleToggleEnabled(tool, checked)"
+                  />
                 </div>
-                <SimpleSwitch
-                  :checked="tool.enabled"
-                  :loading="togglingMap.has(tool.id)"
-                  :disabled="loading || readonly || togglingMap.has(tool.id)"
-                  @change="(checked: boolean) => handleToggleEnabled(tool, checked)"
-                />
+                <div class="footer-row">
+                  <ATag :color="tool.needConfirm ? 'warning' : 'success'" :bordered="false">调用前确认</ATag>
+                  <SimpleSwitch
+                    :checked="tool.needConfirm"
+                    :loading="confirmToggling.has(tool.id)"
+                    :disabled="loading || readonly || !tool.enabled || confirmToggling.has(tool.id)"
+                    @change="(checked: boolean) => handleToggleNeedConfirm(tool, checked)"
+                  />
+                </div>
               </div>
             </div>
           </div>
@@ -205,10 +246,14 @@ onMounted(() => {
       </ASpin>
     </section>
 
-    <!-- 调试抽屉 -->
-    <ToolDebugDrawer
-      v-model:open="debugOpen"
+    <!-- psh 完整调试视图：支持工具切换、历史记录与结果回看 -->
+    <McpDebugView
+      :visible="debugOpen"
       :tool="debugTool"
+      :server="server ?? null"
+      :tools="tools"
+      @update:visible="(visible: boolean) => { debugOpen = visible }"
+      @exit="handleDebugClose"
     />
   </div>
 </template>
@@ -362,9 +407,17 @@ onMounted(() => {
 
     .card-footer {
       display: flex;
-      align-items: center;
-      justify-content: space-between;
+      flex-direction: column;
+      gap: 8px;
       padding-top: var(--spacing-xs);
+
+      .footer-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        width: 100%;
+      }
 
       .card-tags {
         flex: 1;

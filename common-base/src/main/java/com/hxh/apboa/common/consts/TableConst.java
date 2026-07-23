@@ -56,6 +56,7 @@ public class TableConst {
     public static final String LONG_TERM_MEMORY_CONFIG = "long_term_memory_config";
     public static final String AGENT_LONG_TERM_MEMORY = "agent_long_term_memory";
     public static final String SKILL_TOKEN = "skill_token";
+    public static final String IDENTITY_SIGNING_KEY = "identity_signing_key";
     public static final String CACHE = "cache";
     public static final String DATASOURCE = "datasource";
     public static final String MQ = "mq";
@@ -70,5 +71,4 @@ public class TableConst {
     public static final String WORKFLOW_PLUGIN = "workflow_plugin";
     public static final String WORKFLOW_RUN = "workflow_run";
     public static final String WORKFLOW_VERSION = "workflow_version";
-    public static final String IDENTITY_SIGNING_KEY = "identity_signing_key";
 }

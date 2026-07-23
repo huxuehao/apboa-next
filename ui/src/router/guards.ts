@@ -21,7 +21,7 @@ NProgress.configure({
  * 设置页面标题
  */
 export function setPageTitle(title?: string): void {
-  const defaultTitle = 'Apboa Next'
+  const defaultTitle = 'Apboa智能体平台'
   if (title) {
     document.title = `${title} - ${defaultTitle}`
   } else {

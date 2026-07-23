@@ -18,6 +18,7 @@ import {
   FileTextOutlined,
   ApiOutlined,
   RobotOutlined,
+  ApartmentOutlined,
   ToolOutlined,
   AppstoreOutlined,
   CloudServerOutlined,

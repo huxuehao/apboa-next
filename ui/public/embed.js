@@ -1,5 +1,5 @@
 /**
- * Apboa Next 智能体 · 网站嵌入悬浮气泡（chat bubble）
+ * Apboa 智能体 · 网站嵌入悬浮气泡（chat bubble）
  *
  * 用法：把下面一行放到你网站 </body> 之前即可：
  *   <script src="https://你的域名/embed.js" data-chat-key="你的chatKey" defer></script>

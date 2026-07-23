@@ -336,7 +336,7 @@ export function renderEmbedIdentityFlowHtml(): string {
   const ROLES = {
     biz: { label: '业务方后端', color: '#fa8c16' },
     browser: { label: '用户浏览器', color: '#1677ff' },
-    apboa: { label: 'Apboa Next 平台', color: '#52c41a' },
+    apboa: { label: 'Apboa 平台', color: '#52c41a' },
     tool: { label: '业务方 MCP/工具', color: '#722ed1' },
   } as const
   const steps: Array<{ role: keyof typeof ROLES; text: string }> = [

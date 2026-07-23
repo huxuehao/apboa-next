@@ -441,6 +441,7 @@ defineExpose({
               @sub-confirm="$emit('subConfirm', $event)"
               @interaction-submit="$emit('interactionSubmit', $event)"
               @uip-retry="$emit('uipRetry', $event)"
+              @vep-retry="$emit('vepRetry', $event)"
             />
           </div>
         </div>

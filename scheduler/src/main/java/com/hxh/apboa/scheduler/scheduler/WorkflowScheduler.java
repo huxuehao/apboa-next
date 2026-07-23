@@ -58,7 +58,7 @@ public class WorkflowScheduler extends QuartzJob {
 
             // 4. 执行工作流
             WorkflowRunService workflowRunService = getBean(WorkflowRunService.class);
-            WorkflowRunRequest request = buildRunRequest(wrapper.getInputs(), wrapper.getVariables());
+            WorkflowRunRequest request = buildRunRequest(wrapper.getParams(), wrapper.getVariables());
 
             log.info("Executing workflow, workflowId: {}, tenantId: {}, userId: {}",
                     wrapper.getBizId(), tenantId, userInfo.getId());
@@ -154,9 +154,9 @@ public class WorkflowScheduler extends QuartzJob {
     }
 
     /**
-     * 构建工作流运行请求：inputs 展平为开始节点参数，variables 透传为自定义变量覆盖
+     * 构建工作流运行请求：params 转开始节点参数，variables 透传为自定义变量覆盖
      */
-    private WorkflowRunRequest buildRunRequest(Map<String, Object> inputs, Map<String, Object> variables) {
+    private WorkflowRunRequest buildRunRequest(Map<String, Object> params, Map<String, Object> variables) {
         WorkflowRunRequest request = new WorkflowRunRequest();
         // 成本流水归因：定时触发渠道（经变量上下文下传至智能体节点记账）
         request.setChannel(SysConst.CHANNEL_SCHEDULED);

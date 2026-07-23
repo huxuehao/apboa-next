@@ -4,9 +4,6 @@ import com.hxh.apboa.common.consts.SysConst;
 import com.hxh.apboa.common.entity.*;
 import com.hxh.apboa.common.enums.SkillFileType;
 import com.hxh.apboa.engine.agui.AgentContext;
-import com.hxh.apboa.engine.hook.builtins.IConfirmationHook;
-import com.hxh.apboa.engine.skill.builtins.UserInteractionProtocolSkill;
-import com.hxh.apboa.engine.skill.builtins.VisionEnhancementProtocolSkill;
 import com.hxh.apboa.engine.tool.ToolkitFactory;
 import com.hxh.apboa.engine.workspace.skills.SearchReplaceSkill;
 import com.hxh.apboa.engine.workspace.skills.WorkspaceSkill;
@@ -55,7 +52,9 @@ public class SkillBoxFactory {
     }
 
     /**
-     * 根据技能包ID列表构建SkillBox。
+     * 根据技能包ID列表构建SkillBox（workflow Agent 节点用，清单来自节点配置勾选）。
+     * 与 agent 主链路同口径：按勾选 + enabled 过滤，内置技能（UIP/VEP）不无条件注册，
+     * 节点勾选了对应内置技能包才加载。
      *
      * @param skillPackageIds 技能包ID列表
      * @param toolkit         工具箱
@@ -65,15 +64,13 @@ public class SkillBoxFactory {
         Toolkit currentToolkit = toolkit == null ? new Toolkit() : toolkit;
         SkillBox skillBox = new SkillBox(currentToolkit);
 
-        // 注册智能体基础技能，不启用代码执行能力。
-        skillBox.registerSkill(UserInteractionProtocolSkill.getAgentSkill());
-        skillBox.registerSkill(VisionEnhancementProtocolSkill.getAgentSkill());
-
         if (skillPackageIds == null || skillPackageIds.isEmpty()) {
             return skillBox;
         }
 
-        registerSkills(skillBox, skillPackageIds, currentToolkit);
+        skillPackageService.listByIds(skillPackageIds).stream()
+                .filter(SkillPackage::getEnabled)
+                .forEach(skillPackage -> registerSkill(skillBox, skillPackage, currentToolkit));
         return skillBox;
     }
 

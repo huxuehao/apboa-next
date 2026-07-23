@@ -365,17 +365,6 @@ const openPreview = (index: number) => {
             @interaction-submit="$emit('interactionSubmit', $event)"
             @uip-retry="$emit('uipRetry', $event)"
             @vep-retry="$emit('vepRetry', $event)" />
-          <!-- 复制按钮：悬浮显现于正文下方 -->
-          <span
-            v-if="content"
-            class="msg-copy-btn msg-copy-btn--assistant"
-            :class="{ 'is-done': copied }"
-            :title="copied ? '已复制' : '复制'"
-            @click="handleCopy"
-          >
-            <CheckOutlined v-if="copied" />
-            <CopyOutlined v-else />
-          </span>
         </div>
       </div>
       <!-- footer：run 元数据（耗时/轮次/token）+ 相对时间（悬停看完整时间）+ 复制按钮，气泡外左下角 -->

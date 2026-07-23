@@ -10,6 +10,7 @@ import {
   SafetyCertificateOutlined,
   LineChartOutlined,
 } from '@ant-design/icons-vue'
+import BackButton from './BackButton.vue'
 
 interface Props {
   showBack?: boolean
@@ -71,6 +72,7 @@ const currentYear = new Date().getFullYear()
 
     <!-- 右侧表单卡片区 -->
     <div class="auth-card-area">
+      <BackButton v-if="showBack" :to="backTo" />
       <div class="auth-card">
         <slot />
       </div>

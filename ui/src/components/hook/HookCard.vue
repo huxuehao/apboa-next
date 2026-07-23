@@ -5,7 +5,7 @@
  */
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { EllipsisOutlined, LoginOutlined } from '@ant-design/icons-vue'
+import { EllipsisOutlined } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
 import hookAvatar from '@/assets/avatar/hook.png'
 import type { HookConfigVO } from '@/types'

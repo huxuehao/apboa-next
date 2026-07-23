@@ -30,8 +30,8 @@ public interface AgentDefinitionService extends IService<AgentDefinition> {
     List<String> allowFileType(Long id);
     List<ToolConfig> getEnabledToolsOfAgent(Long agentId);
     List<SkillPackage> getEnabledSkillsOfAgent(Long agentId);
-    List<Workflow> getEnabledWorkflowsOfAgent(Long agentId);
     List<McpServerToolsVO> getEnabledMcpOfAgent(Long agentId);
+    List<Workflow> getEnabledWorkflowsOfAgent(Long agentId);
 
     /**
      * 智能体绑定且启用的子智能体（轻量列：id/agentCode/name/description，

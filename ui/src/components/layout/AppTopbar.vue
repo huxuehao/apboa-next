@@ -30,7 +30,8 @@ const pageTitle = computed(() => (route.meta?.title as string) || '')
     </button>
     <span class="topbar-title">{{ pageTitle }}</span>
     <div class="flex-1"></div>
-    <UserSection />
+    <!-- 桌面端账号与租户入口已收进新侧栏；移动端仍保留快捷入口 -->
+    <UserSection v-if="isMobile" />
   </header>
 </template>
 

@@ -820,6 +820,23 @@ CREATE TABLE `tool_config` (
   PRIMARY KEY (`id`)
 ) COMMENT='工具表';
 
+DROP TABLE IF EXISTS `identity_signing_key`;
+CREATE TABLE `identity_signing_key` (
+  `id` bigint NOT NULL,
+  `kid` varchar(64) NOT NULL COMMENT '密钥标识（JWT header kid）',
+  `algorithm` varchar(16) NOT NULL DEFAULT 'RS256' COMMENT '签名算法',
+  `private_pem` text NOT NULL COMMENT '私钥（PKCS#8 PEM），绝不出库到日志/前端',
+  `public_pem` text NOT NULL COMMENT '公钥（X.509 PEM）',
+  `status` varchar(16) NOT NULL DEFAULT 'ACTIVE' COMMENT '状态: ACTIVE=签名用, RETIRING=轮换观察期仅验签, RETIRED=下线',
+  `enabled` tinyint(1) NOT NULL DEFAULT '1' COMMENT '是否可用',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `created_by` bigint DEFAULT NULL,
+  `updated_by` bigint DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_identity_signing_key_kid` (`kid`)
+) COMMENT='平台身份断言签名密钥';
+
 DROP TABLE IF EXISTS `cache`;
 CREATE TABLE `cache` (
   `id` bigint NOT NULL COMMENT 'Primary key',
@@ -837,15 +854,6 @@ CREATE TABLE `cache` (
   `last_health_check` datetime DEFAULT NULL COMMENT 'Last health check time',
   `last_check_message` varchar(500) DEFAULT NULL COMMENT 'Last health check message',
   `enabled` tinyint(1) NOT NULL DEFAULT 1 COMMENT 'Enabled',
-DROP TABLE IF EXISTS `identity_signing_key`;
-CREATE TABLE `identity_signing_key` (
-  `id` bigint NOT NULL,
-  `kid` varchar(64) NOT NULL COMMENT '密钥标识（JWT header kid）',
-  `algorithm` varchar(16) NOT NULL DEFAULT 'RS256' COMMENT '签名算法',
-  `private_pem` text NOT NULL COMMENT '私钥（PKCS#8 PEM），绝不出库到日志/前端',
-  `public_pem` text NOT NULL COMMENT '公钥（X.509 PEM）',
-  `status` varchar(16) NOT NULL DEFAULT 'ACTIVE' COMMENT '状态: ACTIVE=签名用, RETIRING=轮换观察期仅验签, RETIRED=下线',
-  `enabled` tinyint(1) NOT NULL DEFAULT '1' COMMENT '是否可用',
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   `created_by` bigint DEFAULT NULL,
@@ -1079,7 +1087,7 @@ UNIQUE KEY `uk_agent_workflow` (`tenant_id`,`agent_definition_id`,`workflow_id`)
 KEY `idx_agent_id` (`agent_definition_id`) USING BTREE,
 KEY `idx_workflow_id` (`workflow_id`) USING BTREE,
 KEY `idx_tenant_id` (`tenant_id`)
-) COMMENT='智能体与工具关联表';
+) COMMENT='智能体与工作流关联表';
 
 DROP TABLE IF EXISTS `channel`;
 CREATE TABLE `channel` (
@@ -1109,7 +1117,5 @@ CREATE TABLE `workflow_channel` (
 PRIMARY KEY (`workflow_id`, `channel_id`)
 ) COMMENT='工作流渠道绑定表';
 
-  UNIQUE KEY `uk_identity_signing_key_kid` (`kid`)
-) COMMENT='平台身份断言签名密钥';
 
 SET FOREIGN_KEY_CHECKS = 1;

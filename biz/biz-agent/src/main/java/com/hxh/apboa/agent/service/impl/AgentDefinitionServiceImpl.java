@@ -147,7 +147,8 @@ public class AgentDefinitionServiceImpl extends ServiceImpl<AgentDefinitionMappe
                     ids -> listByIds(ids).stream().map(AgentDefinition::getId).collect(Collectors.toSet())));
             vo.setKnowledgeBase(retainExisting(agentKnowledgeBaseService.getKnowledgeIds(id),
                     ids -> knowledgeBaseConfigService.listByIds(ids).stream().map(KnowledgeBaseConfig::getId).collect(Collectors.toSet())));
-            vo.setWorkflow(agentWorkflowService.getWorkflowIds(id));
+            vo.setWorkflow(retainExisting(agentWorkflowService.getWorkflowIds(id),
+                    ids -> workflowService.listByIds(ids).stream().map(Workflow::getId).collect(Collectors.toSet())));
         } else {
             vo.setAgentA2A(agentA2aService.getA2aConfigByAgentId(id));
         }
@@ -434,17 +435,6 @@ public class AgentDefinitionServiceImpl extends ServiceImpl<AgentDefinitionMappe
     }
 
     @Override
-    public List<Workflow> getEnabledWorkflowsOfAgent(Long agentId) {
-        List<Long> workflowIds = agentWorkflowService.getWorkflowIds(agentId);
-        if (!workflowIds.isEmpty()) {
-            return workflowService.list(
-                    new LambdaQueryWrapper<Workflow>()
-                            .select(Workflow::getId, Workflow::getName, Workflow::getRemark)
-                            .eq(Workflow::getEnabled, true)
-                            .eq(Workflow::getStatus, WorkflowStatus.PUBLISHED)
-                            .in(Workflow::getId, workflowIds));
-        }
-        return Collections.emptyList();
     public List<McpServerToolsVO> getEnabledMcpOfAgent(Long agentId) {
         List<McpServerToolsVO> result = new ArrayList<>();
         for (AgentMcpBindingVO binding : agentMcpServerService.getBindings(agentId)) {
@@ -467,6 +457,34 @@ public class AgentDefinitionServiceImpl extends ServiceImpl<AgentDefinitionMappe
             }
         }
         return result;
+    }
+
+    @Override
+    public List<Workflow> getEnabledWorkflowsOfAgent(Long agentId) {
+        List<Long> workflowIds = agentWorkflowService.getWorkflowIds(agentId);
+        if (!workflowIds.isEmpty()) {
+            return workflowService.list(
+                    new LambdaQueryWrapper<Workflow>()
+                            .select(Workflow::getId, Workflow::getName, Workflow::getRemark)
+                            .eq(Workflow::getEnabled, true)
+                            .eq(Workflow::getStatus, WorkflowStatus.PUBLISHED)
+                            .in(Workflow::getId, workflowIds));
+        }
+        return Collections.emptyList();
+    }
+
+    @Override
+    public List<AgentDefinition> getEnabledSubAgentsOfAgent(Long agentId) {
+        List<Long> subAgentIds = agentSubAgentService.getSubAgentIds(agentId);
+        if (subAgentIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return lambdaQuery()
+                .select(AgentDefinition::getId, AgentDefinition::getAgentCode,
+                        AgentDefinition::getName, AgentDefinition::getDescription)
+                .eq(AgentDefinition::getEnabled, true)
+                .in(AgentDefinition::getId, subAgentIds)
+                .list();
     }
 
     @Override

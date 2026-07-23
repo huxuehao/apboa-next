@@ -15,6 +15,7 @@ import com.hxh.apboa.common.vo.ChatSessionVO;
 import com.hxh.apboa.common.wrapper.AgentJobWrapper;
 import com.hxh.apboa.engine.agent.AgentBuilderWrapper;
 import com.hxh.apboa.engine.agent.IAgentFactory;
+import com.hxh.apboa.engine.agent.ReActAgentHelper;
 import com.hxh.apboa.engine.agui.AgentContext;
 import com.hxh.apboa.engine.hook.builtins.IConfirmationHook;
 import com.hxh.apboa.engine.log.ChatLogHook;
@@ -186,8 +187,8 @@ public class AgentScheduler extends QuartzJob {
         if (StringUtils.isBlank(wrapper.getBizId())) {
             return "关联智能体ID为空";
         }
-        if (wrapper.getInputs() == null || !wrapper.getInputs().containsKey("userPrompt")) {
-            return "inputs 缺少 userPrompt（发送给智能体的消息内容）";
+        if (StringUtils.isBlank(wrapper.getUserPrompt())) {
+            return "userPrompt 为空（发送给智能体的消息内容）";
         }
         return null;
     }
@@ -269,7 +270,11 @@ public class AgentScheduler extends QuartzJob {
                 .build();
         reactBuilder.toolExecutionContext(toolContext);
 
-        return reactBuilder.build();
+        ReActAgent agent = reactBuilder.build();
+        // 登记构建期模型审计元数据：ChatLogHook 落 meta 依赖 activeModelConfigId，
+        // 缺失则本次执行的 assistant 消息成本流水不入账
+        getBean(ReActAgentHelper.class).registerBuildMetadata(agent);
+        return agent;
     }
 
     /**
@@ -283,7 +288,7 @@ public class AgentScheduler extends QuartzJob {
     private boolean executeAgent(Agent agent, AgentJobWrapper wrapper, Long sessionId, Long tenantId,
                                  String tenantCode, Long jobId, ConfirmMode confirmMode) {
         String agentId = agent.getAgentId();
-        String userPrompt = wrapper.getInputs().get("userPrompt").toString();
+        String userPrompt = wrapper.getUserPrompt();
 
         // 设置元数据
         try {
