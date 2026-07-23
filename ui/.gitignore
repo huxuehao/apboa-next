@@ -39,3 +39,6 @@ __screenshots__/
 
 # Vite
 *.timestamp-*-*.mjs
+
+# 本地 HTTPS 开发证书（mkcert 生成，npm run cert:dev）
+.cert

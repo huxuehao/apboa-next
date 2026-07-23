@@ -13,6 +13,7 @@ import type {
   CodeLanguage,
   AuthType,
   ModelProviderType,
+  ModelCategory,
   ModelType,
   HealthStatus,
   KbType,
@@ -264,7 +265,9 @@ export interface ModelConfig extends BaseEntity {
   providerId: string
   name: string
   modelId: string
-  modelType: ModelType[]
+  /** 模型用途（LLM=对话生成 / ASR=语音识别） */
+  category?: ModelCategory
+  modelType: ModelType[] | null
   description: string
   streaming: boolean
   thinking: boolean

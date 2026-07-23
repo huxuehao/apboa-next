@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.annotation.TableField;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.hxh.apboa.common.config.mybatis.JsonNodeTypeHandler;
 import com.hxh.apboa.common.consts.TableConst;
+import com.hxh.apboa.common.enums.ModelCategory;
 import com.hxh.apboa.common.util.ExtendConfigHelper;
 import com.hxh.apboa.common.wrapper.ModelConfigWrapper;
 import com.baomidou.mybatisplus.annotation.TableName;
@@ -38,7 +39,12 @@ public class ModelConfig extends BaseTenantEntity {
     private String modelId;
 
     /**
-     * 模型类型
+     * 模型用途（LLM=对话生成 / ASR=语音识别），决定可配参数与被引用场景
+     */
+    private ModelCategory category;
+
+    /**
+     * 模型类型（LLM 的输入模态能力，仅 category=LLM 时有意义）
      */
     @TableField(typeHandler = JsonNodeTypeHandler.class)
     private JsonNode modelType;

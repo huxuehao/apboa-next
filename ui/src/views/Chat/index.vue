@@ -5,6 +5,7 @@ import { Modal, message } from 'ant-design-vue'
 import { useAccountStore, useChatStore } from '@/stores'
 import { formatSessionTitle } from '@/utils/chat/format'
 import { useAgentDetail } from '@/composables/chat/useAgentDetail'
+import { useVoiceInput, type VoiceInputState, type VoicePressAction } from '@/composables/chat/useVoiceInput'
 import { useSessions } from '@/composables/chat/useSessions'
 import { useCurrentSession } from '@/composables/chat/useCurrentSession'
 import { useChatStream } from '@/composables/chat/useChatStream'
@@ -48,6 +49,8 @@ const accountId = computed(() => accountStore.userInfo?.id)
 const enableMemory = computed(() => agentDetail.value?.enableMemory === true)
 const enablePlanning = computed(() => agentDetail.value?.enablePlanning === true)
 const showToolProcess = computed(() => agentDetail.value?.showToolProcess === true)
+// 语音输入是否可用（智能体绑定了 ASR 模型才显示麦克风）
+const voiceEnabled = computed(() => !!agentDetail.value?.asrModelConfigId)
 // 是否配置了代码执行
 const hasCodeExecutionConfig = computed(() => agentDetail.value?.codeExecutionConfigId)
 
@@ -335,6 +338,82 @@ const handleThinkingChange = (v: boolean) => {
 
 // 输入框内容
 const inputText = ref('')
+
+// 语音输入。两个入口两种语义：点击按钮=识别回填等确认；长按空格（PTT）=松手识别后自动发送
+const {
+  status: voiceStatus,
+  elapsedSeconds: voiceSeconds,
+  level: voiceLevel,
+  mode: voiceMode,
+  cancelIntent: voiceCancelIntent,
+  toggle: handleVoiceToggle,
+  start: startVoice,
+  stop: stopVoice,
+  cancel: cancelVoice,
+  setCancelIntent: setVoiceCancelIntent
+} = useVoiceInput({
+  agentId,
+  onResult: (text) => {
+    inputText.value = inputText.value ? inputText.value + text : text
+  },
+  // PTT 门卫：已绑 ASR 模型 && 输入区为空（有字时空格就是打空格）&& 非回复中
+  canPtt: () => voiceEnabled.value && !inputText.value.trim() && !isRunning.value,
+  onAutoSend: () => handleSend()
+})
+
+/** 语音输入聚合状态：单对象沿 ChatMain→Welcome/ChatInput→Toolbar 透传 */
+const voiceState = computed<VoiceInputState>(() => ({
+  enabled: voiceEnabled.value,
+  status: voiceStatus.value,
+  seconds: voiceSeconds.value,
+  level: voiceLevel.value,
+  mode: voiceMode.value,
+  cancelIntent: voiceCancelIntent.value
+}))
+
+/**
+ * 按住说话手势映射。voicePressActive 闭环首次麦克风授权的竞态：
+ * 授权弹窗会打断触摸流，用户授权完成时手指早已松开（end/cancel 先到而
+ * start 的 getUserMedia 后完成）——start 完成后发现按压已结束则立即取消，
+ * 不让录音幽灵般挂着。
+ */
+let voicePressActive = false
+/** 启动锁：getUserMedia 的几百毫秒窗口内忽略新按压，防止并发双录音与标志污染 */
+let voicePressStarting = false
+const handleVoicePress = async (action: VoicePressAction) => {
+  switch (action) {
+    case 'start':
+      // 逻辑层双保险：AI 回复中禁止按住说话（VoicePressBar 已 UI 置灰）
+      if (isRunning.value || voicePressStarting) {
+        return
+      }
+      voicePressActive = true
+      voicePressStarting = true
+      try {
+        await startVoice('press')
+      } finally {
+        voicePressStarting = false
+      }
+      if (!voicePressActive) {
+        cancelVoice()
+      }
+      break
+    case 'end':
+      voicePressActive = false
+      stopVoice()
+      break
+    case 'cancel':
+      voicePressActive = false
+      cancelVoice()
+      break
+    case 'intent-on':
+      setVoiceCancelIntent(true)
+      break
+    case 'intent-off':
+      setVoiceCancelIntent(false)
+      break
+  }
+}
 
 // 记录最近一次流式消息的 ID，用于 DOM key 桥接，避免流式→保存切换时的闪烁
 const lastStreamingKey = ref<string | null>(null)
@@ -916,6 +995,9 @@ watch(isRunning, (running) => {
       :has-more-history="hasMoreHistory"
       :history-loading="historyLoading"
       :current-plan="currentPlan"
+      :voice-state="voiceState"
+      @voice-toggle="handleVoiceToggle"
+      @voice-press="handleVoicePress"
       @update:input-value="inputText = $event"
       @update:uploaded-files="uploadedFiles = $event"
       @memory="handleMemoryChange"

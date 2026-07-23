@@ -60,6 +60,7 @@ const formData = ref({
   },
   model: {
     modelConfigId: '',
+    asrModelConfigId: null as string | null,
     modelParamsOverride: null as Record<string, unknown> | null,
     systemPromptTemplateId: '',
     followTemplate: true,
@@ -187,6 +188,7 @@ watch(
         loadAvatar(String(props.data.id))
         formData.value.model = {
           modelConfigId: props.data.modelConfigId,
+          asrModelConfigId: props.data.asrModelConfigId || null,
           modelParamsOverride: props.data.modelParamsOverride || null,
           systemPromptTemplateId: props.data.systemPromptTemplateId,
           followTemplate: props.data.followTemplate,
@@ -249,6 +251,7 @@ function resetForm() {
     },
     model: {
       modelConfigId: '',
+      asrModelConfigId: null,
       modelParamsOverride: null,
       systemPromptTemplateId: '',
       followTemplate: true,
@@ -340,6 +343,7 @@ async function handleSubmit() {
       commonQuestions: formData.value.basic.commonQuestions || [],
       commonQuestionsPinned: formData.value.basic.commonQuestionsPinned !== false,
       modelConfigId: formData.value.model.modelConfigId,
+      asrModelConfigId: formData.value.model.asrModelConfigId || null,
       modelParamsOverride: formData.value.model.modelParamsOverride,
       systemPromptTemplateId: formData.value.model.systemPromptTemplateId,
       followTemplate: formData.value.model.followTemplate,

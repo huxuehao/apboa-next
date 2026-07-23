@@ -12,12 +12,14 @@ import TokenStepSlider from '@/components/model/TokenStepSlider.vue'
 import * as modelApi from '@/api/model'
 import * as promptApi from '@/api/prompt'
 import type { ModelProviderVO, ModelConfigVO, SystemPromptTemplateVO } from '@/types'
+import { ModelCategory } from '@/types'
 /**
  * Props定义
  */
 const props = defineProps<{
   modelValue: {
     modelConfigId: string
+    asrModelConfigId: string | null
     modelParamsOverride: Record<string, unknown> | null
     systemPromptTemplateId: string
     followTemplate: boolean
@@ -67,31 +69,88 @@ const formData = computed({
   set: (val) => emit('update:modelValue', val)
 })
 
+/** 对话模型（排除语音识别用途） */
+const llmModels = computed(() => allModels.value.filter(m => m.category !== ModelCategory.ASR))
+
+/** 语音识别模型 */
+const asrModels = computed(() => allModels.value.filter(m => m.category === ModelCategory.ASR))
+
 /**
- * 模型提供商选项
+ * 模型提供商选项（仅显示有对话模型的供应商；模型列表未返回前先显示全部避免闪空态）
  */
 const providerOptions = computed(() => {
-  return modelProviders.value.map(p => ({
+  const providers = allModels.value.length === 0
+    ? modelProviders.value
+    : modelProviders.value.filter(p => llmModels.value.some(m => String(m.providerId) === String(p.id)))
+  return providers.map(p => ({
     label: p.name,
     value: p.id
   }))
 })
 
 /**
- * 当前提供商的模型列表
+ * 当前提供商的对话模型列表
  */
 const currentModels = computed(() => {
   if (!selectedProviderId.value) {
-    const model = allModels.value.filter(p => p.id === formData.value.modelConfigId)[0] || null
+    const model = llmModels.value.filter(p => p.id === formData.value.modelConfigId)[0] || null
     if (model) {
       selectedProviderId.value = model.providerId
     } else {
-      selectedProviderId.value = allModels.value[0]?.providerId || ''
+      selectedProviderId.value = llmModels.value[0]?.providerId || ''
     }
     return []
   }
-  return allModels.value.filter(m => m.providerId === selectedProviderId.value)
+  return llmModels.value.filter(m => m.providerId === selectedProviderId.value)
 })
+
+/**
+ * 语音识别供应商选项：「不启用」+ 有 ASR 模型的供应商（交互与上方对话模型一致）
+ */
+const asrProviderOptions = computed(() => {
+  const opts = modelProviders.value
+    .filter(p => asrModels.value.some(m => String(m.providerId) === String(p.id)))
+    .map(p => ({ label: p.name, value: String(p.id) }))
+  return [{ label: '不启用', value: '' }, ...opts]
+})
+
+/** 语音识别选中的供应商（''=不启用，null=待初始化） */
+const asrSelectedProviderKey = ref<string | null>(null)
+
+/**
+ * 回显定位：模型列表与绑定值任一到达都重算——已绑定则选中绑定模型所在供应商分组
+ * （列表与父组件回填的先后不定，找到绑定即覆盖定位；未绑定仅做一次「不启用」初始化，
+ * 不能放在 currentAsrModels 里懒初始化：模板中它被 v-if 挡住，未初始化时永远不会被求值）
+ */
+watch(
+  [asrModels, () => formData.value.asrModelConfigId],
+  ([models, boundId]) => {
+    const bound = models.find(m => String(m.id) === String(boundId ?? ''))
+    if (bound) {
+      asrSelectedProviderKey.value = String(bound.providerId)
+    } else if (asrSelectedProviderKey.value === null && allModels.value.length > 0) {
+      asrSelectedProviderKey.value = ''
+    }
+  },
+  { immediate: true }
+)
+
+/**
+ * 当前供应商的语音识别模型列表
+ */
+const currentAsrModels = computed(() => {
+  if (!asrSelectedProviderKey.value) return []
+  return asrModels.value.filter(m => String(m.providerId) === asrSelectedProviderKey.value)
+})
+
+/**
+ * 语音识别供应商切换：选「不启用」时清空绑定
+ */
+function handleAsrProviderChange(value: string | number) {
+  if (value === '') {
+    formData.value.asrModelConfigId = null
+  }
+}
 
 /**
  * 提示词分类选项
@@ -125,7 +184,7 @@ const currentPrompts = computed(() => {
  */
 const rules = {
   modelConfigId: [
-    { required: true, message: '请选择模型配置', trigger: 'blur' }
+    { required: true, message: '请选择对话生成模型', trigger: 'blur' }
   ],
   systemPromptTemplateId: [
     { required: true, message: '请选择系统提示词模板', trigger: 'blur' }
@@ -324,7 +383,7 @@ defineExpose({
 <template>
   <ApboaSpin :spinning="loading">
     <AForm ref="formRef" :model="formData" :rules="rules" layout="vertical">
-      <AFormItem label="模型配置" name="modelConfigId" required>
+      <AFormItem label="对话生成模型" name="modelConfigId" required>
         <template v-if="providerOptions?.length > 0">
           <div class="mb-md">
             <ASegmented
@@ -481,6 +540,36 @@ defineExpose({
           </AFormItem>
         </div>
       </div>
+
+      <AFormItem label="语音识别模型">
+        <div class="mb-md">
+          <ASegmented
+            v-model:value="asrSelectedProviderKey"
+            :options="asrProviderOptions"
+            style="margin-bottom: 12px; background-color: var(--color-bg)"
+            @change="handleAsrProviderChange"
+          />
+        </div>
+        <ARadioGroup v-if="asrSelectedProviderKey" v-model:value="formData.asrModelConfigId" style="width: 100%">
+          <div class="model-grid" v-if="currentAsrModels?.length > 0">
+            <ARadio
+              v-for="model in currentAsrModels"
+              :key="model.id"
+              :value="model.id"
+              class="model-radio"
+            >
+              <div class="model-info">
+                <div class="model-name">{{ model.name }}</div>
+                <div class="model-desc text-placeholder text-xs">{{ model.description }}</div>
+              </div>
+            </ARadio>
+          </div>
+          <div v-else class="text-placeholder mt-xs">该供应商下暂无语音识别模型</div>
+        </ARadioGroup>
+        <div v-else class="text-placeholder text-xs mt-xs">
+          不启用语音输入；在模型配置中创建「语音识别」用途的模型后可在此绑定
+        </div>
+      </AFormItem>
 
       <AFormItem label="系统提示词模板" name="systemPromptTemplateId" required>
         <template v-if="promptCategoryOptions?.length > 0">

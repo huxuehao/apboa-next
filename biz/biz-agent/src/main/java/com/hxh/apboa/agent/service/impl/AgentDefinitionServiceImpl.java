@@ -11,6 +11,7 @@ import com.hxh.apboa.common.cluster.core.MessagePublisher;
 import com.hxh.apboa.common.consts.RedisChannelTopic;
 import com.hxh.apboa.common.entity.*;
 import com.hxh.apboa.common.enums.AgentType;
+import com.hxh.apboa.common.enums.ModelCategory;
 import com.hxh.apboa.common.enums.ModelType;
 import com.hxh.apboa.common.enums.workflow.WorkflowStatus;
 import com.hxh.apboa.common.util.BeanUtils;
@@ -108,6 +109,7 @@ public class AgentDefinitionServiceImpl extends ServiceImpl<AgentDefinitionMappe
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Boolean saveAgentDefinition(AgentDefinitionVO vo) {
+        validateAsrModelConfig(vo.getAsrModelConfigId());
         AgentDefinition agentDefinition = BeanUtils.copy(vo, AgentDefinition.class);
         save(agentDefinition);
         vo.setId(agentDefinition.getId());
@@ -125,6 +127,7 @@ public class AgentDefinitionServiceImpl extends ServiceImpl<AgentDefinitionMappe
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Boolean updateAgentDefinition(AgentDefinitionVO vo) {
+        validateAsrModelConfig(vo.getAsrModelConfigId());
         AgentDefinition oldAgent = getById(vo.getId());
         updateById(BeanUtils.copy(vo, AgentDefinition.class));
 
@@ -146,6 +149,12 @@ public class AgentDefinitionServiceImpl extends ServiceImpl<AgentDefinitionMappe
 
             return true;
         }
+
+        // updateById 忽略 null 字段，ASR 绑定是可清空字段，照 updateAvatar 先例显式 set（null=解绑）
+        lambdaUpdate()
+                .eq(AgentDefinition::getId, vo.getId())
+                .set(AgentDefinition::getAsrModelConfigId, vo.getAsrModelConfigId())
+                .update();
 
         saveSubItems(vo);
 
@@ -346,6 +355,22 @@ public class AgentDefinitionServiceImpl extends ServiceImpl<AgentDefinitionMappe
                 .eq(AgentDefinition::getId, id)
                 .set(AgentDefinition::getAvatar, (avatar == null || avatar.isEmpty()) ? null : avatar)
                 .update();
+    }
+
+    /**
+     * 校验语音识别模型绑定：必须指向存在、启用、且用途为 ASR 的模型配置
+     */
+    private void validateAsrModelConfig(Long asrModelConfigId) {
+        if (asrModelConfigId == null) {
+            return;
+        }
+        ModelConfig modelConfig = modelConfigService.getById(asrModelConfigId);
+        if (modelConfig == null || !modelConfig.getEnabled()) {
+            throw new RuntimeException("语音识别模型不存在或已禁用");
+        }
+        if (modelConfig.getCategory() != ModelCategory.ASR) {
+            throw new RuntimeException("所选模型的用途不是语音识别");
+        }
     }
 
     private List<String> parseModelType(JsonNode modelTypeJ) {

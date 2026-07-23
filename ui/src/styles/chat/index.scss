@@ -670,14 +670,16 @@ $small-mobile-breakpoint: 375px;
 }
 
 .chat-main-input-wrap {
-  padding: 0 $chat-main-padding-h;
+  /* 桌面端底部留白（原由「AI 生成」声明行撑起，该行删除后补回） */
+  padding: 0 $chat-main-padding-h 16px;
   flex-shrink: 0;
   //border-top: 1px solid var(--color-border-extra-light);
 
-  /* 移动端适配：底部固定输入区域 */
+  /* 移动端适配：底部固定输入区域。
+     安全区避让由 .chat-page 统一处理（页面级已加 safe-area-bottom），
+     此处不再叠加——双层 padding 曾造成输入框下方约两倍 Home 条高度的空白 */
   @media (max-width: $mobile-breakpoint) {
     padding: 0 var(--spacing-sm);
-    padding-bottom: var(--safe-area-bottom);
     background-color: $chat-bg-main;
   }
 }
@@ -780,20 +782,29 @@ $small-mobile-breakpoint: 375px;
   }
 }
 
-.chat-welcome {
+/* 欢迎态外层：占满 header 之外的剩余高度，内容超高时整体可滚动 */
+.chat-welcome-container {
   flex: 1;
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.chat-welcome {
+  /* margin auto 垂直居中：无头像/常用问题的少内容态也真正居中；
+     内容超高时 margin 归零退化为顶部对齐可滚动（flex center 会裁掉顶部内容） */
+  margin: auto 0;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: 200px $chat-main-padding-h;
+  padding: var(--spacing-xl) $chat-main-padding-h;
   text-align: center;
   min-width: 0;
 
-  /* 移动端适配：顶部留白收紧，把垂直空间让给内容与输入框 */
+  /* 移动端适配：留白收紧；垂直居中与桌面端一致（margin auto），内容超高时自动退化为顶部对齐可滚动 */
   @media (max-width: $mobile-breakpoint) {
     padding: var(--spacing-xl) var(--spacing-md);
-    justify-content: flex-start;
     padding-top: 24px;
   }
 
@@ -1251,6 +1262,54 @@ $small-mobile-breakpoint: 375px;
   }
 
   .confirm-mode-option-desc {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-secondary);
+  }
+}
+
+/* 工具栏开关菜单（记忆/思考）：结构同授权模式菜单，菜单项自解释
+   （标题+行为说明+当前项选中），消除移动端对 hover tooltip 的信息依赖 */
+.toolbar-toggle-menu {
+  .toolbar-toggle-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 2px 0;
+  }
+
+  .toolbar-toggle-option-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    font-size: 14px;
+    flex-shrink: 0;
+
+    &.is-on {
+      color: #2f54eb;
+      background: rgba(47, 84, 235, 0.1);
+    }
+    &.is-off {
+      color: var(--color-text-secondary);
+      background: rgba(0, 0, 0, 0.05);
+    }
+  }
+
+  .toolbar-toggle-option-text {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.4;
+  }
+
+  .toolbar-toggle-option-label {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-primary);
+    font-weight: 500;
+  }
+
+  .toolbar-toggle-option-desc {
     font-size: var(--font-size-xs);
     color: var(--color-text-secondary);
   }

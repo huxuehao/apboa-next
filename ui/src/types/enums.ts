@@ -76,7 +76,16 @@ export enum ModelProviderType {
 }
 
 /**
- * 模型类型
+ * 模型用途（单选）：LLM=对话生成 / ASR=语音识别。
+ * 与 ModelType（LLM 输入模态能力，多选）是正交维度。
+ */
+export enum ModelCategory {
+  LLM = 'LLM',
+  ASR = 'ASR'
+}
+
+/**
+ * 模型类型（LLM 的输入模态能力，仅 category=LLM 时有意义）
  */
 export enum ModelType {
   CHAT = 'CHAT',

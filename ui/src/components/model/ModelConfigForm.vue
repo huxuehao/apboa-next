@@ -8,7 +8,7 @@ import { ref, watch, computed, h } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import { EyeOutlined } from '@ant-design/icons-vue'
 import type { ModelConfigVO, ModelConfig, ModelProviderVO } from '@/types'
-import { ModelType, ModelProviderType } from '@/types'
+import { ModelCategory, ModelType, ModelProviderType } from '@/types'
 import * as modelApi from '@/api/model'
 import ExtendConfigEditor, { type ExtendConfigData } from './ExtendConfigEditor.vue'
 import TokenStepSlider from './TokenStepSlider.vue'
@@ -36,6 +36,7 @@ const loading = ref<boolean>(false)
 
 const formData = ref<{
   used?: string[]
+  category: ModelCategory
   name: string
   modelId: string
   modelType: ModelType[]
@@ -51,6 +52,7 @@ const formData = ref<{
   seed: string
   extendConfig: ExtendConfigData | null
 }>({
+  category: ModelCategory.LLM,
   name: '',
   modelId: '',
   modelType: [ModelType.CHAT],
@@ -69,8 +71,26 @@ const formData = ref<{
 
 const isEdit = computed(() => !!props.data?.id)
 
+/** 是否语音识别用途（隐藏 LLM 专属区块与校验） */
+const isAsr = computed(() => formData.value.category === ModelCategory.ASR)
+
 /**
- * 模型类型选项
+ * 模型用途选项（单选，编辑时不可改：已被 agent 绑定的用途变更会造成引用错乱）
+ */
+const categoryOptions = [
+  { label: '对话生成', value: ModelCategory.LLM },
+  { label: '语音识别', value: ModelCategory.ASR }
+]
+
+/**
+ * 用途切换时清掉另一形态的校验残留
+ */
+function handleCategoryChange() {
+  formRef.value?.clearValidate()
+}
+
+/**
+ * 模型类型选项（LLM 输入模态能力）
  */
 const modelTypeOptions = [
   { label: '文本模型', value: ModelType.CHAT },
@@ -87,9 +107,11 @@ watch(
         const ec = props.data.extendConfig as ExtendConfigData | null
         formData.value = {
           used: props.data.used,
+          category: props.data.category || ModelCategory.LLM,
           name: props.data.name,
           modelId: props.data.modelId,
-          modelType: Array.isArray(props.data.modelType) ? props.data.modelType : [props.data.modelType],
+          // ASR 模型的 modelType 为 null，回填成空数组避免 [null]
+          modelType: Array.isArray(props.data.modelType) ? props.data.modelType : (props.data.modelType ? [props.data.modelType] : []),
           description: props.data.description,
           streaming: props.data.streaming,
           thinking: props.data.thinking,
@@ -110,9 +132,9 @@ watch(
 )
 
 /**
- * 表单验证规则
+ * 表单验证规则：基础字段两种用途通用，LLM 专属参数仅在对话生成用途下校验
  */
-const rules = {
+const baseRules = {
   name: [
     { required: true, message: '请输入名称', trigger: 'blur' },
     { max: 100, message: '名称长度不能超过100个字符', trigger: 'blur' }
@@ -121,12 +143,15 @@ const rules = {
     { required: true, message: '请输入模型ID', trigger: 'blur' },
     { max: 100, message: '模型ID长度不能超过100个字符', trigger: 'blur' }
   ],
+  description: [
+    { required: true, message: '请输入模型描述', trigger: 'blur' },
+    { max: 300, message: '描述长度不能超过300个字符', trigger: 'blur' }
+  ]
+}
+
+const llmRules = {
   modelType: [
     { required: true, type: 'array', min: 1, message: '请至少选择一个模型类型', trigger: 'change' }
-  ],
-  description: [
-    { required: true, message: '请选择模型类型', trigger: 'blur' },
-    { max: 300, message: '描述长度不能超过300个字符', trigger: 'blur' }
   ],
   contextWindow: [
     { required: true, message: '请输入上下文窗口大小', trigger: 'blur' }
@@ -148,11 +173,14 @@ const rules = {
   ]
 }
 
+const rules = computed(() => (isAsr.value ? baseRules : { ...baseRules, ...llmRules }))
+
 /**
  * 重置表单
  */
 function resetForm() {
   formData.value = {
+    category: ModelCategory.LLM,
     name: '',
     modelId: '',
     modelType: [ModelType.CHAT],
@@ -179,23 +207,34 @@ async function handleSubmit() {
     await formRef.value?.validate()
     loading.value = true
 
-    const entity: ModelConfig = {
-      providerId: props.providerId,
-      name: formData.value.name,
-      modelId: formData.value.modelId,
-      modelType: formData.value.modelType,
-      description: formData.value.description,
-      streaming: formData.value.streaming,
-      thinking: formData.value.thinking,
-      contextWindow: formData.value.contextWindow,
-      maxTokens: formData.value.maxTokens,
-      temperature: formData.value.temperature,
-      topP: formData.value.topP,
-      topK: formData.value.topK,
-      repeatPenalty: formData.value.repeatPenalty,
-      seed: formData.value.seed,
-      extendConfig: formData.value.extendConfig || undefined
-    } as ModelConfig
+    // 语音识别用途只保留基础信息，LLM 生成参数与模态类型一概不提交
+    const entity: ModelConfig = (isAsr.value
+      ? {
+          providerId: props.providerId,
+          category: formData.value.category,
+          name: formData.value.name,
+          modelId: formData.value.modelId,
+          modelType: null,
+          description: formData.value.description
+        }
+      : {
+          providerId: props.providerId,
+          category: formData.value.category,
+          name: formData.value.name,
+          modelId: formData.value.modelId,
+          modelType: formData.value.modelType,
+          description: formData.value.description,
+          streaming: formData.value.streaming,
+          thinking: formData.value.thinking,
+          contextWindow: formData.value.contextWindow,
+          maxTokens: formData.value.maxTokens,
+          temperature: formData.value.temperature,
+          topP: formData.value.topP,
+          topK: formData.value.topK,
+          repeatPenalty: formData.value.repeatPenalty,
+          seed: formData.value.seed,
+          extendConfig: formData.value.extendConfig || undefined
+        }) as ModelConfig
 
     if (isEdit.value && props.data) {
       entity.id = props.data.id as string
@@ -291,6 +330,18 @@ async function handleViewProvider() {
           </div>
         </AFormItem>
         <div class="section-title">基础信息</div>
+        <AFormItem label="模型用途" name="category">
+          <ASegmented
+            v-model:value="formData.category"
+            :options="categoryOptions"
+            :disabled="isEdit"
+            style="background-color: var(--color-bg)"
+            @change="handleCategoryChange"
+          />
+          <div v-if="isEdit" class="text-placeholder text-xs mt-xs">
+            用途创建后不可修改
+          </div>
+        </AFormItem>
         <AFormItem label="名称" name="name">
           <AInput v-model:value="formData.name" placeholder="请输入模型名称">
             <template #suffix>
@@ -307,7 +358,7 @@ async function handleViewProvider() {
           <AInput v-model:value="formData.modelId" placeholder="请输入模型ID，如: gpt-4" />
         </AFormItem>
 
-        <AFormItem label="模型类型" name="modelType">
+        <AFormItem v-if="!isAsr" label="模型类型" name="modelType">
           <ASelect
             v-model:value="formData.modelType"
             mode="multiple"
@@ -328,7 +379,7 @@ async function handleViewProvider() {
         </AFormItem>
       </div>
 
-      <div class="form-section">
+      <div v-if="!isAsr" class="form-section">
         <div class="section-title">功能开关</div>
 
         <ARow :gutter="24">
@@ -346,7 +397,7 @@ async function handleViewProvider() {
         </ARow>
       </div>
 
-      <div class="form-section">
+      <div v-if="!isAsr" class="form-section">
         <div class="section-title">参数配置</div>
 
         <AFormItem label="上下文窗口" name="contextWindow">
@@ -441,7 +492,7 @@ async function handleViewProvider() {
         </AFormItem>
       </div>
 
-      <div class="form-section">
+      <div v-if="!isAsr" class="form-section">
         <div class="section-title">扩展配置</div>
         <AFormItem label="">
           <ExtendConfigEditor

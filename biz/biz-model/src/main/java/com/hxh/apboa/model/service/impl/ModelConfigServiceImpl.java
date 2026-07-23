@@ -97,7 +97,8 @@ public class ModelConfigServiceImpl extends ServiceImpl<ModelConfigMapper, Model
 
         String subSql = systemPromptId.stream().map(String::valueOf).collect(Collectors.joining(","));
 
-        String sql = String.format("SELECT * FROM %s WHERE model_config_id IN (%s)", TableConst.AGENT, subSql);
+        // 聊天模型或语音识别模型任一引用都算「被智能体使用」；OR 必须括号包住，后面还要 AND 租户过滤
+        String sql = String.format("SELECT * FROM %s WHERE (model_config_id IN (%s) OR asr_model_config_id IN (%s))", TableConst.AGENT, subSql, subSql);
         // 添加租户过滤（JdbcTemplate 绕过 MyBatis-Plus 拦截器）
         if (TenantUtils.getCurrentTenantId() != null) {
             sql += " AND tenant_id = " + TenantUtils.getCurrentTenantId();

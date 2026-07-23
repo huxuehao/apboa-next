@@ -2,6 +2,7 @@ package com.hxh.apboa.common.vo;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.hxh.apboa.common.config.SerializableEnable;
+import com.hxh.apboa.common.enums.ModelCategory;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
@@ -20,6 +21,7 @@ public class ModelConfigVO implements SerializableEnable {
     private Long providerId;
     private String name;
     private String modelId;
+    private ModelCategory category;
     private JsonNode modelType;
     private String description;
     private Boolean streaming;

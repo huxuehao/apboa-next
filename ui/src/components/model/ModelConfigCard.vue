@@ -16,7 +16,7 @@ import {
 import { getProviderLogo } from '@/utils/providerLogo'
 import modelAvatar from '@/assets/avatar/model.png'
 import type { ModelConfigVO } from '@/types'
-import { ModelConnectivityStatus } from '@/types'
+import { ModelCategory, ModelConnectivityStatus } from '@/types'
 import {
   createDeleteItem,
   createDivider,
@@ -51,6 +51,9 @@ const modelTypeLabels: Record<string, string> = {
   AUDIO: '音频',
   VIDEO: '视频'
 }
+
+/** 语音识别用途卡片：生成参数与模态标签无意义，改为显示用途标识 */
+const isAsrCard = computed(() => props.data.category === ModelCategory.ASR)
 
 /**
  * 格式化更新时间
@@ -197,30 +200,40 @@ const formattedTemperature = computed(() => {
       {{ data.description || '暂无描述' }}
     </div>
 
-    <!-- 参数精简行 -->
-    <div class="card-params flex items-center gap-sm text-xs text-placeholder">
+    <!-- 参数精简行（语音识别用途无生成参数） -->
+    <div v-if="!isAsrCard" class="card-params flex items-center gap-sm text-xs text-placeholder">
       <span>Context: {{ data.contextWindow }}</span>
       <span class="param-divider">|</span>
       <span>Tokens: {{ data.maxTokens }}</span>
       <span class="param-divider">|</span>
       <span>T: {{ formattedTemperature }}</span>
     </div>
+    <div v-else class="card-params flex items-center gap-sm text-xs text-placeholder">
+      <span>音频转文字，不参与对话生成</span>
+    </div>
 
     <div class="card-footer flex items-center justify-between">
-      <div class="card-tags flex items-center gap-xs">
-        <ATag :bordered="false">
-            {{ data.streaming ? '流式' : '非流式' }}
-        </ATag>
-        <ATag :bordered="false">
-            {{ data.thinking ? '思考' : '非思考' }}
-        </ATag>
-      </div>
-      <div class="card-tags flex items-center gap-xs">
-        <ATag v-for="t in (Array.isArray(data.modelType) ? data.modelType : [data.modelType])"
-              :key="t" color="default" class="tag" :bordered="false">
-          {{ modelTypeLabels[t] || t }}
-        </ATag>
-      </div>
+      <template v-if="!isAsrCard">
+        <div class="card-tags flex items-center gap-xs">
+          <ATag :bordered="false">
+              {{ data.streaming ? '流式' : '非流式' }}
+          </ATag>
+          <ATag :bordered="false">
+              {{ data.thinking ? '思考' : '非思考' }}
+          </ATag>
+        </div>
+        <div class="card-tags flex items-center gap-xs">
+          <ATag v-for="t in (Array.isArray(data.modelType) ? data.modelType : (data.modelType ? [data.modelType] : []))"
+                :key="t" color="default" class="tag" :bordered="false">
+            {{ modelTypeLabels[t] || t }}
+          </ATag>
+        </div>
+      </template>
+      <template v-else>
+        <div class="card-tags flex items-center gap-xs">
+          <ATag color="blue" :bordered="false">语音识别</ATag>
+        </div>
+      </template>
     </div>
   </div>
 </template>

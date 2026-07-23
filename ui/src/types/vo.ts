@@ -9,6 +9,7 @@ import type {
   HookType,
   ToolType,
   AuthType,
+  ModelCategory,
   ModelType,
   HealthStatus,
   KbType,
@@ -122,6 +123,8 @@ export interface AgentDefinitionVO {
   /** 常用问题是否在对话中常驻显示（DB 默认 1） */
   commonQuestionsPinned?: boolean
   modelConfigId: string
+  /** 语音识别模型配置ID（null=不启用语音输入） */
+  asrModelConfigId?: string | null
   modelParamsOverride: Record<string, unknown> | null
   skill: string[]
   workflow: string[]
@@ -291,7 +294,9 @@ export interface ModelConfigVO {
   providerId: string
   name: string
   modelId: string
-  modelType: ModelType[]
+  /** 模型用途（LLM=对话生成 / ASR=语音识别） */
+  category?: ModelCategory
+  modelType: ModelType[] | null
   description: string
   streaming: boolean
   thinking: boolean

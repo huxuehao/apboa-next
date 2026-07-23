@@ -36,6 +36,26 @@ public class SysConst {
      */
     public static final String SINGLE_FILE_MAX_SIZE = "5";
 
+    /**
+     * 语音输入单次最长时长（单位：秒）
+     */
+    public static final String ASR_MAX_DURATION = "60";
+
+    /**
+     * 语音识别输出繁体转简体（Qwen3-ASR 自动语种检测偶发繁体方向，模型与接口层无简繁参数）
+     */
+    public static final String ASR_TRADITIONAL_TO_SIMPLE = "true";
+
+    /**
+     * 语音帧能量门限（dBFS，高于此值的帧视为语音；正常说话约 -30~-10，安静底噪约 -60~-45）
+     */
+    public static final String ASR_SILENCE_DB = "-40";
+
+    /**
+     * 最小语音帧占比（百分比整数，低于此比例判定为静音录音、拒绝识别——生成式 ASR 对静音会输出幻觉文本）
+     */
+    public static final String ASR_MIN_VOICE_RATIO = "3";
+
     public static final String ALLOW_IMAGE_FILE_TYPE = "png,jpeg,png,gif,webp";
     public static final String ALLOW_AUDIO_FILE_TYPE = "mp3,wav,mpeg";
     public static final String ALLOW_VIDEO_FILE_TYPE = "mp4,mpeg";

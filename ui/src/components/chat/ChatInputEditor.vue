@@ -651,7 +651,8 @@ const triggerMention = async () => {
  */
 defineExpose({
   triggerMention,
-  focus: () => editorRef.value?.focus()
+  /** options 透传给 DOM focus（preventScroll 用于抑制 iOS 程序化聚焦的激进滚动） */
+  focus: (options?: FocusOptions) => editorRef.value?.focus(options)
 })
 
 // 监听外部 modelValue 变化，重新渲染 editor

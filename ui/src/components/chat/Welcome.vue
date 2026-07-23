@@ -26,6 +26,7 @@ defineProps<{
   allowUploadFileType?: string[]
   sessionId?: string | null
   mentionAllowed?: boolean
+  voiceState?: import('@/composables/chat/useVoiceInput').VoiceInputState
 }>()
 
 defineEmits<{
@@ -37,6 +38,8 @@ defineEmits<{
   (e: 'toolProcess', value: boolean): void
   (e: 'confirmMode', value: import('@/api/chatSession').ConfirmMode): void
   (e: 'thinking', value: boolean): void
+  (e: 'voiceToggle'): void
+  (e: 'voicePress', action: import('@/composables/chat/useVoiceInput').VoicePressAction): void
   (e: 'newSession'): void
   (e: 'quickQuestion', question: string): void
 }>()
@@ -88,6 +91,7 @@ defineEmits<{
         :confirm-mode="confirmMode"
         :thinking-supported="thinkingSupported"
         :thinking-active="thinkingActive"
+        :voice-state="voiceState"
         :session-id="sessionId"
         :mention-allowed="mentionAllowed"
         @update:model-value="$emit('update:inputValue', $event)"
@@ -97,6 +101,8 @@ defineEmits<{
         @toolProcess="$emit('toolProcess', $event)"
         @confirm-mode="$emit('confirmMode', $event)"
         @thinking="$emit('thinking', $event)"
+        @voice-toggle="$emit('voiceToggle')"
+        @voice-press="$emit('voicePress', $event)"
         @send="$emit('send')"
         @new-session="$emit('newSession')"
       />

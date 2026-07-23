@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {ref, watch, onMounted} from 'vue'
+import {ref, watch, onMounted, onBeforeUnmount} from 'vue'
 import {
   MenuOutlined,
   FolderOutlined,
@@ -58,6 +58,8 @@ const props = defineProps<{
   historyLoading?: boolean
   /** 当前计划信息 */
   currentPlan?: PlanInfo | null
+  /** 语音输入聚合状态 */
+  voiceState?: import('@/composables/chat/useVoiceInput').VoiceInputState
 }>()
 
 const emit = defineEmits<{
@@ -73,6 +75,8 @@ const emit = defineEmits<{
   (e: 'toolProcess', value: boolean): void
   (e: 'confirmMode', value: import('@/api/chatSession').ConfirmMode): void
   (e: 'thinking', value: boolean): void
+  (e: 'voiceToggle'): void
+  (e: 'voicePress', action: import('@/composables/chat/useVoiceInput').VoicePressAction): void
   (e: 'toggleSidebar'): void
   (e: 'toggleWorkspace'): void
   /** 触发加载更多历史消息 */
@@ -102,8 +106,14 @@ const savedScrollTop = ref(0)
 const workspaceFilePreviewVisible = ref(false)
 const workspaceFilePreviewNode = ref<FlatFileItem | null>(null)
 
+// 底部锚定内容观察点（滚动容器的直接子包裹）
+const messagesContentRef = ref<HTMLElement | null>(null)
+
 // 标志位：区分程序化滚动与用户手动滚动，防止 scrollToBottom 触发的 scroll 事件错误更新 shouldAutoScroll
 let programmaticScrolling = false
+// 上次 scrollTop：判定滚动方向（iOS 在内容撑高/视口变化时会额外派发 scroll 事件，
+// 只有实际向上滚动才代表用户想离开底部）
+let lastScrollTop = 0
 // 待执行的自动滚动 rAF ID，用于在用户主动上滑时立即取消，打破"抗衡"
 let scrollRafId: number | null = null
 
@@ -151,11 +161,22 @@ const checkAndUpdateAutoScroll = () => {
 const handleScroll = (event: Event) => {
   // 跳过程序化滚动触发的事件，避免展开面板/DOM变化时错误更新 shouldAutoScroll
   if (programmaticScrolling) {
+    lastScrollTop = messagesScrollRef.value?.scrollTop ?? lastScrollTop
     emit('scroll', event)
     return
   }
 
-  checkAndUpdateAutoScroll()
+  // 用户意图方向判定：iOS 在图片加载撑高内容、视口变化等时机会额外派发 scroll
+  // 事件（scrollTop 并未减小），若按「距底距离」直接判定会把贴底意图误置为
+  // false、令底部锚定整体失效（桌面无此噪声事件所以只在移动端复现）。
+  // 只有 scrollTop 实际向上（容差 2px 防 iOS 滚动锚定微调）才可能是用户想离底；
+  // 已离底状态下任何方向都重新判定（下滑回底要能恢复贴底）。
+  const currentTop = messagesScrollRef.value?.scrollTop ?? 0
+  const scrollingUp = currentTop < lastScrollTop - 2
+  lastScrollTop = currentTop
+  if (scrollingUp || !shouldAutoScroll.value) {
+    checkAndUpdateAutoScroll()
+  }
 
   // 用户主动上滑离开底部时，立即取消待执行的自动滚动，消除"抗衡感"
   if (!shouldAutoScroll.value && scrollRafId !== null) {
@@ -206,6 +227,38 @@ const inputTagPreviewHandle = (file: FlatFileItem) => {
   workspaceFilePreviewVisible.value = true
   workspaceFilePreviewNode.value = file
 }
+
+/**
+ * 持续底部锚定。「滚到底」是一次性动作：此后图片加载、代码高亮、常用问题条
+ * 出现等不改变消息数组但改变高度的异步完成都会破坏贴底且无人修复。观察
+ * 「滚动容器」（被输入区顶高挤压变矮）与「内容包裹层」（异步渲染撑高），
+ * 本应贴底（shouldAutoScroll）时自动重新锚定；用户上滑离底后不会被拉回。
+ * 欢迎态↔对话态切换由 ref 变化的 watch 自动挂卸。
+ */
+let bottomAnchorObserver: ResizeObserver | null = null
+
+watch(
+  [messagesScrollRef, messagesContentRef],
+  ([scrollEl, contentEl]) => {
+    bottomAnchorObserver?.disconnect()
+    if (typeof ResizeObserver === 'undefined' || (!scrollEl && !contentEl)) return
+    if (!bottomAnchorObserver) {
+      bottomAnchorObserver = new ResizeObserver(() => {
+        if (shouldAutoScroll.value) {
+          scrollToBottom()
+        }
+      })
+    }
+    if (scrollEl) bottomAnchorObserver.observe(scrollEl)
+    if (contentEl) bottomAnchorObserver.observe(contentEl)
+  },
+  { flush: 'post' }
+)
+
+onBeforeUnmount(() => {
+  bottomAnchorObserver?.disconnect()
+  bottomAnchorObserver = null
+})
 
 // 监听消息变化，自动滚动
 watch(
@@ -298,6 +351,7 @@ defineExpose({
         :confirm-mode="confirmMode"
         :thinking-supported="thinkingSupported"
         :thinking-active="thinkingActive"
+        :voice-state="voiceState"
         :session-id="sessionId"
         :mention-allowed="true"
         @update:input-value="$emit('update:inputValue', $event)"
@@ -307,6 +361,8 @@ defineExpose({
         @toolProcess="$emit('toolProcess', $event)"
         @confirm-mode="$emit('confirmMode', $event)"
         @thinking="$emit('thinking', $event)"
+        @voice-toggle="$emit('voiceToggle')"
+        @voice-press="$emit('voicePress', $event)"
         @send="handleSend"
         @new-session="$emit('newSession')"
         @quick-question="$emit('quickQuestion', $event)"
@@ -320,33 +376,35 @@ defineExpose({
           class="chat-main-messages-scroll"
           @scroll="handleScroll"
         >
-          <!-- 历史消息加载提示 -->
-          <div v-if="hasMoreHistory || historyLoading" class="chat-history-loading">
-            <template v-if="historyLoading">
-              <LoadingOutlined style="margin-right: 6px; font-size: 14px" />
-              <span>正在加载</span>
-            </template>
-            <template v-else-if="hasMoreHistory">
-              <span>下拉加载更多历史消息</span>
-            </template>
+          <!-- 内容包裹层：底部锚定的尺寸观察点（图片加载/代码高亮等撑高时重新贴底） -->
+          <div ref="messagesContentRef">
+            <!-- 历史消息加载提示 -->
+            <div v-if="hasMoreHistory || historyLoading" class="chat-history-loading">
+              <template v-if="historyLoading">
+                <LoadingOutlined style="margin-right: 6px; font-size: 14px" />
+                <span>正在加载</span>
+              </template>
+              <template v-else-if="hasMoreHistory">
+                <span>下拉加载更多历史消息</span>
+              </template>
+            </div>
+            <PlanPanel
+              v-if="currentPlan"
+              :plan="currentPlan"
+              :is-running="isRunning"
+              @destroy="$emit('planDestroyed')"
+            />
+            <MessageList
+              :agent-has-result="agentHasResult"
+              :messages="messages"
+              :tool-calls="toolCalls"
+              @inputTagPreview="inputTagPreviewHandle"
+              @toolContent="(content: any) => $emit('toolContent', content)"
+              @sub-confirm="$emit('subConfirm', $event)"
+              @interaction-submit="$emit('interactionSubmit', $event)"
+              @uip-retry="$emit('uipRetry', $event)"
+            />
           </div>
-          <PlanPanel
-            v-if="currentPlan"
-            :plan="currentPlan"
-            :is-running="isRunning"
-            @destroy="$emit('planDestroyed')"
-          />
-          <MessageList
-            :agent-has-result="agentHasResult"
-            :messages="messages"
-            :tool-calls="toolCalls"
-            @inputTagPreview="inputTagPreviewHandle"
-            @toolContent="(content: any) => $emit('toolContent', content)"
-            @sub-confirm="$emit('subConfirm', $event)"
-            @interaction-submit="$emit('interactionSubmit', $event)"
-            @uip-retry="$emit('uipRetry', $event)"
-            @vep-retry="$emit('vepRetry', $event)"
-          />
         </div>
         <MessageNavigator
           :messages="messages"
@@ -407,6 +465,7 @@ defineExpose({
             :confirm-mode="confirmMode"
         :thinking-supported="thinkingSupported"
         :thinking-active="thinkingActive"
+            :voice-state="voiceState"
             :session-id="sessionId"
             :mention-allowed="true"
             @inputTagPreview="inputTagPreviewHandle"
@@ -417,10 +476,11 @@ defineExpose({
             @toolProcess="$emit('toolProcess', $event)"
             @confirm-mode="$emit('confirmMode', $event)"
         @thinking="$emit('thinking', $event)"
+            @voice-toggle="$emit('voiceToggle')"
+            @voice-press="$emit('voicePress', $event)"
             @send="handleSend"
             @abort="$emit('abort')"
           />
-          <div class="text-placeholder text-xs mt-sm" style="text-align: center; margin: 5px 0;">内容由AI生成，仅供参考</div>
         </div>
       </div>
     </template>
