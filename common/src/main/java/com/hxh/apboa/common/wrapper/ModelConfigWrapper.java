@@ -114,6 +114,16 @@ public class ModelConfigWrapper {
      */
     private Boolean fixedSystemMessage;
 
+    /**
+     * 思考"开"时注入的请求体参数（数据驱动，参数名由模型自己声明，如空表示不传）
+     */
+    private Map<String, Object> thinkingParamsOn;
+
+    /**
+     * 思考"关"时注入的请求体参数（如 {"reasoning_effort":"none"}）
+     */
+    private Map<String, Object> thinkingParamsOff;
+
     @Override
     public String toString() {
         return "ModelConfigWrapper{" +
@@ -137,6 +147,8 @@ public class ModelConfigWrapper {
                 ", queryParams=" + queryParams +
                 ", bodyParams=" + bodyParams +
                 ", fixedSystemMessage=" + fixedSystemMessage +
+                ", thinkingParamsOn=" + thinkingParamsOn +
+                ", thinkingParamsOff=" + thinkingParamsOff +
                 '}';
     }
 }

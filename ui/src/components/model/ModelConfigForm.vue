@@ -11,7 +11,8 @@ import type { ModelConfigVO, ModelConfig, ModelProviderVO } from '@/types'
 import { ModelCategory, ModelType, ModelProviderType } from '@/types'
 import * as modelApi from '@/api/model'
 import ExtendConfigEditor, { type ExtendConfigData } from './ExtendConfigEditor.vue'
-import TokenStepSlider from './TokenStepSlider.vue'
+import ParamSlider from './ParamSlider.vue'
+import ParamLabel from './ParamLabel.vue'
 
 /**
  * Props定义
@@ -129,7 +130,7 @@ watch(
           topK: props.data.topK,
           repeatPenalty: props.data.repeatPenalty,
           seed: props.data.seed || '',
-          extendConfig: ec && typeof ec === 'object' ? { headers: ec.headers || {}, queryParams: ec.queryParams || {}, bodyParams: ec.bodyParams || {}, fixedSystemMessage: ec.fixedSystemMessage ?? false } : null
+          extendConfig: ec && typeof ec === 'object' ? { headers: ec.headers || {}, queryParams: ec.queryParams || {}, bodyParams: ec.bodyParams || {}, fixedSystemMessage: ec.fixedSystemMessage ?? false, thinkingParams: ec.thinkingParams } : null
         }
       } else {
         resetForm()
@@ -393,14 +394,17 @@ async function handleViewProvider() {
 
         <ARow :gutter="24">
           <ACol :span="12">
-            <AFormItem label="流式输出" name="streaming">
+            <AFormItem name="streaming">
+              <template #label><ParamLabel param="streaming" /></template>
               <ASwitch v-model:checked="formData.streaming" />
             </AFormItem>
           </ACol>
           <ACol :span="12">
-            <AFormItem label="思考模式" name="thinking">
-              <ASwitch v-model:checked="formData.thinking" :disabled="providerType != 'DASH_SCOPE'" />
-              <span v-if="providerType != 'DASH_SCOPE'" class="text-placeholder text-xs mt-xs">&nbsp;&nbsp;参考官方文档，在“扩展配置”中设置</span>
+            <AFormItem name="thinking">
+              <template #label><ParamLabel param="thinking" /></template>
+              <ASwitch v-model:checked="formData.thinking" :disabled="providerType != 'DASH_SCOPE' && providerType != 'OPEN_AI'" />
+              <span v-if="providerType != 'DASH_SCOPE' && providerType != 'OPEN_AI'" class="text-placeholder text-xs mt-xs">&nbsp;&nbsp;当前供应商暂不支持思考切换</span>
+              <span v-else-if="providerType === 'OPEN_AI' && formData.thinking" class="text-placeholder text-xs mt-xs">&nbsp;&nbsp;在下方“扩展配置”的思考参数里设置开/关分别注入的请求体参数</span>
             </AFormItem>
           </ACol>
         </ARow>
@@ -409,91 +413,38 @@ async function handleViewProvider() {
       <div v-if="isLlm" class="form-section">
         <div class="section-title">参数配置</div>
 
-        <AFormItem label="上下文窗口" name="contextWindow">
-          <TokenStepSlider v-model="formData.contextWindow" />
+        <AFormItem name="contextWindow">
+          <template #label><ParamLabel param="contextWindow" /></template>
+          <ParamSlider v-model="formData.contextWindow" preset="token" />
         </AFormItem>
 
-        <AFormItem label="最大Token数" name="maxTokens">
-          <TokenStepSlider v-model="formData.maxTokens" />
+        <AFormItem name="maxTokens">
+          <template #label><ParamLabel param="maxTokens" /></template>
+          <ParamSlider v-model="formData.maxTokens" preset="token" />
         </AFormItem>
 
-        <AFormItem label="温度 (Temperature)" name="temperature">
-          <ARow :gutter="16">
-            <ACol :span="16">
-              <ASlider
-                v-model:value="formData.temperature"
-                :min="0"
-                :max="2"
-                :step="0.1"
-              />
-            </ACol>
-            <ACol :span="8">
-              <AInputNumber
-                v-model:value="formData.temperature"
-                :min="0"
-                :max="2"
-                :step="0.1"
-                style="width: 100%"
-              />
-            </ACol>
-          </ARow>
+        <AFormItem name="temperature">
+          <template #label><ParamLabel param="temperature" /></template>
+          <ParamSlider v-model="formData.temperature" :min="0" :max="2" :step="0.1" :ticks="[0, 0.5, 1, 1.5, 2]" />
         </AFormItem>
 
-        <AFormItem label="Top P" name="topP">
-          <ARow :gutter="16">
-            <ACol :span="16">
-              <ASlider
-                v-model:value="formData.topP"
-                :min="0"
-                :max="1"
-                :step="0.01"
-              />
-            </ACol>
-            <ACol :span="8">
-              <AInputNumber
-                v-model:value="formData.topP"
-                :min="0"
-                :max="1"
-                :step="0.01"
-                style="width: 100%"
-              />
-            </ACol>
-          </ARow>
+        <AFormItem name="topP">
+          <template #label><ParamLabel param="topP" /></template>
+          <ParamSlider v-model="formData.topP" :min="0" :max="1" :step="0.05" :ticks="[0, 0.5, 0.9, 1]" />
         </AFormItem>
 
-        <AFormItem label="Top K" name="topK">
-          <AInputNumber
-            v-model:value="formData.topK"
-            :min="1"
-            :max="1000"
-            style="width: 100%"
-            placeholder="请输入Top K值"
-          />
+        <AFormItem name="topK">
+          <template #label><ParamLabel param="topK" /></template>
+          <ParamSlider v-model="formData.topK" :min="0" :max="100" :step="1" :ticks="[0, 20, 40, 60, 80, 100]" />
         </AFormItem>
 
-        <AFormItem label="重复惩罚 (Repeat Penalty)" name="repeatPenalty">
-          <ARow :gutter="16">
-            <ACol :span="16">
-              <ASlider
-                v-model:value="formData.repeatPenalty"
-                :min="0"
-                :max="2"
-                :step="0.1"
-              />
-            </ACol>
-            <ACol :span="8">
-              <AInputNumber
-                v-model:value="formData.repeatPenalty"
-                :min="0"
-                :max="2"
-                :step="0.1"
-                style="width: 100%"
-              />
-            </ACol>
-          </ARow>
+        <AFormItem name="repeatPenalty">
+          <template #label><ParamLabel param="repeatPenalty" /></template>
+          <ParamSlider v-model="formData.repeatPenalty" :min="1" :max="2" :step="0.05" :ticks="[1, 1.2, 1.5, 2]" />
         </AFormItem>
 
-        <AFormItem label="随机种子 (Seed)" name="seed">
+        <AFormItem name="seed">
+          <template #label><ParamLabel param="seed" /></template>
           <AInputNumber
             v-model:value="formData.seed"
             style="width: 100%"
@@ -510,6 +461,7 @@ async function handleViewProvider() {
           <ExtendConfigEditor
             v-model="formData.extendConfig"
             :show-fixed-system-message="providerType === 'OPEN_AI' && isLlm"
+            :show-thinking-params="providerType === 'OPEN_AI' && isLlm && formData.thinking"
           />
         </AFormItem>
       </div>

@@ -249,3 +249,99 @@
   border-top: 1px solid var(--color-border-lighter);
   margin-top: var(--spacing-2xl);
 }
+
+// ========== 移动端（<1024）：菜单收进左侧抽屉 ==========
+
+.settings-container.is-mobile {
+  flex-direction: column;
+  max-width: 100%;
+  position: relative;
+
+  // 顶栏：X 关闭 Modal + 汉堡开菜单 + 当前项标题（始终最上层，可点）
+  .settings-mobile-topbar {
+    position: relative;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 52px;
+    padding: 0 10px;
+    flex-shrink: 0;
+    background: var(--color-bg-white);
+    border-bottom: 1px solid var(--color-border-light);
+  }
+
+  .settings-topbar-btn {
+    width: 34px;
+    height: 34px;
+    border: none;
+    background: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 18px;
+    color: var(--color-text-primary);
+    transition: background-color 0.2s;
+
+    &:hover {
+      background-color: var(--color-bg-base);
+    }
+
+    &.settings-close-btn {
+      color: var(--color-danger);
+    }
+  }
+
+  .settings-topbar-title {
+    margin-left: 2px;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  // 菜单变左侧抽屉：从顶栏下方滑出，X/汉堡不被遮挡
+  .settings-sidebar {
+    position: absolute;
+    top: 52px;
+    left: 0;
+    bottom: 0;
+    width: 260px;
+    max-width: 80%;
+    padding: 12px 0;
+    z-index: 20;
+    background: var(--color-bg-white);
+    overflow-y: auto;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+
+    &.open {
+      transform: translateX(0);
+      box-shadow: 2px 0 12px rgba(0, 0, 0, 0.15);
+    }
+  }
+
+  .settings-divider {
+    display: none;
+  }
+
+  .settings-content {
+    flex: 1;
+    padding: 16px;
+  }
+
+  // 抽屉遮罩：盖住顶栏下方内容，不盖顶栏
+  .settings-menu-mask {
+    position: absolute;
+    top: 52px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 15;
+    background: rgba(0, 0, 0, 0.4);
+  }
+}

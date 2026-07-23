@@ -38,6 +38,16 @@ public final class ExtendConfigHelper {
         if (configWrapper.getFixedSystemMessage() == null && extendConfig.has("fixedSystemMessage")) {
             configWrapper.setFixedSystemMessage(parseBoolean(extendConfig.get("fixedSystemMessage")));
         }
+        // 思考参数（开/关分别注入的请求体参数，数据驱动；代码不认识具体参数名）
+        if (extendConfig.has("thinkingParams") && extendConfig.get("thinkingParams").isObject()) {
+            JsonNode tp = extendConfig.get("thinkingParams");
+            if (configWrapper.getThinkingParamsOn() == null && tp.has("on")) {
+                configWrapper.setThinkingParamsOn(parseObjectMap(tp.get("on")));
+            }
+            if (configWrapper.getThinkingParamsOff() == null && tp.has("off")) {
+                configWrapper.setThinkingParamsOff(parseObjectMap(tp.get("off")));
+            }
+        }
     }
 
     /**
@@ -58,6 +68,16 @@ public final class ExtendConfigHelper {
         }
         if (extendConfig.has("fixedSystemMessage")) {
             configWrapper.setFixedSystemMessage(parseBoolean(extendConfig.get("fixedSystemMessage")));
+        }
+        // 思考参数（agent 级强制覆盖）
+        if (extendConfig.has("thinkingParams") && extendConfig.get("thinkingParams").isObject()) {
+            JsonNode tp = extendConfig.get("thinkingParams");
+            if (tp.has("on")) {
+                configWrapper.setThinkingParamsOn(parseObjectMap(tp.get("on")));
+            }
+            if (tp.has("off")) {
+                configWrapper.setThinkingParamsOff(parseObjectMap(tp.get("off")));
+            }
         }
     }
 

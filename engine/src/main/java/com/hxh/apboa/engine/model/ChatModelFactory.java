@@ -11,6 +11,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import io.agentscope.core.model.Model;
 import org.springframework.stereotype.Component;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -98,15 +99,34 @@ public class ChatModelFactory {
         configWrapper.setToolChoiceStrategy(agentDefinition.getToolChoiceStrategy());
         configWrapper.setSpecificToolName(agentDefinition.getSpecificToolName());
 
-        // 会话级思考模式（仅 DASH_SCOPE 全链路支持——enable_thinking 为百炼官方参数；
-        // 其他供应商的思考参数在各自服务端不受控）：有会话上下文时 thinking = 覆盖 ?? 默认开；
-        // 非会话场景（调试等无 threadId）保持模型配置现状。开关变化由
-        // AguiRequestProcessor 检测触发 agent 重建，本处在重建时读到新值
+        // 会话级思考模式：按 provider 分两套翻译，开关变化由 AguiRequestProcessor 检测触发 agent 重建，
+        // 本处在重建时读到新值。DASH_SCOPE 走百炼官方 enable_thinking（下面设 thinking 布尔，
+        // DefaultDashScopeModelI 消费）；OPEN_AI 走数据驱动的 thinkingParams（见后一分支）。
+        // thinking = 会话覆盖 ?? 默认开；非会话场景（无 threadId）覆盖为 null 即默认开。
         if (configWrapper.getProvider() == ModelProviderType.DASH_SCOPE) {
             String threadId = AgentContext.getIfExists().map(AgentContext::getThreadId).orElse(null);
             if (threadId != null && !threadId.isEmpty()) {
                 Boolean override = ThinkingModeResolver.resolveOverride(threadId);
                 configWrapper.setThinking(override == null || override);
+            }
+        }
+
+        // OPEN_AI（含本地 Ollama /v1）：思考控制无 SDK 原生开关，靠把 thinkingParams 里
+        // 用户声明的请求体参数按开/关状态 merge 进 bodyParams（代码不认识 reasoning_effort 等具体名）。
+        // 仅 thinking==true（模型标记支持）时生效。新建 HashMap 避免 bodyParams 为不可变空 Map 时 putAll 抛错。
+        if (configWrapper.getProvider() == ModelProviderType.OPEN_AI
+                && Boolean.TRUE.equals(configWrapper.getThinking())) {
+            String threadId = AgentContext.getIfExists().map(AgentContext::getThreadId).orElse(null);
+            Boolean override = ThinkingModeResolver.resolveOverride(threadId);
+            boolean on = override == null || override;
+            Map<String, Object> pick = on ? configWrapper.getThinkingParamsOn() : configWrapper.getThinkingParamsOff();
+            if (pick != null && !pick.isEmpty()) {
+                Map<String, Object> merged = new HashMap<>();
+                if (configWrapper.getBodyParams() != null) {
+                    merged.putAll(configWrapper.getBodyParams());
+                }
+                merged.putAll(pick);
+                configWrapper.setBodyParams(merged);
             }
         }
 

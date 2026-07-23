@@ -1,21 +1,59 @@
 /**
- * 布局样式 - 左右结构
+ * 布局样式 — 新侧边栏 + 顶栏的响应式两列结构
  *
  * @author huxuehao
  */
 
 .app-layout {
   min-height: 100vh;
+  background: #f5f6f8;
   display: flex;
+
+  .layout-sidebar {
+    position: sticky;
+    top: 0;
+    align-self: flex-start;
+    height: 100vh;
+    flex-shrink: 0;
+    z-index: 90;
+  }
+
+  .layout-main {
+    // 允许收缩，防止子内容把整体布局撑破（flex min-width:auto 的坑）
+    min-width: 0;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  .layout-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 80;
+    flex-shrink: 0;
+    background: var(--color-bg-white);
+    border-bottom: 1px solid var(--color-border-light);
+  }
 
   .layout-content {
     flex: 1;
-    height: calc(100vh - 20px);
+    min-height: 0;
     overflow: auto;
     margin: 10px 10px 10px 0;
     border-radius: 18px;
-    background-color: #FFFFFF;
+    background-color: #fff;
     box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.01);
+  }
+
+  .layout-footer {
+    height: 105px;
+    flex-shrink: 0;
+  }
+
+  &.is-mobile {
+    .layout-content {
+      margin: 8px;
+      border-radius: 12px;
+    }
   }
 }
 
@@ -25,17 +63,6 @@
   transition: all 0.3s ease;
 }
 
-.slide-right-enter-from {
-  opacity: 0;
-  transform: translateX(-30px);
-}
-
-.slide-right-leave-to {
-  opacity: 0;
-  transform: translateX(30px);
-}
-
-/* 或者如果你想保持当前位置 */
 .slide-right-enter-from {
   opacity: 0;
   transform: translateX(-30px);

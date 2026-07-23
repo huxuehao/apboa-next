@@ -1,0 +1,36 @@
+/**
+ * AppTopbar 顶栏样式
+ *
+ * @author vaulka
+ */
+
+.app-topbar {
+  height: 55px;
+  padding: 0 16px;
+  gap: 12px;
+
+  .topbar-hamburger {
+    width: 36px;
+    height: 36px;
+    border: none;
+    background: transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--color-text-primary);
+    font-size: 18px;
+    transition: background-color 0.2s;
+
+    &:hover {
+      background-color: var(--color-bg-light);
+    }
+  }
+
+  .topbar-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}

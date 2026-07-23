@@ -54,8 +54,8 @@ public class AgentDefinitionVO implements SerializableEnable {
     private Boolean showToolProcess;
 
     /**
-     * 当前模型是否支持会话级思考模式开关（派生字段，detail 时按模型供应商算出，
-     * 当前仅 DASH_SCOPE 全链路支持；前端据此决定是否展示思考按钮）
+     * 当前模型是否支持会话级思考模式开关（派生字段，detail 时按 model_config.thinking 算出：
+     * DASH_SCOPE 靠内置 enable_thinking、OPEN_AI 靠模型配的 thinkingParams；前端据此决定是否展示思考按钮）
      */
     private Boolean thinkingSwitchSupported;
     private Boolean enableMemory;

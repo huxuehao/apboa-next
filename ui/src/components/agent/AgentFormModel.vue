@@ -8,7 +8,8 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { RoutePaths } from '@/router/constants.ts'
 import SmartCodeEditor from '@/components/editor/SmartCodeEditor.vue'
 import ExtendConfigEditor, { type ExtendConfigData } from '@/components/model/ExtendConfigEditor.vue'
-import TokenStepSlider from '@/components/model/TokenStepSlider.vue'
+import ParamSlider from '@/components/model/ParamSlider.vue'
+import ParamLabel from '@/components/model/ParamLabel.vue'
 import * as modelApi from '@/api/model'
 import * as promptApi from '@/api/prompt'
 import type { ModelProviderVO, ModelConfigVO, SystemPromptTemplateVO } from '@/types'
@@ -483,91 +484,38 @@ defineExpose({
       <div v-if="formData.modelConfigId && showModelParamsOverride" class="params-override-section">
         <ARow :gutter="16" :key="showModelParamsOverride">
           <ACol :span="8">
-            <AFormItem label="温度 (Temperature)">
-              <ARow :gutter="16">
-                <ACol :span="16">
-                  <ASlider
-                    v-model:value="modelParamsForm.temperature"
-                    :min="0"
-                    :max="2"
-                    :step="0.1"
-                  />
-                </ACol>
-                <ACol :span="8">
-                  <AInputNumber
-                    v-model:value="modelParamsForm.temperature"
-                    :min="0"
-                    :max="2"
-                    :step="0.1"
-                    style="width: 100%"
-                  />
-                </ACol>
-              </ARow>
+            <AFormItem>
+              <template #label><ParamLabel param="temperature" /></template>
+              <ParamSlider v-model="modelParamsForm.temperature" :min="0" :max="2" :step="0.1" :ticks="[0, 0.5, 1, 1.5, 2]" />
             </AFormItem>
           </ACol>
           <ACol :span="8">
-            <AFormItem label="Top P">
-              <ARow :gutter="16">
-                <ACol :span="16">
-                  <ASlider
-                    v-model:value="modelParamsForm.topP"
-                    :min="0"
-                    :max="1"
-                    :step="0.01"
-                  />
-                </ACol>
-                <ACol :span="8">
-                  <AInputNumber
-                    v-model:value="modelParamsForm.topP"
-                    :min="0"
-                    :max="1"
-                    :step="0.01"
-                    style="width: 100%"
-                  />
-                </ACol>
-              </ARow>
+            <AFormItem>
+              <template #label><ParamLabel param="topP" /></template>
+              <ParamSlider v-model="modelParamsForm.topP" :min="0" :max="1" :step="0.05" :ticks="[0, 0.5, 0.9, 1]" />
             </AFormItem>
           </ACol>
           <ACol :span="8">
-            <AFormItem label="重复惩罚 (Repeat Penalty)">
-              <ARow :gutter="16">
-                <ACol :span="16">
-                  <ASlider
-                    v-model:value="modelParamsForm.repeatPenalty"
-                    :min="0"
-                    :max="2"
-                    :step="0.1"
-                  />
-                </ACol>
-                <ACol :span="8">
-                  <AInputNumber
-                    v-model:value="modelParamsForm.repeatPenalty"
-                    :min="0"
-                    :max="2"
-                    :step="0.1"
-                    style="width: 100%"
-                  />
-                </ACol>
-              </ARow>
+            <AFormItem>
+              <template #label><ParamLabel param="repeatPenalty" /></template>
+              <ParamSlider v-model="modelParamsForm.repeatPenalty" :min="1" :max="2" :step="0.05" :ticks="[1, 1.2, 1.5, 2]" />
             </AFormItem>
           </ACol>
           <ACol :span="8">
-            <AFormItem label="最大Token数">
-              <TokenStepSlider v-model="modelParamsForm.maxTokens" />
+            <AFormItem>
+              <template #label><ParamLabel param="maxTokens" /></template>
+              <ParamSlider v-model="modelParamsForm.maxTokens" preset="token" />
             </AFormItem>
           </ACol>
           <ACol :span="8">
-            <AFormItem label="Top K">
-              <AInputNumber
-                v-model:value="modelParamsForm.topK"
-                :min="1"
-                :max="1000"
-                style="width: 100%"
-              />
+            <AFormItem>
+              <template #label><ParamLabel param="topK" /></template>
+              <ParamSlider v-model="modelParamsForm.topK" :min="0" :max="100" :step="1" :ticks="[0, 20, 40, 60, 80, 100]" />
             </AFormItem>
           </ACol>
           <ACol :span="8">
-            <AFormItem label="随机种子 (Seed)" name="seed">
+            <AFormItem name="seed">
+              <template #label><ParamLabel param="seed" /></template>
               <AInputNumber
                 v-model:value="modelParamsForm.seed"
                 style="width: 100%"
@@ -575,7 +523,8 @@ defineExpose({
             </AFormItem>
           </ACol>
           <ACol :span="8">
-            <AFormItem label="流式输出">
+            <AFormItem>
+              <template #label><ParamLabel param="streaming" /></template>
               <ASwitch v-model:checked="modelParamsForm.streaming" />
             </AFormItem>
           </ACol>
