@@ -7,6 +7,8 @@ import MediaIcon from '@/components/common/MediaIcon.vue'
 import MarkdownRenderer from "@/components/markdown/MarkdownRenderer.vue";
 import TaggedContentRenderer from './TaggedContentRenderer.vue';
 import type { InteractionSubmitPayload } from '@/components/markdown/uip/types'
+import { useToolCallDisplayName } from '@/composables/chat/useToolCallDisplayName'
+import { formatElapsed } from '@/utils/chat/format'
 
 const FILE_SEP = '@==##::::##==@'
 
@@ -120,6 +122,8 @@ interface ToolCallItem {
   result: string
 }
 
+const { resolveToolCallName } = useToolCallDisplayName()
+
 /** 解析工具调用 JSON 内容 */
 const parsedToolCall = computed<ToolCallItem>(() => {
   if (!props.content) return null
@@ -129,6 +133,53 @@ const parsedToolCall = computed<ToolCallItem>(() => {
     return null
   }
 })
+
+/**
+ * 工具是否失败（内容启发式：TOOL 消息无显式状态位）：
+ * - agentscope 错误约定：ToolResultBlock.error 的 "Error:" 前缀 / 执行层 "Tool execution failed"
+ * - 内置工具结构化返回的 "status":"failed"（如 web_search）
+ */
+const toolFailed = computed(() => {
+  const r = parsedToolCall.value?.result
+  if (!r) return false
+  const t = String(r).trim()
+  return t.startsWith('Error:')
+    || t.includes('Tool execution failed')
+    || /"status"\s*:\s*"failed"/.test(t)
+})
+
+// 请求参数/响应结果小节折叠态（默认都展开，可各自收起）
+const argsExpanded = ref(true)
+const resultExpanded = ref(true)
+// 小节复制反馈（2 秒内显示对勾）
+const copiedSection = ref<'args' | 'result' | null>(null)
+
+/** JSON 美化：能解析则两空格缩进，否则原样返回（结果可能是纯文本） */
+function prettyJson(text?: string): string {
+  if (!text) return ''
+  try {
+    return JSON.stringify(JSON.parse(text), null, 2)
+  } catch {
+    return text
+  }
+}
+const prettyArgs = computed(() => prettyJson(parsedToolCall.value?.args))
+const prettyResult = computed(() => prettyJson(parsedToolCall.value?.result))
+
+/** 复制小节原始内容（未美化的原文，便于排查） */
+async function copySection(section: 'args' | 'result') {
+  const raw = section === 'args' ? parsedToolCall.value?.args : parsedToolCall.value?.result
+  if (!raw) return
+  try {
+    await navigator.clipboard.writeText(raw)
+    copiedSection.value = section
+    setTimeout(() => {
+      if (copiedSection.value === section) copiedSection.value = null
+    }, 2000)
+  } catch {
+    // 剪贴板不可用时静默
+  }
+}
 
 // 复制成功状态（2秒内）
 const copied = ref(false)
@@ -242,8 +293,10 @@ const openPreview = (index: number) => {
               <RightOutlined v-else />
             </span>
           </div>
+          <!-- 思考内容是标准 Markdown（列表/加粗/行内代码），按 markdown 渲染恢复结构；
+               故意不包 chat-md-content 类：让元素继承本容器的灰色小字弱化样式，结构成型但不抢正文的戏 -->
           <div class="chat-reasoning-content" :class="{ 'is-expanded': reasoningExpanded }">
-            {{content}}
+            <MarkdownRenderer :content="content" :is-streaming="isStreaming" />
           </div>
         </div>
       </div>
@@ -279,11 +332,18 @@ const openPreview = (index: number) => {
     <template v-else-if="isTool">
       <div class="chat-message-bubble">
         <div class="chat-tool-panel">
-          <!-- 可点击的头部：图标 + 标题 + 展开/收起箭头 -->
+          <!-- 可点击的头部：图标 + 标题（含工具名） + 状态耗时 + 展开/收起箭头 -->
           <div class="chat-tool-header" @click="toolExpanded = !toolExpanded">
             <span class="chat-tool-header-icon"><ToolOutlined /></span>
             <span class="chat-tool-header-title">
-              工具调用
+              工具调用<template v-if="parsedToolCall">：{{ resolveToolCallName(parsedToolCall.name) }}</template>
+            </span>
+            <span
+              v-if="parsedToolCall"
+              class="chat-tool-header-status"
+              :class="toolFailed ? 'chat-tool-status--fail' : 'chat-tool-status--ok'"
+            >
+              {{ toolFailed ? '失败' : '完成' }} · {{ formatElapsed(parsedToolCall.totalTimes) }}
             </span>
             <span class="chat-tool-header-arrow">
               <DownOutlined v-if="toolExpanded" />
@@ -291,19 +351,40 @@ const openPreview = (index: number) => {
             </span>
           </div>
 
-          <!-- 展开后的工具调用列表 -->
+          <!-- 展开后的工具调用详情（名称/耗时已在标题行）：请求参数（默认收起）+ 响应结果 -->
           <div class="chat-tool-body" :class="{ 'is-expanded': toolExpanded }">
-            <!-- JSON 解析成功：结构化展示每个工具调用 -->
             <template v-if="parsedToolCall">
-              <div class="chat-tool-item-header">
-                <span class="chat-tool-item-name">{{ parsedToolCall.name }}</span>
-                <span class="chat-tool-item-time">{{ parsedToolCall.totalTimes }}ms</span>
+              <div v-if="parsedToolCall.args && parsedToolCall.args !== '{}'" class="chat-tool-section">
+                <div class="chat-tool-section-header">
+                  <span class="chat-tool-section-label chat-tool-section-label--clickable" @click="argsExpanded = !argsExpanded">
+                    <span class="chat-tool-section-arrow">
+                      <DownOutlined v-if="argsExpanded" />
+                      <RightOutlined v-else />
+                    </span>
+                    请求参数
+                  </span>
+                  <span class="chat-tool-section-copy" :title="copiedSection === 'args' ? '已复制' : '复制'" @click.stop="copySection('args')">
+                    <CheckOutlined v-if="copiedSection === 'args'" />
+                    <CopyOutlined v-else />
+                  </span>
+                </div>
+                <pre v-show="argsExpanded" class="chat-tool-item-code">{{ prettyArgs }}</pre>
               </div>
-              <div v-if="parsedToolCall.args && parsedToolCall.args !== '{}'">
-                <pre class="chat-tool-item-code">{{ parsedToolCall.args }}</pre>
-              </div>
-              <div v-if="parsedToolCall.result">
-                <pre class="chat-tool-item-code">{{ parsedToolCall.result }}</pre>
+              <div v-if="parsedToolCall.result" class="chat-tool-section">
+                <div class="chat-tool-section-header">
+                  <span class="chat-tool-section-label chat-tool-section-label--clickable" @click="resultExpanded = !resultExpanded">
+                    <span class="chat-tool-section-arrow">
+                      <DownOutlined v-if="resultExpanded" />
+                      <RightOutlined v-else />
+                    </span>
+                    响应结果
+                  </span>
+                  <span class="chat-tool-section-copy" :title="copiedSection === 'result' ? '已复制' : '复制'" @click.stop="copySection('result')">
+                    <CheckOutlined v-if="copiedSection === 'result'" />
+                    <CopyOutlined v-else />
+                  </span>
+                </div>
+                <pre v-show="resultExpanded" class="chat-tool-item-code">{{ prettyResult }}</pre>
               </div>
             </template>
             <!-- JSON 解析失败：降级为原始文本 -->

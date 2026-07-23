@@ -6,8 +6,12 @@ import com.hxh.apboa.engine.workspace.hook.ToolConstants;
 import com.hxh.apboa.sensitive.service.SensitiveWordConfigService;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.TextStyle;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * 描述：提示词工厂
@@ -29,6 +33,25 @@ public class AgentSysPromptFactory {
 
     public String getAgentSysPrompt(AgentDefinition agentDefinition, boolean hasWorkspace) {
         String prompt = primaryAgentSysPrompt.getPrompt(agentDefinition);
+
+        // 当前系统时间（构建 agent 实例时实时渲染，server-side-memory 下同会话复用首轮时间）：
+        // 模型内置知识的"当前年份"过时，相对时间换算必须以注入的真实时间为唯一基准。
+        // 保持工具无关（全局注入）：具体工具的时间规则（如搜索构词年份）下沉到各 agent 自己的提示词
+        LocalDateTime now = LocalDateTime.now();
+        String currentTimeExplanation = """
+                ===================================================
+                Current System Time:
+                The current date and time is %s (%s).
+
+                Your internal knowledge has a training cutoff date, so any "current year" you assume from it is outdated.
+                > Always treat the date and time above as the single source of truth for "now".
+
+                - When the user mentions relative time (e.g. "recently", "latest", "this year"), resolve it against the time above
+                - NEVER guess today's date from your internal knowledge
+                """;
+        prompt = prompt + "\n\n" + String.format(currentTimeExplanation,
+                now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")),
+                now.getDayOfWeek().getDisplayName(TextStyle.FULL, Locale.ENGLISH));
 
         // 用户交互协议技能
         String userInteractionProtocolSkill = """

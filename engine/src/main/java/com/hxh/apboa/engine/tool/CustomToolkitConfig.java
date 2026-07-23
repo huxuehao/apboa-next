@@ -33,9 +33,10 @@ public class CustomToolkitConfig {
     private boolean allowToolDeletion = false;
 
     /**
-     * 工具执行超时时间（秒），默认 60 秒
+     * 工具执行超时时间（秒），默认 300 秒
+     * （联网搜索等 agentic 长调用需要充裕窗口；可通过 apboa.tool.execution-timeout-seconds 覆盖）
      */
-    private long executionTimeoutSeconds = 60;
+    private long executionTimeoutSeconds = 300;
 
     /**
      * 构建 ExecutionConfig

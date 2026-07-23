@@ -32,6 +32,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
@@ -138,7 +139,8 @@ public class McpClientFactory {
                         degradeContext,
                         toolSchema,
                         () -> getInitializedClient(mcpServer.getId()),
-                        mcpRuntimeDegradeService));
+                        mcpRuntimeDegradeService,
+                        client -> invalidateContext(mcpServer.getId(), client)));
             });
         }
         return result;
@@ -213,7 +215,9 @@ public class McpClientFactory {
 
         String contextKey = buildContextKey(current);
         SharedMcpClientContext context = sharedContexts.compute(mcpServerId, (id, existing) -> {
-            if (existing != null && Objects.equals(existing.contextKey, contextKey)) {
+            // 惰性双查：命中缓存但空闲已超期（远端 session 大概率已被回收）时，弃旧建新
+            if (existing != null && Objects.equals(existing.contextKey, contextKey)
+                    && !isIdleExpired(existing, current)) {
                 return existing;
             }
 
@@ -224,11 +228,44 @@ public class McpClientFactory {
             return created;
         });
 
+        // 取用即续约
+        context.lastUsedAt = System.currentTimeMillis();
         return context.initializedClient;
     }
 
+    /**
+     * 低频清扫：主动关闭空闲超期的 HTTP/SSE 连接，释放本端资源，
+     * 并避免长期持有远端已回收 session 的死连接。
+     */
+    @Scheduled(fixedDelay = 60_000)
+    public void evictIdleContexts() {
+        sharedContexts.forEach((serverId, context) -> {
+            McpServer server = mcpServerService.getById(serverId);
+            if (isIdleExpired(context, server) && sharedContexts.remove(serverId, context)) {
+                // remove(key, value) 精确移除，并发新建的 context 不会被误删
+                closeContext(context);
+                log.info("Evicted idle MCP client context for server {}", serverId);
+            }
+        });
+    }
+
+    /**
+     * 空闲判定：阈值实时读 server 配置（与 runtimeFailThreshold 同类，改配置即时生效，无需重新激活）。
+     * STDIO 连接等同本地子进程（无远端 session 回收问题、重建成本高），不参与回收。
+     */
+    private boolean isIdleExpired(SharedMcpClientContext context, McpServer server) {
+        if (context.protocol == McpProtocol.STDIO || server == null) {
+            return false;
+        }
+        long threshold = server.getIdleTimeoutMs() == null ? 300_000L : server.getIdleTimeoutMs();
+        if (threshold <= 0) {
+            return false;
+        }
+        return System.currentTimeMillis() - context.lastUsedAt > threshold;
+    }
+
     private SharedMcpClientContext createContext(McpServer mcpServer, String contextKey) {
-        SharedMcpClientContext context = new SharedMcpClientContext(contextKey);
+        SharedMcpClientContext context = new SharedMcpClientContext(contextKey, mcpServer.getProtocol());
         context.initializedClient = Mono.defer(() -> {
                     McpClientWrapper client = getMcpClientForServer(mcpServer);
                     context.clientRef.set(client);
@@ -253,6 +290,19 @@ public class McpClientFactory {
             } catch (Exception e) {
                 log.debug("Close MCP client context failed: {}", e.getMessage());
             }
+        }
+    }
+
+    /**
+     * 作废共享连接：仅当缓存仍是持有 failedClient 的那个实例才移除
+     * （CAS 语义，并发失败时只有第一个触发重建，防止重复重建风暴）。
+     */
+    public void invalidateContext(Long mcpServerId, McpClientWrapper failedClient) {
+        SharedMcpClientContext context = sharedContexts.get(mcpServerId);
+        if (context != null && context.clientRef.get() == failedClient
+                && sharedContexts.remove(mcpServerId, context)) {
+            closeContext(context);
+            log.warn("Invalidated MCP client context for server {} due to lost session", mcpServerId);
         }
     }
 
@@ -292,11 +342,15 @@ public class McpClientFactory {
 
     private static final class SharedMcpClientContext {
         private final String contextKey;
+        private final McpProtocol protocol;
         private final AtomicReference<McpClientWrapper> clientRef = new AtomicReference<>();
+        /** 最近取用时间（空闲租约判定依据） */
+        private volatile long lastUsedAt = System.currentTimeMillis();
         private Mono<McpClientWrapper> initializedClient;
 
-        private SharedMcpClientContext(String contextKey) {
+        private SharedMcpClientContext(String contextKey, McpProtocol protocol) {
             this.contextKey = contextKey;
+            this.protocol = protocol;
         }
     }
 }

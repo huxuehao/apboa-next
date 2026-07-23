@@ -233,6 +233,7 @@ export interface McpServer extends BaseEntity {
   toolCount: number
   availableToolCount?: number
   runtimeFailThreshold?: number
+  idleTimeoutMs?: number
   activationRevision?: string | number | null
   configHash?: string | null
   needsSync: boolean

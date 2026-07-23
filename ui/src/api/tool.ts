@@ -1,7 +1,7 @@
 import request from '@/utils/request'
 import type { ApiResponse, PageResult } from '@/types'
 import type { ToolDTO, ToolVO } from '@/types'
-import type { ToolConfig } from '@/types'
+import type { ToolConfig, ToolDebugResultVO } from '@/types'
 
 /**
  * 分页查询
@@ -57,4 +57,12 @@ export function usedWithAgent(ids: string[]) {
  */
 export function listCategories() {
   return request.get<ApiResponse<string[]>>('/api/tool/get/categories')
+}
+
+/**
+ * 调试执行工具（工具执行环境在 runtime 服务，/api/runtime 前缀由代理转发）
+ * POST /runtime/agent/tool/debug
+ */
+export function debugTool(id: string | number, input: Record<string, unknown>) {
+  return request.post<ApiResponse<ToolDebugResultVO>>('/api/runtime/agent/tool/debug', { id, input })
 }

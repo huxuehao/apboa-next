@@ -5,6 +5,7 @@ import com.hxh.apboa.agent.mapper.ChatSessionMapper;
 import com.hxh.apboa.agent.service.AgentDefinitionService;
 import com.hxh.apboa.agent.service.ChatMessageService;
 import com.hxh.apboa.agent.service.ChatSessionService;
+import com.hxh.apboa.common.consts.RedisChannelTopic;
 import com.hxh.apboa.common.consts.SysConst;
 import com.hxh.apboa.common.dto.ChatMessageAppendDTO;
 import com.hxh.apboa.common.dto.ChatSessionCreateDTO;
@@ -15,6 +16,7 @@ import com.hxh.apboa.common.entity.ChatSession;
 import com.hxh.apboa.common.mp.support.PageParams;
 import com.hxh.apboa.common.util.BeanUtils;
 import com.hxh.apboa.common.util.FolderUtils;
+import com.hxh.apboa.common.util.RedisUtils;
 import com.hxh.apboa.common.util.UserUtils;
 import com.hxh.apboa.common.vo.ChatMessageVO;
 import com.hxh.apboa.common.vo.ChatMessagePageVO;
@@ -32,6 +34,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -43,11 +46,15 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ChatSessionServiceImpl extends ServiceImpl<ChatSessionMapper, ChatSession> implements ChatSessionService {
 
+    /** 一键授权开关 Redis TTL（天，写入时滚动刷新） */
+    private static final long AUTO_APPROVE_TTL_DAYS = 30;
+
     private final ChatMessageService chatMessageService;
     private final MessageTableRouter messageTableRouter;
     private final ThreadSessionManager sessionManager;
     private final AgentScopeSessionMapper agentScopeSessionMapper;
     private final AgentDefinitionService agentDefinitionService;
+    private final RedisUtils redisUtils;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -388,6 +395,26 @@ public class ChatSessionServiceImpl extends ServiceImpl<ChatSessionMapper, ChatS
         // 删除工作空间目录（文件 + sessionId文件夹本身）
         String workspacePath = SysConst.getWorkspacePath() + "/" + session.getId();
         FolderUtils.deleteRecursively(workspacePath);
+    }
+
+    @Override
+    public boolean getAutoApprove(Long sessionId) {
+        return "1".equals(redisUtils.get(RedisChannelTopic.CHAT_AUTO_APPROVE_KEY_PREFIX + sessionId));
+    }
+
+    @Override
+    public void setAutoApprove(Long sessionId, boolean enabled) {
+        // 校验会话归属（MP 租户拦截器过滤，非本租户查不到），防越权改他人会话开关
+        ChatSession session = getById(sessionId);
+        if (session == null) {
+            throw new RuntimeException("会话不存在");
+        }
+        String key = RedisChannelTopic.CHAT_AUTO_APPROVE_KEY_PREFIX + sessionId;
+        if (enabled) {
+            redisUtils.setEx(key, "1", AUTO_APPROVE_TTL_DAYS, TimeUnit.DAYS);
+        } else {
+            redisUtils.delete(key);
+        }
     }
 
     private ChatSessionVO toSessionVO(ChatSession session) {

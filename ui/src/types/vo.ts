@@ -202,6 +202,7 @@ export interface McpServerVO {
   toolCount: number
   availableToolCount: number
   runtimeFailThreshold: number
+  idleTimeoutMs: number
   needsSync: boolean
   enabled: boolean
   createdAt: string
@@ -431,6 +432,31 @@ export interface ToolVO {
   createdBy: string
   updatedBy: string
   used: string[]
+}
+
+/**
+ * 工具调试调用结果（结构对齐 McpToolDebugResultVO，后端 ToolDebugResultVO）
+ */
+export interface ToolDebugResultVO {
+  success: boolean
+  toolName: string
+  content: unknown
+  errorMessage: string | null
+  durationMs: number
+  executedAt: string
+}
+
+/**
+ * 工具调试历史记录项
+ */
+export interface ToolDebugHistoryItem {
+  id: string
+  toolId: string | number
+  toolName: string
+  category: string
+  input: Record<string, unknown>
+  result: ToolDebugResultVO
+  executedAt: string
 }
 
 /**

@@ -16,6 +16,7 @@ const props = defineProps<{
   enablePlanning?: boolean
   toolProcessActive?: boolean
   showToolProcess?: boolean
+  autoApproveActive?: boolean
   allowUploadFileType?: string[]
   sessionId?: string | null
   mentionAllowed?: boolean
@@ -33,6 +34,7 @@ defineEmits<{
   (e: 'memory', value: boolean): void
   (e: 'plan', value: boolean): void
   (e: 'toolProcess', value: boolean): void
+  (e: 'autoApprove', value: boolean): void
   (e: 'newSession'): void
 }>()
 </script>
@@ -54,6 +56,7 @@ defineEmits<{
         :allow-upload-file-type="allowUploadFileType"
         :show-tool-process="showToolProcess"
         :tool-process-active="toolProcessActive"
+        :auto-approve-active="autoApproveActive"
         :session-id="sessionId"
         :mention-allowed="mentionAllowed"
         :need-init="needInit"
@@ -62,6 +65,7 @@ defineEmits<{
         @memory="$emit('memory', $event)"
         @plan="$emit('plan', $event)"
         @toolProcess="$emit('toolProcess', $event)"
+        @auto-approve="$emit('autoApprove', $event)"
         @send="$emit('send')"
         @new-session="$emit('newSession')"
       />

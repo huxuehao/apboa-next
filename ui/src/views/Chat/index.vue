@@ -137,6 +137,7 @@ const {
   currentPlan,
   sendMessage,
   decideConfirm,
+  pendingConfirms,
   restorePending,
   abortRun,
   reconnect: reconnectStream,
@@ -153,6 +154,76 @@ const {
   (chatMsg: ChatMessageVO) => {
     messagesList.value.push(chatMsg)
   })
+
+// 一键授权（会话级，source of truth 在 Redis：换端/刷新一致；无记录默认逐步确认）
+const autoApproveActive = ref(false)
+// 新会话尚未创建（懒创建，首条消息才有 sessionId）时的本地暂存：
+// 会话创建后由 watch 回放写入 Redis（false 无需回放，默认即逐步确认）
+let pendingAutoApprove = false
+
+// 会话切换/进入时拉取开关状态；读取失败按逐步确认兜底
+watch(currentSessionId, async (sid) => {
+  if (!sid) {
+    // 新会话默认开启一键授权（免每次手动开），本地先行生效；
+    // 首条消息创建会话后由暂存回放写入 Redis，手动关闭则暂存清零、不回放（Redis 无记录=逐步确认）
+    autoApproveActive.value = true
+    pendingAutoApprove = true
+    return
+  }
+  if (pendingAutoApprove) {
+    // 有暂存（无会话状态下用户已切开）：回放写入并跳过 GET，避免 GET 的 false 冲掉预设
+    pendingAutoApprove = false
+    try {
+      await chatSessionApi.setAutoApprove(sid, true)
+      autoApproveActive.value = true
+    } catch {
+      autoApproveActive.value = false
+    }
+    return
+  }
+  try {
+    const res = await chatSessionApi.getAutoApprove(sid)
+    autoApproveActive.value = res.data?.data === true
+  } catch {
+    autoApproveActive.value = false
+  }
+}, { immediate: true })
+
+/** 把当前所有待确认工具全部允许（凑齐决策后 useChatStream 自动提交 resume） */
+const approveAllPending = () => {
+  Object.entries(pendingConfirms.value).forEach(([toolUseId, state]) => {
+    if (state === 'pending') decideConfirm(toolUseId, true)
+  })
+}
+
+const handleAutoApproveChange = (v: boolean) => {
+  const sid = currentSessionId.value
+  if (!sid) {
+    // 会话未创建：本地先行生效，首条消息创建会话后由 watch 回放写入 Redis
+    autoApproveActive.value = v
+    pendingAutoApprove = v
+    return
+  }
+  if (v) {
+    chatSessionApi.setAutoApprove(sid, true).then(() => {
+      autoApproveActive.value = true
+      // 已弹出的待确认项一并放行
+      approveAllPending()
+    })
+  } else {
+    chatSessionApi.setAutoApprove(sid, false).then(() => {
+      autoApproveActive.value = false
+    })
+  }
+}
+
+// 兜底：一键授权开启时，任何新到达的待确认项（跑动中切开关的竞态窗口、刷新恢复的遗留 pending）自动全批
+watch(pendingConfirms, (confirms) => {
+  if (!autoApproveActive.value) return
+  if (Object.values(confirms).some((s) => s === 'pending')) {
+    approveAllPending()
+  }
+})
 
 // 输入框内容
 const inputText = ref('')
@@ -239,6 +310,9 @@ const handleNewSession = async () => {
 
     const existNewSession = otherSessions.value.find((s) => s.title === '新对话')
     if (existNewSession) {
+      // 开启新对话默认一键授权：预置暂存，交由 currentSessionId watch 的回放分支写入 Redis
+      // （此路径 sessionId 非空，不会走 !sid 的默认开分支）
+      pendingAutoApprove = true
       await selectSession({
         id: existNewSession.id,
         title: existNewSession.title || '新对话',
@@ -253,6 +327,8 @@ const handleNewSession = async () => {
       preserveRunningSession.value = false
       return
     }
+    // 同上：预创建会话路径的默认一键授权
+    pendingAutoApprove = true
     resetSession({
       id: String(newSession.id),
       title:'新对话'
@@ -606,6 +682,7 @@ watch(isRunning, (running) => {
       :agent-has-result="agentHasResult"
       :show-tool-process="showToolProcess"
       :tool-process-active="toolProcessActive"
+      :auto-approve-active="autoApproveActive"
       :workspace-panel-open="workspacePanelOpen"
       :has-code-execution-config="!!hasCodeExecutionConfig"
       :session-id="currentSessionId"
@@ -618,6 +695,7 @@ watch(isRunning, (running) => {
       @memory="handleMemoryChange"
       @plan="handlePlanChange"
       @toolProcess="handelToolProcess"
+      @auto-approve="handleAutoApproveChange"
       @toolContent="handelToolContent"
       @send="handleSend"
       @abort="abortRun"

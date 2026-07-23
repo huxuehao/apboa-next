@@ -76,18 +76,28 @@ const strategyOptions = [
 const toolsByCategory = computed(() => {
   const groups: Record<string, ToolVO[]> = {}
   toolCategories.value.forEach(cat => {
-    groups[cat] = allTools.value.filter(t => t.category === cat)
+    const tools = allTools.value.filter(t => t.category === cat)
+    if (tools.length > 0) {
+      groups[cat] = tools
+    }
   })
   return groups
 })
 
 /**
- * 按类型分组的钩子（内置、自定义）
+ * 按类型分组的钩子（内置、自定义），空分组不展示
  */
 const hooksByType = computed(() => {
+  const groups: Record<string, HookConfigVO[]> = {}
   const builtin = allHooks.value.filter(h => h.hookType === 'BUILTIN')
   const custom = allHooks.value.filter(h => h.hookType === 'CUSTOM')
-  return { '内置': builtin, '自定义': custom } as Record<string, HookConfigVO[]>
+  if (builtin.length > 0) {
+    groups['内置'] = builtin
+  }
+  if (custom.length > 0) {
+    groups['自定义'] = custom
+  }
+  return groups
 })
 
 /**
@@ -121,7 +131,10 @@ const skillsByGroup = computed(() => {
 const sensitivesByCategory = computed(() => {
   const groups: Record<string, SensitiveWordConfigVO[]> = {}
   sensitiveCategories.value.forEach(cat => {
-    groups[cat] = allSensitives.value.filter(s => s.category === cat)
+    const sensitives = allSensitives.value.filter(s => s.category === cat)
+    if (sensitives.length > 0) {
+      groups[cat] = sensitives
+    }
   })
   return groups
 })
@@ -373,7 +386,7 @@ defineExpose({
   <ApboaSpin :spinning="loading">
     <AForm ref="formRef" :model="formData" layout="vertical">
       <AFormItem label="钩子配置">
-        <ACollapse>
+        <ACollapse v-if="Object.keys(hooksByType).length > 0">
           <ACollapsePanel
             v-for="(hooks, typeLabel) in hooksByType"
             :key="typeLabel"
@@ -421,14 +434,14 @@ defineExpose({
       </AFormItem>
 
       <AFormItem label="工具集">
-        <ACollapse v-if="toolCategories?.length > 0">
+        <ACollapse v-if="Object.keys(toolsByCategory).length > 0">
           <ACollapsePanel
-            v-for="category in toolCategories"
+            v-for="(tools, category) in toolsByCategory"
             :key="category"
-            :header="`${category}（${countCommonElements(toolsByCategory[category]?.map(i => i.id) || [], formData.tool)}/${toolsByCategory[category]?.length}）`">
+            :header="`${category}（${countCommonElements(tools.map(i => i.id), formData.tool)}/${tools.length}）`">
             <div class="checkbox-grid">
               <ACheckbox
-                v-for="tool in toolsByCategory[category]"
+                v-for="tool in tools"
                 :checked="formData.tool.includes(tool.id as string)"
                 @change="(e: any) => handleToolChange(tool.id as string, e.target.checked)"
                 :key="tool.id"
@@ -524,14 +537,14 @@ defineExpose({
 <!--      </AFormItem>-->
 
       <AFormItem label="敏感词配置">
-        <ACollapse v-if="sensitiveCategories?.length > 0">
+        <ACollapse v-if="Object.keys(sensitivesByCategory).length > 0">
           <ACollapsePanel
-            v-for="category in sensitiveCategories"
+            v-for="(sensitives, category) in sensitivesByCategory"
             :key="category"
-            :header="`${category}（${countCommonElements(sensitivesByCategory[category]?.map(i => i.id) || [], [formData.sensitiveWordConfigId])}/${sensitivesByCategory[category]?.length}）`">
+            :header="`${category}（${countCommonElements(sensitives.map(i => i.id), [formData.sensitiveWordConfigId])}/${sensitives.length}）`">
             <div class="checkbox-grid">
               <ACheckbox
-                v-for="sensitive in sensitivesByCategory[category]"
+                v-for="sensitive in sensitives"
                 :checked="formData.sensitiveWordConfigId === sensitive.id"
                 @change="(e: any) => handleSensitiveChange(sensitive.id as string, e.target.checked)"
                 :key="sensitive.id"

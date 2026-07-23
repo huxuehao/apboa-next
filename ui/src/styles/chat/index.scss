@@ -1229,7 +1229,7 @@ $small-mobile-breakpoint: 375px;
 }
 
 .chat-reasoning-title {
-  font-size: 12px;
+  font-size: 15px;
   color: #7B7E80;
   &:hover {
     color: #454748;
@@ -1253,9 +1253,28 @@ $small-mobile-breakpoint: 375px;
 
 .chat-reasoning-content {
   padding: 0 20px;
-  font-size: 11px;
+  font-size: var(--font-size-sm);
   color: #a7afbe;
   line-height: 1.7;
+
+  /* 思考内容按 markdown 渲染后的结构样式（全局 reset 关了 list-style，此处局部恢复；
+     不挂 chat-md-content，让元素继承本容器灰色小字的弱化视觉） */
+  ol {
+    list-style: decimal;
+    padding-left: 20px;
+    margin: 4px 0;
+  }
+  ul {
+    list-style: disc;
+    padding-left: 20px;
+    margin: 4px 0;
+  }
+  p {
+    margin: 4px 0;
+  }
+  code {
+    font-size: 0.92em;
+  }
   margin-top: 0;
   max-height: 0;
   overflow: hidden;
@@ -1296,11 +1315,23 @@ $small-mobile-breakpoint: 375px;
 }
 
 .chat-tool-header-title {
-  font-size: 12px;
-  color: #7B7E80;
-  &:hover {
-    color: #454748;
-  }
+  font-size: 15px;
+  color: var(--color-text-primary);
+}
+
+/* 标题行状态段：完成绿 / 失败红（等宽数字防耗时抖动） */
+.chat-tool-header-status {
+  font-size: 14px;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.chat-tool-status--ok {
+  color: var(--color-success);
+}
+
+.chat-tool-status--fail {
+  color: var(--color-danger);
 }
 
 .chat-tool-header-arrow {
@@ -1360,11 +1391,57 @@ $small-mobile-breakpoint: 375px;
   flex-shrink: 0;
 }
 
+/* 工具详情小节：小节标签 + 复制按钮 + 代码块 */
+.chat-tool-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.chat-tool-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.chat-tool-section-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #9aa3af;
+  user-select: none;
+}
+
+.chat-tool-section-label--clickable {
+  cursor: pointer;
+  &:hover {
+    color: #4a4f57;
+  }
+}
+
+.chat-tool-section-arrow {
+  font-size: 9px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.chat-tool-section-copy {
+  font-size: 12px;
+  color: #a0a4ab;
+  cursor: pointer;
+  padding: 2px 4px;
+  &:hover {
+    color: #4a4f57;
+  }
+}
+
 .chat-tool-item-code {
   margin: 0;
   padding: 6px 8px;
   line-height: 1.6;
-  font-size: 11px;
+  /* pre 默认等宽字体视觉偏大，比思考过程正文(sm)降一档补偿 */
+  font-size: var(--font-size-xs);
   color: #a7afbe;
   background: #FAFAFB;
   border-radius: 4px;
@@ -1378,7 +1455,7 @@ $small-mobile-breakpoint: 375px;
 .chat-tool-raw {
   margin: 0;
   padding: 8px 10px;
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   line-height: 1.6;
   color: #555;
   white-space: pre-wrap;

@@ -11,6 +11,7 @@ import type { ModelConfigVO, ModelConfig, ModelProviderVO } from '@/types'
 import { ModelType, ModelProviderType } from '@/types'
 import * as modelApi from '@/api/model'
 import ExtendConfigEditor, { type ExtendConfigData } from './ExtendConfigEditor.vue'
+import TokenStepSlider from './TokenStepSlider.vue'
 
 /**
  * Props定义
@@ -348,30 +349,13 @@ async function handleViewProvider() {
       <div class="form-section">
         <div class="section-title">参数配置</div>
 
-        <ARow :gutter="16">
-          <ACol :span="12">
-            <AFormItem label="上下文窗口" name="contextWindow">
-              <AInputNumber
-                v-model:value="formData.contextWindow"
-                :min="1"
-                :max="1000000"
-                style="width: 100%"
-                placeholder="请输入上下文窗口大小"
-              />
-            </AFormItem>
-          </ACol>
-          <ACol :span="12">
-            <AFormItem label="最大Token数" name="maxTokens">
-              <AInputNumber
-                v-model:value="formData.maxTokens"
-                :min="1"
-                :max="1000000"
-                style="width: 100%"
-                placeholder="请输入最大Token数"
-              />
-            </AFormItem>
-          </ACol>
-        </ARow>
+        <AFormItem label="上下文窗口" name="contextWindow">
+          <TokenStepSlider v-model="formData.contextWindow" />
+        </AFormItem>
+
+        <AFormItem label="最大Token数" name="maxTokens">
+          <TokenStepSlider v-model="formData.maxTokens" />
+        </AFormItem>
 
         <AFormItem label="温度 (Temperature)" name="temperature">
           <ARow :gutter="16">

@@ -111,6 +111,11 @@ public class McpServer extends BaseTenantEntity {
     private Integer runtimeFailThreshold;
 
     /**
+     * HTTP/SSE 空闲连接回收阈值（毫秒），0 表示不回收；STDIO 不适用
+     */
+    private Integer idleTimeoutMs;
+
+    /**
      * 激活版本号
      */
     private Long activationRevision;

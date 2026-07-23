@@ -114,6 +114,11 @@ public class AgentDefinitionServiceImpl extends ServiceImpl<AgentDefinitionMappe
 
         saveSubItems(vo);
 
+        // 新建后注册到 runtime 的内存 registry（对齐 update 行为）。
+        // 不发的话新 agent 在 runtime 重启前不可对话（Agent not found: {agentCode}）。
+        messagePublisher.publishAfterCommit(RedisChannelTopic.AGENT_REREGISTER_CHANNEL,
+                String.valueOf(vo.getId()));
+
         return true;
     }
 

@@ -184,9 +184,10 @@ export function useChatStream(
         // 计划追踪：累积工具参数
         onPlanToolArgs(_e.toolCallId, partialArgs)
 
+        // 按 toolCallId 定位目标项（模型并行发起多个工具时，最后一项不一定是本事件的归属）
         const arr = [...toolCallsInProgress.value]
-        const last = arr[arr.length - 1]
-        if (last) last.args = partialArgs
+        const target = arr.find(t => t.id === _e.toolCallId)
+        if (target) target.args = partialArgs
         toolCallsInProgress.value = arr
       },
       onToolCallResult: (e) => {
@@ -198,15 +199,18 @@ export function useChatStream(
           if (!(toolProcessActive?.value ?? true)) {
             return
           }
-          // 更新工具调用结果和耗时
-          toolCallsInProgress.value = toolCallsInProgress.value.map((t) =>
-            t.id === e.toolCallId ? { ...t, result: e.content, elapsed: Date.now() - t.startTime } : t
-          )
+          // 只结算本次 toolCallId 对应的调用：并行场景下数组里可能还有其他进行中的工具，
+          // 不能像旧逻辑那样把整个数组序列化/清空（会丢掉后续工具的保存与卡片）
+          const completed = toolCallsInProgress.value.find(t => t.id === e.toolCallId)
+          if (!completed) {
+            return
+          }
+          const finished = { ...completed, result: e.content, elapsed: Date.now() - completed.startTime }
 
-          // // 保存工具调用消息，通过队列保证写入顺序
+          // 保存工具调用消息，通过队列保证写入顺序（一次调用一条 tool 消息，与后端历史格式一致）
           const sid = currentSessionId.value
           if (sid) {
-            const contentToSave = buildToolCallsContent(toolCallsInProgress.value)
+            const contentToSave = buildToolCallsContent([finished])
             if (contentToSave) {
               onMessageSaved?.({
                 id: nextIdBig(),
@@ -221,8 +225,9 @@ export function useChatStream(
             }
           }
         } finally {
-          // 清空进行中的工具调用（可根据需要保留，此处清空）
-          toolCallsInProgress.value = []
+          // 仅移除本次完成的调用，保留其他进行中的工具卡片；
+          // 异常残留项由 onRunStarted 的清空兜底（与原有清理时机一致）
+          toolCallsInProgress.value = toolCallsInProgress.value.filter(t => t.id !== e.toolCallId)
         }
       },
       onRunFinished: (_e) => {

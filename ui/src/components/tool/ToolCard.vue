@@ -11,6 +11,7 @@ import type { ToolVO } from '@/types'
 import {
   createViewItem,
   createEditItem,
+  createDebugItem,
   createEnableItem,
   createDeleteItem,
   createDivider,
@@ -29,6 +30,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   view: [id: string]
   edit: [id: string]
+  debug: [id: string]
   delete: [id: string]
   enable: [id: string]
 }>()
@@ -62,6 +64,8 @@ const menuItems = computed(() => {
   const items = [
     createViewItem(),
     createEditItem(),
+    // 仅启用状态的工具可调试（与 MCP 工具治理的 Debug 入口条件对齐）
+    ...(props.data.enabled ? [createDebugItem()] : []),
     createEnableItem(props.data.enabled),
   ]
   if (props.data.toolType !== 'BUILTIN') {
@@ -81,6 +85,9 @@ function handleMenuClick({ key }: { key: string }) {
       break
     case 'edit':
       emit('edit', props.data.id as string)
+      break
+    case 'debug':
+      emit('debug', props.data.id as string)
       break
     case 'enable':
       emit('enable', props.data.id as string)
@@ -114,7 +121,8 @@ function handleMenuClick({ key }: { key: string }) {
     <div class="card-footer flex items-center justify-between">
       <div class="card-tags flex items-center gap-xs">
         <ATag color="default" class="tag">{{ toolTypeText }}</ATag>
-        <ATag color="default" class="tag" style="max-width: 80px;">{{ data.category || '未设置标签' }}</ATag>
+        <!-- 分类标签仅在有值且不与类型文案重复时显示（内置工具入库 category="内置"，避免「内置 内置」撞车） -->
+        <ATag v-if="data.category && data.category !== toolTypeText" color="default" class="tag" style="max-width: 80px;">{{ data.category }}</ATag>
       </div>
       <div class="card-time text-placeholder text-xs">{{ formattedTime }}</div>
     </div>

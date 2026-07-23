@@ -8,7 +8,7 @@ import type { InteractionSubmitPayload } from '@/components/markdown/uip/types'
 defineProps<{
   messages: DisplayMessage[]
   agentHasResult?: boolean
-  toolCalls: Array<{ id: string; name: string; args: string; result?: string; elapsed?: number, needConfirm?: boolean }>
+  toolCalls: Array<{ id: string; name: string; args: string; result?: string; elapsed?: number, needConfirm?: boolean, startTime?: number }>
 }>()
 
 defineEmits<{
@@ -49,6 +49,7 @@ defineEmits<{
         :elapsed="t.elapsed"
         :loading="t.result == null"
         :need-confirm="t.needConfirm"
+        :start-time="t.startTime"
         @toolContent="(content: any) => $emit('toolContent', content)"
       />
     </TransitionGroup>

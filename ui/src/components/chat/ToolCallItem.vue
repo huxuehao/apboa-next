@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
+import { useToolCallDisplayName } from '@/composables/chat/useToolCallDisplayName'
 
-defineProps<{
+const props = defineProps<{
   id: string,
   name: string
   args?: string
@@ -9,7 +10,42 @@ defineProps<{
   elapsed?: number
   loading?: boolean
   needConfirm?: boolean
+  startTime?: number
 }>()
+
+const { resolveToolCallName } = useToolCallDisplayName()
+
+/** 仅显示层翻译（工具/子智能体 → 显示名）；HITL 允许/禁止回传仍用原始 name */
+const displayName = computed(() => resolveToolCallName(props.name))
+
+// 执行中实时耗时（100ms 刷新，0.1s 步进滚动）；needConfirm 暂停态不计时（工具没在跑，是在等人）
+const nowTick = ref(Date.now())
+let elapsedTimer: number | null = null
+
+const startTick = () => {
+  if (elapsedTimer != null) return
+  nowTick.value = Date.now()
+  elapsedTimer = window.setInterval(() => { nowTick.value = Date.now() }, 100)
+}
+const stopTick = () => {
+  if (elapsedTimer != null) {
+    clearInterval(elapsedTimer)
+    elapsedTimer = null
+  }
+}
+
+watch(
+  () => props.loading && !props.needConfirm,
+  (running) => { running ? startTick() : stopTick() },
+  { immediate: true }
+)
+onUnmounted(stopTick)
+
+const runningElapsed = computed(() => {
+  if (!props.startTime) return ''
+  const s = Math.max(0, nowTick.value - props.startTime) / 1000
+  return `${s.toFixed(1)}s`
+})
 
 const emit = defineEmits<{
   (e: 'toolContent', value: any): void
@@ -38,7 +74,9 @@ const handleShowArgs = () => {
     <div class="chat-tool-call" :class="{ 'chat-tool-call--loading': loading }">
       <span class="chat-tool-call-dot"></span>
       <span class="chat-tool-call-label">
-      <template v-if="loading">正在执行 {{ name }}</template>
+      <template v-if="loading">
+        正在执行 {{ displayName }}<span v-if="!needConfirm && runningElapsed" class="chat-tool-call-elapsed"> · {{ runningElapsed }}</span>
+      </template>
       <template v-if="needConfirm" >
         <div class="chat-tool-call-actions">
           <AButton v-if="args && args !== '{}'"
@@ -61,4 +99,9 @@ const handleShowArgs = () => {
 
 <style scoped lang="scss">
 @use '@/styles/chat/index.scss' as *;
+
+/* 等宽数字：计时滚动时不左右抖动 */
+.chat-tool-call-elapsed {
+  font-variant-numeric: tabular-nums;
+}
 </style>

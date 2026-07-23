@@ -13,6 +13,7 @@ import io.modelcontextprotocol.spec.McpSchema;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,17 +30,21 @@ public class LazyMcpAgentTool implements AgentTool {
     private final McpSchema.Tool toolSchema;
     private final Supplier<Mono<McpClientWrapper>> initializedClientSupplier;
     private final McpRuntimeDegradeService mcpRuntimeDegradeService;
+    /** 会话失效时作废共享连接的回调（入参为失败时刻的 client 实例，作 CAS 比对令牌） */
+    private final Consumer<McpClientWrapper> contextInvalidator;
     private final Map<String, Object> parameters;
     private final Map<String, Object> outputSchema;
 
     public LazyMcpAgentTool(RuntimeDegradeContext degradeContext,
                             McpSchema.Tool toolSchema,
                             Supplier<Mono<McpClientWrapper>> initializedClientSupplier,
-                            McpRuntimeDegradeService mcpRuntimeDegradeService) {
+                            McpRuntimeDegradeService mcpRuntimeDegradeService,
+                            Consumer<McpClientWrapper> contextInvalidator) {
         this.degradeContext = degradeContext;
         this.toolSchema = toolSchema;
         this.initializedClientSupplier = initializedClientSupplier;
         this.mcpRuntimeDegradeService = mcpRuntimeDegradeService;
+        this.contextInvalidator = contextInvalidator;
         this.parameters = McpTool.convertMcpSchemaToParameters(toolSchema.inputSchema(), Set.of());
         this.outputSchema = toolSchema.outputSchema() != null
                 ? new HashMap<>(toolSchema.outputSchema())
@@ -82,8 +87,15 @@ public class LazyMcpAgentTool implements AgentTool {
             // 设置租户上下文
             TenantUtils.setCurrentTenant(tenantId, tenantCode);
 
-            return initializedClientSupplier.get()
-                    .flatMap(client -> client.callTool(getName(), param.getInput()))
+            return callOnce(param)
+                    // 会话失效：连接已在 callOnce 内作废，重建后重试一次（新 session）；其余错误不重试
+                    .onErrorResume(e -> isSessionLost(e)
+                            ? Mono.defer(() -> {
+                                log.info("MCP session lost for tool '{}' from '{}', rebuilding connection and retrying once",
+                                        getName(), degradeContext.serverName());
+                                return callOnce(param);
+                            })
+                            : Mono.error(e))
                     .doOnSuccess(result -> {
                         mcpRuntimeDegradeService.recordSuccess(
                                 degradeContext.serverId(),
@@ -107,6 +119,28 @@ public class LazyMcpAgentTool implements AgentTool {
                     })
                     .doFinally(signalType -> TenantUtils.clear());
         });
+    }
+
+    /**
+     * 单次调用；失败且为会话失效时立即作废共享连接（client 实例即 CAS 比对令牌），
+     * 使后续（重试或下次调用）经 supplier 重建新 session。
+     */
+    private Mono<McpSchema.CallToolResult> callOnce(ToolCallParam param) {
+        return initializedClientSupplier.get()
+                .flatMap(client -> client.callTool(getName(), param.getInput())
+                        .doOnError(e -> {
+                            if (isSessionLost(e)) {
+                                contextInvalidator.accept(client);
+                            }
+                        }));
+    }
+
+    /**
+     * 会话失效特征（高德等 Streamable HTTP 服务端回收 session 后的典型报文），可按需扩展
+     */
+    private static boolean isSessionLost(Throwable e) {
+        String msg = e.getMessage();
+        return msg != null && (msg.contains("Session ID not found") || msg.contains("Please reconnect"));
     }
 
     private String unavailableMessage(Throwable e) {

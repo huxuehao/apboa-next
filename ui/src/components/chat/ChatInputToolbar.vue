@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * 聊天输入框工具栏组件
- * 负责记忆开关、工具调用历史开关、@按钮、上传按钮、发送/中断按钮
+ * 负责记忆开关、工具调用历史开关、授权模式开关、@按钮、上传按钮、发送/中断按钮
  *
  * @component
  */
@@ -9,8 +9,10 @@ import { computed } from 'vue'
 import {
   ArrowUpOutlined,
   ClockCircleOutlined,
+  LockOutlined,
   PaperClipOutlined,
-  ThunderboltOutlined
+  ThunderboltOutlined,
+  UnlockOutlined
 } from '@ant-design/icons-vue'
 
 const props = withDefaults(
@@ -22,6 +24,7 @@ const props = withDefaults(
     memoryActive?: boolean
     showToolProcess?: boolean
     toolProcessActive?: boolean
+    autoApproveActive?: boolean
     mentionAllowed?: boolean
     allowUploadFileType?: string[]
   }>(),
@@ -31,6 +34,7 @@ const props = withDefaults(
     memoryActive: false,
     showToolProcess: false,
     toolProcessActive: false,
+    autoApproveActive: false,
     mentionAllowed: false
   }
 )
@@ -38,6 +42,7 @@ const props = withDefaults(
 const emit = defineEmits<{
   (e: 'memory', value: boolean): void
   (e: 'toolProcess', value: boolean): void
+  (e: 'autoApprove', value: boolean): void
   (e: 'mentionTrigger'): void
   (e: 'pickFile'): void
   (e: 'send'): void
@@ -58,6 +63,14 @@ const toggleMemory = () => {
 const toggleToolProcess = () => {
   if (!props.showToolProcess) return
   emit('toolProcess', !props.toolProcessActive)
+}
+
+/**
+ * 切换授权模式（逐步确认 / 一键授权）。
+ * 开启的二次确认 Modal 由上层处理（涉及 pending 全批逻辑）
+ */
+const toggleAutoApprove = () => {
+  emit('autoApprove', !props.autoApproveActive)
 }
 
 /** 多模态类型扩展名集合（用于 tooltip 分类） */
@@ -116,6 +129,21 @@ const uploadTooltip = computed(() => {
           @click="toggleToolProcess"
         >
           <ThunderboltOutlined />
+        </button>
+      </ATooltip>
+
+      <ATooltip placement="bottom" :overlay-style="{ maxWidth: 'none' }" :overlay-inner-style="{ whiteSpace: 'nowrap' }">
+        <template #title>
+          {{ autoApproveActive ? '一键授权：需确认的工具将自动允许执行' : '逐步确认：需确认的工具将等待手动允许' }}
+        </template>
+        <button
+          type="button"
+          class="chat-toolbar-btn chat-toolbar-btn-icon chat-toolbar-btn-circle"
+          :class="{ 'is-warn-active': autoApproveActive }"
+          @click="toggleAutoApprove"
+        >
+          <UnlockOutlined v-if="autoApproveActive" />
+          <LockOutlined v-else />
         </button>
       </ATooltip>
     </div>
@@ -198,6 +226,18 @@ const uploadTooltip = computed(() => {
     color: $chat-primary;
     background-color: rgba($chat-primary, 0.1);
     font-weight: 500;
+  }
+
+  /* 一键授权激活态：警示色，提示需确认工具将自动放行 */
+  &.is-warn-active {
+    color: #fa8c16;
+    background-color: rgba(250, 140, 22, 0.12);
+    font-weight: 500;
+
+    &:hover {
+      color: #fa8c16;
+      background-color: rgba(250, 140, 22, 0.18);
+    }
   }
 
   &:disabled,

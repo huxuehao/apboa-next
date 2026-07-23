@@ -96,6 +96,22 @@ export function getSessionDetail(id: string) {
 }
 
 /**
+ * 查询会话「一键授权」开关（无记录=false 逐步确认）
+ * GET /agent/chat/session/{sessionId}/auto-approve
+ */
+export function getAutoApprove(sessionId: string) {
+  return request.get<ApiResponse<boolean>>(`${BASE}/${sessionId}/auto-approve`)
+}
+
+/**
+ * 设置会话「一键授权」开关
+ * PUT /agent/chat/session/{sessionId}/auto-approve?enabled=
+ */
+export function setAutoApprove(sessionId: string, enabled: boolean) {
+  return request.put<ApiResponse<boolean>>(`${BASE}/${sessionId}/auto-approve?enabled=${enabled}`)
+}
+
+/**
  * 置顶会话
  * PUT /agent/chat/session/{id}/pin
  */

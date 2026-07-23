@@ -8,6 +8,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { RoutePaths } from '@/router/constants.ts'
 import SmartCodeEditor from '@/components/editor/SmartCodeEditor.vue'
 import ExtendConfigEditor, { type ExtendConfigData } from '@/components/model/ExtendConfigEditor.vue'
+import TokenStepSlider from '@/components/model/TokenStepSlider.vue'
 import * as modelApi from '@/api/model'
 import * as promptApi from '@/api/prompt'
 import type { ModelProviderVO, ModelConfigVO, SystemPromptTemplateVO } from '@/types'
@@ -42,7 +43,21 @@ const allPrompts = ref<SystemPromptTemplateVO[]>([])
 const selectedProviderId = ref<string>('')
 const selectedPromptCategory = ref<string>('')
 const showModelParamsOverride = ref(false)
-const modelParamsForm = ref<Record<string, unknown>>({})
+
+/** 覆盖模型参数表单结构（滑块控件需要明确的 number 类型） */
+interface ModelParamsForm {
+  streaming?: boolean
+  temperature?: number
+  topP?: number
+  topK?: number
+  maxTokens?: number
+  repeatPenalty?: number
+  seed?: number | string | null
+  extendConfig?: ExtendConfigData | null
+  [key: string]: unknown
+}
+
+const modelParamsForm = ref<ModelParamsForm>({})
 
 /**
  * 表单数据
@@ -358,60 +373,91 @@ defineExpose({
 
       <div v-if="formData.modelConfigId && showModelParamsOverride" class="params-override-section">
         <ARow :gutter="16" :key="showModelParamsOverride">
-          <ACol :span="6">
-            <AFormItem label="Temperature">
-              <AInputNumber
-                v-model:value="modelParamsForm.temperature"
-                :min="0"
-                :max="2"
-                :step="0.1"
-                style="width: 100%"
-              />
+          <ACol :span="8">
+            <AFormItem label="温度 (Temperature)">
+              <ARow :gutter="16">
+                <ACol :span="16">
+                  <ASlider
+                    v-model:value="modelParamsForm.temperature"
+                    :min="0"
+                    :max="2"
+                    :step="0.1"
+                  />
+                </ACol>
+                <ACol :span="8">
+                  <AInputNumber
+                    v-model:value="modelParamsForm.temperature"
+                    :min="0"
+                    :max="2"
+                    :step="0.1"
+                    style="width: 100%"
+                  />
+                </ACol>
+              </ARow>
             </AFormItem>
           </ACol>
-          <ACol :span="6">
+          <ACol :span="8">
             <AFormItem label="Top P">
-              <AInputNumber
-                v-model:value="modelParamsForm.topP"
-                :min="0"
-                :max="1"
-                :step="0.1"
-                style="width: 100%"
-              />
+              <ARow :gutter="16">
+                <ACol :span="16">
+                  <ASlider
+                    v-model:value="modelParamsForm.topP"
+                    :min="0"
+                    :max="1"
+                    :step="0.01"
+                  />
+                </ACol>
+                <ACol :span="8">
+                  <AInputNumber
+                    v-model:value="modelParamsForm.topP"
+                    :min="0"
+                    :max="1"
+                    :step="0.01"
+                    style="width: 100%"
+                  />
+                </ACol>
+              </ARow>
             </AFormItem>
           </ACol>
-          <ACol :span="6">
+          <ACol :span="8">
+            <AFormItem label="重复惩罚 (Repeat Penalty)">
+              <ARow :gutter="16">
+                <ACol :span="16">
+                  <ASlider
+                    v-model:value="modelParamsForm.repeatPenalty"
+                    :min="0"
+                    :max="2"
+                    :step="0.1"
+                  />
+                </ACol>
+                <ACol :span="8">
+                  <AInputNumber
+                    v-model:value="modelParamsForm.repeatPenalty"
+                    :min="0"
+                    :max="2"
+                    :step="0.1"
+                    style="width: 100%"
+                  />
+                </ACol>
+              </ARow>
+            </AFormItem>
+          </ACol>
+          <ACol :span="8">
+            <AFormItem label="最大Token数">
+              <TokenStepSlider v-model="modelParamsForm.maxTokens" />
+            </AFormItem>
+          </ACol>
+          <ACol :span="8">
             <AFormItem label="Top K">
               <AInputNumber
                 v-model:value="modelParamsForm.topK"
-                :min="0"
-                :max="100"
-                style="width: 100%"
-              />
-            </AFormItem>
-          </ACol>
-          <ACol :span="6">
-            <AFormItem label="Max Tokens">
-              <AInputNumber
-                v-model:value="modelParamsForm.maxTokens"
                 :min="1"
-                :max="1000000"
+                :max="1000"
                 style="width: 100%"
               />
             </AFormItem>
           </ACol>
-          <ACol :span="6">
-            <AFormItem label="Repeat Penalty">
-              <AInputNumber
-                v-model:value="modelParamsForm.repeatPenalty"
-                :min="0"
-                :max="2"
-                :step="0.1"
-                style="width: 100%"
-              />
-            </AFormItem>
-          </ACol>
-          <ACol :span="6">
+          <ACol :span="8">
             <AFormItem label="随机种子 (Seed)" name="seed">
               <AInputNumber
                 v-model:value="modelParamsForm.seed"
@@ -419,8 +465,8 @@ defineExpose({
                 placeholder="请输入随机种子，留空表示随机" />
             </AFormItem>
           </ACol>
-          <ACol :span="6">
-            <AFormItem label="Streaming">
+          <ACol :span="8">
+            <AFormItem label="流式输出">
               <ASwitch v-model:checked="modelParamsForm.streaming" />
             </AFormItem>
           </ACol>

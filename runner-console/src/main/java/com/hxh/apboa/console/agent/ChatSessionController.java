@@ -108,6 +108,29 @@ public class ChatSessionController {
     }
 
     /**
+     * 查询会话「一键授权」开关（Redis，无记录=false 逐步确认）
+     */
+    @SkAccess
+    @ChatKeyAccess
+    @GetMapping("/{sessionId}/auto-approve")
+    public R<Boolean> getAutoApprove(@PathVariable("sessionId") Long sessionId) {
+        return R.data(chatSessionService.getAutoApprove(sessionId));
+    }
+
+    /**
+     * 设置会话「一键授权」开关（开启写 Redis TTL 30 天滚动，关闭删 key；
+     * runtime 侧 IConfirmationHook 在 stopAgent 前实时读取生效）
+     */
+    @SkAccess
+    @ChatKeyAccess
+    @PutMapping("/{sessionId}/auto-approve")
+    public R<Boolean> setAutoApprove(@PathVariable("sessionId") Long sessionId,
+                                     @RequestParam("enabled") boolean enabled) {
+        chatSessionService.setAutoApprove(sessionId, enabled);
+        return R.data(true);
+    }
+
+    /**
      * 会话列表（未删除，默认当前用户，可按 agentId 筛选）
      */
     @SkAccess

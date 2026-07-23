@@ -133,5 +133,22 @@ public interface ChatSessionService extends IService<ChatSession> {
      * @param id 会话 ID
      */
     void deleteSession(Long id);
+
+    /**
+     * 查询会话「一键授权」开关（Redis，无记录=false 逐步确认）
+     *
+     * @param sessionId 会话 ID
+     * @return 是否开启一键授权
+     */
+    boolean getAutoApprove(Long sessionId);
+
+    /**
+     * 设置会话「一键授权」开关：开启写 Redis（TTL 30 天滚动刷新），关闭删 key。
+     * runtime 侧 IConfirmationHook 在 stopAgent 前实时读取，开着则直接放行需确认工具。
+     *
+     * @param sessionId 会话 ID
+     * @param enabled   是否开启
+     */
+    void setAutoApprove(Long sessionId, boolean enabled);
 }
 

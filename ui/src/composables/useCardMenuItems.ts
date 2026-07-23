@@ -8,6 +8,7 @@ import { h } from 'vue'
 import type { VNode } from 'vue'
 import {
   ApartmentOutlined,
+  BugOutlined,
   CheckCircleOutlined,
   ClockCircleOutlined,
   DeleteOutlined,
@@ -167,6 +168,13 @@ export function createRenameItem(): CardMenuItem {
  */
 export function createToolLinkItem(): CardMenuItem {
   return { key: 'toolLink', label: '关联工具', icon: () => h(ToolOutlined) }
+}
+
+/**
+ * 创建「调试」菜单项
+ */
+export function createDebugItem(): CardMenuItem {
+  return { key: 'debug', label: '调试', icon: () => h(BugOutlined) }
 }
 
 /**

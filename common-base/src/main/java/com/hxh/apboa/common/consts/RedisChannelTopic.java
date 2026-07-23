@@ -32,4 +32,11 @@ public class RedisChannelTopic {
 
     /** 技能文件同步频道（通知 runner-file 节点增量同步） */
     public static final String SKILL_FILE_SYNC_CHANNEL = "apboa:skill:file:sync";
+
+    /**
+     * 会话「一键授权」开关 key 前缀（+ sessionId/threadId，值 "1"，TTL 30 天滚动）。
+     * console 侧 ChatSessionService 读写，runtime 侧 IConfirmationHook 在 stopAgent 前实时读，
+     * 开着则直接放行需确认工具（不走 暂停→确认→resume 循环）。
+     */
+    public static final String CHAT_AUTO_APPROVE_KEY_PREFIX = "apboa:chat:auto-approve:";
 }

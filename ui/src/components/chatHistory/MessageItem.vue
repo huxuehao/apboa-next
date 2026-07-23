@@ -6,6 +6,7 @@ import type { UploadedFileItem } from '@/types'
 import MediaIcon from '@/components/common/MediaIcon.vue'
 import MarkdownRenderer from "@/components/markdown/MarkdownRenderer.vue";
 import TaggedContentRenderer from '../chat/TaggedContentRenderer.vue';
+import { useToolCallDisplayName } from '@/composables/chat/useToolCallDisplayName'
 
 const FILE_SEP = '@==##::::##==@'
 
@@ -106,6 +107,8 @@ interface ToolCallItem {
 }
 
 /** 解析工具调用 JSON 内容 */
+const { resolveToolCallName } = useToolCallDisplayName()
+
 const parsedToolCall = computed<ToolCallItem>(() => {
   if (!props.content) return null
   try {
@@ -201,7 +204,7 @@ const openPreview = (index: number) => {
             <!-- JSON 解析成功：结构化展示每个工具调用 -->
             <template v-if="parsedToolCall">
               <div class="chat-tool-item-header">
-                <span class="chat-tool-item-name">{{ parsedToolCall.name }}</span>
+                <span class="chat-tool-item-name">{{ resolveToolCallName(parsedToolCall.name) }}</span>
                 <span class="chat-tool-item-time">{{ parsedToolCall.totalTimes }}ms</span>
               </div>
               <div v-if="parsedToolCall.args && parsedToolCall.args !== '{}'">

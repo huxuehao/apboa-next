@@ -33,7 +33,8 @@ const formData = ref({
   protocol: McpProtocol.HTTP,
   mode: McpMode.SYNC,
   timeout: 30000,
-  runtimeFailThreshold: 3
+  runtimeFailThreshold: 3,
+  idleTimeoutMs: 300000
 })
 
 const httpConfig = ref({
@@ -86,7 +87,8 @@ function initForm() {
       protocol: props.data.protocol,
       mode: props.data.mode,
       timeout: props.data.timeout,
-      runtimeFailThreshold: props.data.runtimeFailThreshold ?? 3
+      runtimeFailThreshold: props.data.runtimeFailThreshold ?? 3,
+      idleTimeoutMs: props.data.idleTimeoutMs ?? 300000
     }
     parseProtocolConfig(props.data.protocolConfig)
     return
@@ -99,7 +101,8 @@ function initForm() {
     protocol: props.initialProtocol || McpProtocol.HTTP,
     mode: McpMode.SYNC,
     timeout: 30000,
-    runtimeFailThreshold: 3
+    runtimeFailThreshold: 3,
+    idleTimeoutMs: 300000
   }
   resetProtocolConfig()
 }
@@ -201,6 +204,7 @@ async function handleSubmit() {
       mode: formData.value.mode,
       timeout: formData.value.timeout,
       runtimeFailThreshold: formData.value.runtimeFailThreshold,
+      idleTimeoutMs: formData.value.idleTimeoutMs,
       protocolConfig: buildProtocolConfig()
     }
 
@@ -304,6 +308,19 @@ function handleCancel() {
         />
         <div class="text-placeholder text-xs mt-xs">
           设置为 0 表示关闭运行时自动降级；大于 0 时，连续出现该次数的连接或传输失败后会自动置为连接失败。
+        </div>
+      </AFormItem>
+
+      <AFormItem label="空闲连接回收(毫秒)">
+        <AInputNumber
+          v-model:value="formData.idleTimeoutMs"
+          :min="0"
+          :step="60000"
+          style="width: 100%"
+          placeholder="0 表示不回收"
+        />
+        <div class="text-placeholder text-xs mt-xs">
+          HTTP/SSE 连接空闲超过该时长将被主动关闭并在下次调用时重建（避免远端会话过期导致调用失败）；设置为 0 表示不回收；STDIO 协议不适用。建议不小于一分钟且不大于远端会话存活期。
         </div>
       </AFormItem>
 

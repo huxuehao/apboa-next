@@ -36,6 +36,17 @@ export function buildToolCallsContent(
 }
 
 /**
+ * 工具耗时格式化：<1s 用 ms（整数），≥1s 用 s（保留两位）。
+ * 兼容字符串输入（历史 TOOL 消息经保存链路后 totalTimes 为字符串，如 "2052"）
+ */
+export function formatElapsed(ms: number | string): string {
+  const n = Number(ms)
+  if (!Number.isFinite(n) || n < 0) return ''
+  if (n < 1000) return `${Math.round(n)}ms`
+  return `${(n / 1000).toFixed(2)}s`
+}
+
+/**
  * 根据用户输入生成会话标题（截取前50字符）
  */
 export function formatSessionTitle(input: string | null): string {

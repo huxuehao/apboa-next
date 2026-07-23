@@ -38,6 +38,7 @@ public class McpServerVO implements SerializableEnable {
     private Integer toolCount;
     private Integer availableToolCount;
     private Integer runtimeFailThreshold;
+    private Integer idleTimeoutMs;
     private Boolean needsSync;
     private Boolean enabled;
     private LocalDateTime createdAt;

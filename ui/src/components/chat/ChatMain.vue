@@ -33,6 +33,7 @@ const props = defineProps<{
   enablePlanning?: boolean
   toolProcessActive?: boolean
   showToolProcess?: boolean
+  autoApproveActive?: boolean
   allowUploadFileType?: string[]
   agentHasResult?: boolean
   workspacePanelOpen?: boolean
@@ -57,6 +58,7 @@ const emit = defineEmits<{
   (e: 'memory', value: boolean): void
   (e: 'plan', value: boolean): void
   (e: 'toolProcess', value: boolean): void
+  (e: 'autoApprove', value: boolean): void
   (e: 'toggleSidebar'): void
   (e: 'toggleWorkspace'): void
   /** 触发加载更多历史消息 */
@@ -273,6 +275,7 @@ defineExpose({
         :allow-upload-file-type="allowUploadFileType"
         :show-tool-process="showToolProcess"
         :tool-process-active="toolProcessActive"
+        :auto-approve-active="autoApproveActive"
         :session-id="sessionId"
         :has-code-execution-config="hasCodeExecutionConfig"
         :mention-allowed="true"
@@ -281,6 +284,7 @@ defineExpose({
         @memory="$emit('memory', $event)"
         @plan="$emit('plan', $event)"
         @toolProcess="$emit('toolProcess', $event)"
+        @auto-approve="$emit('autoApprove', $event)"
         @send="handleSend"
         @new-session="$emit('newSession')"
       />
@@ -339,6 +343,7 @@ defineExpose({
             :allow-upload-file-type="allowUploadFileType"
             :show-tool-process="showToolProcess"
             :tool-process-active="toolProcessActive"
+            :auto-approve-active="autoApproveActive"
             :session-id="sessionId"
             :mention-allowed="true"
             @inputTagPreview="inputTagPreviewHandle"
@@ -347,6 +352,7 @@ defineExpose({
             @memory="$emit('memory', $event)"
             @plan="$emit('plan', $event)"
             @toolProcess="$emit('toolProcess', $event)"
+            @auto-approve="$emit('autoApprove', $event)"
             @send="handleSend"
             @abort="$emit('abort')"
           />

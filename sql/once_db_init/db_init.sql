@@ -383,6 +383,7 @@ CREATE TABLE `mcp_server` (
   `last_tool_sync_time` datetime DEFAULT NULL COMMENT '上次工具同步时间',
   `tool_count` int NOT NULL DEFAULT 0 COMMENT '当前工具数量',
   `runtime_fail_threshold` int NOT NULL DEFAULT 3 COMMENT '运行时自动降级连续失败阈值，0 表示关闭',
+  `idle_timeout_ms` int NOT NULL DEFAULT 300000 COMMENT 'HTTP/SSE 空闲连接回收阈值（毫秒），0 表示不回收；STDIO 不适用',
   `activation_revision` bigint NOT NULL DEFAULT 0 COMMENT '激活版本号',
   `config_hash` varchar(64) DEFAULT NULL COMMENT '当前连接配置哈希',
   `needs_sync` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否需要同步工具列表',

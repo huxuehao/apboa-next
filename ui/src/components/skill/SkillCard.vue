@@ -250,7 +250,8 @@ function handleMenuClick({ key }: { key: string }) {
     <div class="card-footer flex items-center justify-between">
       <div class="card-tags flex items-center gap-xs">
         <ATag color="default" class="tag">{{ skillTypeText }}</ATag>
-        <ATag color="default" class="tag">{{ data.category || '未设置标签' }}</ATag>
+        <!-- 分类标签仅在有值且不与类型文案重复时显示（对齐 ToolCard/HookCard 的统一规则） -->
+        <ATag v-if="data.category && data.category !== skillTypeText" color="default" class="tag">{{ data.category }}</ATag>
       </div>
       <div class="card-time text-placeholder text-xs">更新于 {{ formattedTime }}</div>
     </div>

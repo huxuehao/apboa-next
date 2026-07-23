@@ -15,6 +15,7 @@ import type {ToolVO} from '@/types'
 import ToolCard from '@/components/tool/ToolCard.vue'
 import CreateCard from '@/components/tool/CreateCard.vue'
 import ToolForm from '@/components/tool/ToolForm.vue'
+import ToolDebugView from '@/components/tool/ToolDebugView.vue'
 import {ApboaModalApi} from "@/components/common/ApboaModalApi.ts";
 import ApboaInfiniteLoading from '@/components/common/ApboaInfiniteLoading.vue'
 
@@ -23,6 +24,12 @@ const { list, categories, selectedToolType, selectedCategory, keyword, loading, 
 
 const formVisible = ref<boolean>(false)
 const currentData = ref<ToolVO | undefined>(undefined)
+/** 调试面板可见性 */
+const debugVisible = ref<boolean>(false)
+/** 当前调试的工具 */
+const debugToolData = ref<ToolVO | null>(null)
+/** 调试面板可切换的工具列表（当前已加载且启用的） */
+const debugTools = computed(() => list.value.filter(item => item.enabled))
 /** 用于强制重建 InfiniteLoading 组件的 key */
 const infiniteLoadingKey = ref(0)
 /** 是否首次加载 */
@@ -117,6 +124,22 @@ async function handleEdit(id: string) {
   const response = await toolApi.detail(id)
   currentData.value = response.data.data
   formVisible.value = true
+}
+
+/**
+ * 处理调试：进入全屏调试面板
+ */
+async function handleDebug(id: string) {
+  const response = await toolApi.detail(id)
+  debugToolData.value = response.data.data
+  debugVisible.value = true
+}
+
+/**
+ * 退出调试面板
+ */
+function handleDebugExit() {
+  debugToolData.value = null
 }
 
 /**
@@ -311,6 +334,7 @@ onMounted(() => {
           :data="item"
           @view="handleView"
           @edit="handleEdit"
+          @debug="handleDebug"
           @enable="handleEnable"
           @delete="handleDelete"
         />
@@ -327,6 +351,13 @@ onMounted(() => {
       :data="currentData"
       :categories="categories"
       @success="handleFormSuccess"
+    />
+
+    <ToolDebugView
+      v-model:visible="debugVisible"
+      :tool="debugToolData"
+      :tools="debugTools"
+      @exit="handleDebugExit"
     />
   </div>
 </template>
