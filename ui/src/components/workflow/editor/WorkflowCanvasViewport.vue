@@ -328,6 +328,7 @@ defineExpose({ addAtCenter, fitAll, zoomInCanvas, zoomOutCanvas, resetZoom, fitN
       :nodes-draggable="!readonly"
       :nodes-connectable="!readonly"
       :edges-updatable="!readonly"
+      :delete-key-code="[]"
       :default-edge-options="{ animated: false, type: 'workflow' }"
       @connect="onConnect"
       @node-click="onNodeClick"
