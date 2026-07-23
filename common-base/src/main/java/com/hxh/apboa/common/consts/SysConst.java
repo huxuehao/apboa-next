@@ -56,9 +56,17 @@ public class SysConst {
      */
     public static final String ASR_MIN_VOICE_RATIO = "3";
 
-    public static final String ALLOW_IMAGE_FILE_TYPE = "png,jpeg,png,gif,webp";
-    public static final String ALLOW_AUDIO_FILE_TYPE = "mp3,wav,mpeg";
-    public static final String ALLOW_VIDEO_FILE_TYPE = "mp4,mpeg";
+    /**
+     * 语音合成单次最大字符数（前端按句切段后逐段请求，超限直接拒绝——qwen3-tts 单次约 512 token）
+     */
+    public static final String TTS_MAX_TEXT_LENGTH = "500";
+
+    // 以前端 ChatInputToolbar.vue 的 IMAGE_EXTS/AUDIO_EXTS/VIDEO_EXTS 分类集合为准：
+    // 那份长期是 tooltip 展示用的"设计期完整清单"，与这里决定实际放行的值脱节，
+    // 图片漏了 jpg（且 png 误重复一份）、音频/视频均大幅缺格式。
+    public static final String ALLOW_IMAGE_FILE_TYPE = "png,jpg,jpeg,gif,webp,bmp,svg,ico";
+    public static final String ALLOW_AUDIO_FILE_TYPE = "mp3,wav,ogg,m4a,flac,aac,wma,mpeg";
+    public static final String ALLOW_VIDEO_FILE_TYPE = "mp4,webm,mov,mkv,avi,flv,m3u8,mpeg";
     public static final String ALLOW_DOC_FILE_TYPE = "doc,docx,pdf,txt,md";
     public static final String ALLOW_EXCEL_FILE_TYPE = "xlsx,xls,csv";
     public static final String ALLOW_PPT_FILE_TYPE = "pptx,ppt";

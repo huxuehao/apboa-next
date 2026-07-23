@@ -81,6 +81,7 @@ CREATE TABLE `agent_definition` (
   `common_questions_pinned` tinyint(1) NOT NULL DEFAULT 1 COMMENT '常用问题是否在对话中常驻显示',
   `model_config_id` bigint DEFAULT NULL COMMENT '基础模型配置ID',
   `asr_model_config_id` bigint DEFAULT NULL COMMENT '语音识别模型配置ID（NULL=不启用语音输入）',
+  `tts_model_config_id` bigint DEFAULT NULL COMMENT '语音合成模型配置ID（NULL=不启用语音播报）',
   `model_params_override` text COMMENT '模型参数覆盖',
   `tool_choice_strategy` enum('AUTO','NONE','REQUIRED','SPECIFIC') DEFAULT 'AUTO' COMMENT '工具选择策略',
   `specific_tool_name` varchar(100) DEFAULT NULL COMMENT '指定工具名称（当tool_choice_strategy=SPECIFIC时）',
@@ -432,7 +433,7 @@ CREATE TABLE `model_config` (
   `provider_id` bigint NOT NULL COMMENT '提供商ID',
   `name` varchar(100) NOT NULL COMMENT '模型名称',
   `model_id` varchar(100) NOT NULL COMMENT '模型编号/标识符',
-  `category` varchar(20) NOT NULL DEFAULT 'LLM' COMMENT '模型用途: LLM=对话生成, ASR=语音识别',
+  `category` varchar(20) NOT NULL DEFAULT 'LLM' COMMENT '模型用途: LLM=对话生成, ASR=语音识别, TTS=语音合成',
   `model_type` varchar(100) DEFAULT NULL COMMENT '模型类型（LLM 输入模态能力，仅 category=LLM 有意义）',
   `description` varchar(500) DEFAULT NULL COMMENT '模型描述',
   `streaming` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否支持流式',
@@ -490,9 +491,9 @@ CREATE TABLE `params` (
 INSERT INTO `params` (`id`, `param_name`, `param_key`, `param_value`, `tenant_id`) VALUES (1, '访问Token有效期（单位 ms）', 'ACCESS_TOKEN_TTL', '21600000', 1);
 INSERT INTO `params` (`id`, `param_name`, `param_key`, `param_value`, `tenant_id`) VALUES (2, '刷新Token有效期（单位 ms）', 'REFRESH_TOKEN_TTL', '64800000', 1);
 INSERT INTO `params` (`id`, `param_name`, `param_key`, `param_value`, `tenant_id`) VALUES (3, '单个文件大小限制（单位 MB）', 'SINGLE_FILE_MAX_SIZE', '5', 1);
-INSERT INTO `params` (`id`, `param_name`, `param_key`, `param_value`, `tenant_id`) VALUES (4, '支持的图片文件类型', 'ALLOW_IMAGE_FILE_TYPE', 'png,jpeg,png,gif,webp', 1);
-INSERT INTO `params` (`id`, `param_name`, `param_key`, `param_value`, `tenant_id`) VALUES (5, '支持的音频文件类型', 'ALLOW_AUDIO_FILE_TYPE', 'mp3,wav,mpeg', 1);
-INSERT INTO `params` (`id`, `param_name`, `param_key`, `param_value`, `tenant_id`) VALUES (6, '支持的视频文件类型', 'ALLOW_VIDEO_FILE_TYPE', 'mp4,mpeg', 1);
+INSERT INTO `params` (`id`, `param_name`, `param_key`, `param_value`, `tenant_id`) VALUES (4, '支持的图片文件类型', 'ALLOW_IMAGE_FILE_TYPE', 'png,jpg,jpeg,gif,webp,bmp,svg,ico', 1);
+INSERT INTO `params` (`id`, `param_name`, `param_key`, `param_value`, `tenant_id`) VALUES (5, '支持的音频文件类型', 'ALLOW_AUDIO_FILE_TYPE', 'mp3,wav,ogg,m4a,flac,aac,wma,mpeg', 1);
+INSERT INTO `params` (`id`, `param_name`, `param_key`, `param_value`, `tenant_id`) VALUES (6, '支持的视频文件类型', 'ALLOW_VIDEO_FILE_TYPE', 'mp4,webm,mov,mkv,avi,flv,m3u8,mpeg', 1);
 INSERT INTO `params` (`id`, `param_name`, `param_key`, `param_value`, `tenant_id`) VALUES (7, '技能包文件允许入库的扩展名', 'SKILL_FILE_ALLOWED_EXTENSIONS', 'md,py,sh,js,ts,json,yaml,yml,xml,txt,java,cs,go,rs,rb,php,sql,html,css,scss,less,cfg,conf,toml', 1);
 
 

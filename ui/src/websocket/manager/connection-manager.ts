@@ -50,6 +50,8 @@ export class ConnectionManager {
     return new Promise((resolve, reject) => {
       try {
         const socket = new WebSocket(url);
+        // TTS 音频帧走二进制，统一 ArrayBuffer（默认 Blob 每帧都要异步转换）
+        socket.binaryType = 'arraybuffer';
 
         // 握手成功
         socket.onopen = () => {

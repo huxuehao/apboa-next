@@ -7,6 +7,14 @@ import { ReconnectionManager } from './manager/reconnection-manager';
 import { eventBus } from './core/event-bus';
 import {md5} from "js-md5";
 
+// 模块级活跃 handler：懒加载模块（如播报）在错过 WEBSOCKET:CONNECTED 事件后
+// 仍可同步取到发送通道（事件总线不回放历史事件）
+let activeHandler: EnhancedMessageHandler | null = null;
+
+export function getActiveWsHandler(): EnhancedMessageHandler | null {
+  return activeHandler;
+}
+
 export function useWebSocket() {
   const accountStore = useAccountStore()
   const isConnected = ref(false);
@@ -46,6 +54,7 @@ export function useWebSocket() {
     onClose: () => {
       // onClose 只在连接建立后断开时触发，不会与 onerror 导致的重连重复
       messageHandler.value = null;
+      activeHandler = null;
       eventBus.emit('WEBSOCKET:DISCONNECTED', { timestamp: Date.now() });
 
       if (connectionManager.shouldReconnect()) {
@@ -76,10 +85,12 @@ export function useWebSocket() {
       const socket = await connectionManager.connect(WS_CONFIG.URL);
 
       // 初始化增强消息处理器（仅持有 socket 引用用于发送消息）
-      messageHandler.value = new EnhancedMessageHandler(socket, {
+      const handler = new EnhancedMessageHandler(socket, {
         autoParse: true,
         ignorePingPong: true
       });
+      messageHandler.value = handler;
+      activeHandler = handler;
 
       // 发布连接成功事件（携带 handler 引用，供 useWebSocketSender 自动获取）
       eventBus.emit('WEBSOCKET:CONNECTED', {

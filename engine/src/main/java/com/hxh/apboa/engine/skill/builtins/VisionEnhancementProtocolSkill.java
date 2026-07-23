@@ -17,6 +17,21 @@ public class VisionEnhancementProtocolSkill implements IBuiltinSkill {
     private static final String SKILL_NAME = "vision_enhancement_protocol_rules";
 
     @Override
+    public String getSysPrompt() {
+        return """
+                ===================================================
+                Core Principle
+                > **Only use** the `vision_enhancement_protocol_rules` feature for visual presentation **when** it can **significantly improve comprehension** compared to plain text.
+
+                Before responding, ask yourself:
+                > "Would presenting part of the content as cards or charts help the user understand the information faster and better?"
+
+                - If **yes** → Respond using the `vision_enhancement_protocol_rules`
+                - If **no** → Reply with plain text only
+                """;
+    }
+
+    @Override
     public AgentSkill getAgentSkill() {
         return AgentSkill.builder()
                 .name(SKILL_NAME)

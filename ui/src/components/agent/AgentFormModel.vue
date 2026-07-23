@@ -20,6 +20,7 @@ const props = defineProps<{
   modelValue: {
     modelConfigId: string
     asrModelConfigId: string | null
+    ttsModelConfigId: string | null
     modelParamsOverride: Record<string, unknown> | null
     systemPromptTemplateId: string
     followTemplate: boolean
@@ -69,11 +70,14 @@ const formData = computed({
   set: (val) => emit('update:modelValue', val)
 })
 
-/** 对话模型（排除语音识别用途） */
-const llmModels = computed(() => allModels.value.filter(m => m.category !== ModelCategory.ASR))
+/** 对话模型（历史写法是排除 ASR，新增 TTS 用途后改为白名单，避免语音模型混入对话下拉） */
+const llmModels = computed(() => allModels.value.filter(m => m.category === ModelCategory.LLM))
 
 /** 语音识别模型 */
 const asrModels = computed(() => allModels.value.filter(m => m.category === ModelCategory.ASR))
+
+/** 语音合成模型 */
+const ttsModels = computed(() => allModels.value.filter(m => m.category === ModelCategory.TTS))
 
 /**
  * 模型提供商选项（仅显示有对话模型的供应商；模型列表未返回前先显示全部避免闪空态）
@@ -149,6 +153,52 @@ const currentAsrModels = computed(() => {
 function handleAsrProviderChange(value: string | number) {
   if (value === '') {
     formData.value.asrModelConfigId = null
+  }
+}
+
+/**
+ * 语音合成供应商选项：「不启用」+ 有 TTS 模型的供应商（交互与语音识别一致）
+ */
+const ttsProviderOptions = computed(() => {
+  const opts = modelProviders.value
+    .filter(p => ttsModels.value.some(m => String(m.providerId) === String(p.id)))
+    .map(p => ({ label: p.name, value: String(p.id) }))
+  return [{ label: '不启用', value: '' }, ...opts]
+})
+
+/** 语音合成选中的供应商（''=不启用，null=待初始化） */
+const ttsSelectedProviderKey = ref<string | null>(null)
+
+/**
+ * 回显定位（同 ASR：列表与绑定值任一到达都重算，未绑定仅做一次「不启用」初始化）
+ */
+watch(
+  [ttsModels, () => formData.value.ttsModelConfigId],
+  ([models, boundId]) => {
+    const bound = models.find(m => String(m.id) === String(boundId ?? ''))
+    if (bound) {
+      ttsSelectedProviderKey.value = String(bound.providerId)
+    } else if (ttsSelectedProviderKey.value === null && allModels.value.length > 0) {
+      ttsSelectedProviderKey.value = ''
+    }
+  },
+  { immediate: true }
+)
+
+/**
+ * 当前供应商的语音合成模型列表
+ */
+const currentTtsModels = computed(() => {
+  if (!ttsSelectedProviderKey.value) return []
+  return ttsModels.value.filter(m => String(m.providerId) === ttsSelectedProviderKey.value)
+})
+
+/**
+ * 语音合成供应商切换：选「不启用」时清空绑定
+ */
+function handleTtsProviderChange(value: string | number) {
+  if (value === '') {
+    formData.value.ttsModelConfigId = null
   }
 }
 
@@ -568,6 +618,36 @@ defineExpose({
         </ARadioGroup>
         <div v-else class="text-placeholder text-xs mt-xs">
           不启用语音输入；在模型配置中创建「语音识别」用途的模型后可在此绑定
+        </div>
+      </AFormItem>
+
+      <AFormItem label="语音合成模型">
+        <div class="mb-md">
+          <ASegmented
+            v-model:value="ttsSelectedProviderKey"
+            :options="ttsProviderOptions"
+            style="margin-bottom: 12px; background-color: var(--color-bg)"
+            @change="handleTtsProviderChange"
+          />
+        </div>
+        <ARadioGroup v-if="ttsSelectedProviderKey" v-model:value="formData.ttsModelConfigId" style="width: 100%">
+          <div class="model-grid" v-if="currentTtsModels?.length > 0">
+            <ARadio
+              v-for="model in currentTtsModels"
+              :key="model.id"
+              :value="model.id"
+              class="model-radio"
+            >
+              <div class="model-info">
+                <div class="model-name">{{ model.name }}</div>
+                <div class="model-desc text-placeholder text-xs">{{ model.description }}</div>
+              </div>
+            </ARadio>
+          </div>
+          <div v-else class="text-placeholder mt-xs">该供应商下暂无语音合成模型</div>
+        </ARadioGroup>
+        <div v-else class="text-placeholder text-xs mt-xs">
+          不启用语音播报；在模型配置中创建「语音合成」用途的模型后可在此绑定
         </div>
       </AFormItem>
 

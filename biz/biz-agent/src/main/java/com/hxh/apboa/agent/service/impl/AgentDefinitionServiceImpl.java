@@ -110,6 +110,7 @@ public class AgentDefinitionServiceImpl extends ServiceImpl<AgentDefinitionMappe
     @Transactional(rollbackFor = Exception.class)
     public Boolean saveAgentDefinition(AgentDefinitionVO vo) {
         validateAsrModelConfig(vo.getAsrModelConfigId());
+        validateTtsModelConfig(vo.getTtsModelConfigId());
         AgentDefinition agentDefinition = BeanUtils.copy(vo, AgentDefinition.class);
         save(agentDefinition);
         vo.setId(agentDefinition.getId());
@@ -128,6 +129,7 @@ public class AgentDefinitionServiceImpl extends ServiceImpl<AgentDefinitionMappe
     @Transactional(rollbackFor = Exception.class)
     public Boolean updateAgentDefinition(AgentDefinitionVO vo) {
         validateAsrModelConfig(vo.getAsrModelConfigId());
+        validateTtsModelConfig(vo.getTtsModelConfigId());
         AgentDefinition oldAgent = getById(vo.getId());
         updateById(BeanUtils.copy(vo, AgentDefinition.class));
 
@@ -150,10 +152,11 @@ public class AgentDefinitionServiceImpl extends ServiceImpl<AgentDefinitionMappe
             return true;
         }
 
-        // updateById 忽略 null 字段，ASR 绑定是可清空字段，照 updateAvatar 先例显式 set（null=解绑）
+        // updateById 忽略 null 字段，ASR/TTS 绑定是可清空字段，照 updateAvatar 先例显式 set（null=解绑）
         lambdaUpdate()
                 .eq(AgentDefinition::getId, vo.getId())
                 .set(AgentDefinition::getAsrModelConfigId, vo.getAsrModelConfigId())
+                .set(AgentDefinition::getTtsModelConfigId, vo.getTtsModelConfigId())
                 .update();
 
         saveSubItems(vo);
@@ -370,6 +373,22 @@ public class AgentDefinitionServiceImpl extends ServiceImpl<AgentDefinitionMappe
         }
         if (modelConfig.getCategory() != ModelCategory.ASR) {
             throw new RuntimeException("所选模型的用途不是语音识别");
+        }
+    }
+
+    /**
+     * 校验语音合成模型绑定：必须指向存在、启用、且用途为 TTS 的模型配置
+     */
+    private void validateTtsModelConfig(Long ttsModelConfigId) {
+        if (ttsModelConfigId == null) {
+            return;
+        }
+        ModelConfig modelConfig = modelConfigService.getById(ttsModelConfigId);
+        if (modelConfig == null || !modelConfig.getEnabled()) {
+            throw new RuntimeException("语音合成模型不存在或已禁用");
+        }
+        if (modelConfig.getCategory() != ModelCategory.TTS) {
+            throw new RuntimeException("所选模型的用途不是语音合成");
         }
     }
 

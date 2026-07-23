@@ -48,8 +48,17 @@ public class ChatLogHook implements Hook {
         return toolUseId == null ? null : TOOL_ELAPSED_MAP.remove(toolUseId);
     }
 
-    /** 存权威耗时（异常场景消费缺席导致的滞留由上限兜底清空） */
-    private static void offerToolElapsed(String toolUseId, long elapsed) {
+    /** 查看某工具的权威耗时（不删——落库读取在 Adapter poll 取走之前，两个消费者共享同一测量） */
+    public static Long peekToolElapsed(String toolUseId) {
+        return toolUseId == null ? null : TOOL_ELAPSED_MAP.get(toolUseId);
+    }
+
+    /**
+     * 存权威耗时（异常场景消费缺席导致的滞留由上限兜底清空）。
+     * public：真实单工具起止只有 ToolExecutor 能测到（订阅→结果，排队不计入），
+     * 由它在每个工具完成瞬间喂入；本 Hook 的 PostActing 批级计时退为兜底
+     */
+    public static void offerToolElapsed(String toolUseId, long elapsed) {
         if (toolUseId == null) {
             return;
         }
@@ -190,9 +199,17 @@ public class ChatLogHook implements Hook {
                             }
                             String toolRes = RunTelemetryExtractor.toolResultText(toolResult);
                             String toolName = toolCache.get("tool_name").toString();
-                            // 权威耗时：算一次，落库与实时下发（Adapter 经 pollToolElapsed 取走）同一个值
-                            long elapsed = System.currentTimeMillis() - (Long) toolCache.get("tool_start");
-                            offerToolElapsed(toolId, elapsed);
+                            // 权威耗时优先取 ToolExecutor 完成瞬间喂入的单工具真实值（peek 不删，
+                            // Adapter 随后 poll 取走下发 TOOL_ELAPSED——落库与实时同一次测量）；
+                            // 表无值（异常路径）才退回批级兜底：PostActing 是整批工具完成后的事件，
+                            // 此处起止算的是批时长，串行多工具时每个都≈总时长（历史 bug 根源）
+                            Long realElapsed = peekToolElapsed(toolId);
+                            long elapsed = realElapsed != null
+                                    ? realElapsed
+                                    : System.currentTimeMillis() - (Long) toolCache.get("tool_start");
+                            if (realElapsed == null) {
+                                offerToolElapsed(toolId, elapsed);
+                            }
                             ConcurrentLogProducer.pushLog(buildChatMessage(
                                     Long.valueOf(threadId),
                                     "tool",

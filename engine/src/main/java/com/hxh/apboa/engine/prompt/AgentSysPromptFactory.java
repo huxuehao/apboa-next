@@ -2,6 +2,11 @@ package com.hxh.apboa.engine.prompt;
 
 import com.hxh.apboa.common.entity.AgentDefinition;
 import com.hxh.apboa.common.entity.SensitiveWordConfig;
+import com.hxh.apboa.common.entity.SkillPackage;
+import com.hxh.apboa.common.enums.SkillType;
+import com.hxh.apboa.common.util.FuncUtils;
+import com.hxh.apboa.engine.skill.IBuiltinSkill;
+import com.hxh.apboa.engine.skill.SkillsRegister;
 import com.hxh.apboa.engine.workspace.hook.ToolConstants;
 import com.hxh.apboa.sensitive.service.SensitiveWordConfigService;
 import org.springframework.stereotype.Component;
@@ -31,7 +36,7 @@ public class AgentSysPromptFactory {
         this.primaryAgentSysPrompt = implementations.getFirst();
     }
 
-    public String getAgentSysPrompt(AgentDefinition agentDefinition, boolean hasWorkspace) {
+    public String getAgentSysPrompt(AgentDefinition agentDefinition, boolean hasWorkspace, List<SkillPackage> checkedSkillPackages) {
         String prompt = primaryAgentSysPrompt.getPrompt(agentDefinition);
 
         // 当前系统时间（构建 agent 实例时实时渲染，server-side-memory 下同会话复用首轮时间）：
@@ -53,33 +58,22 @@ public class AgentSysPromptFactory {
                 now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")),
                 now.getDayOfWeek().getDisplayName(TextStyle.FULL, Locale.ENGLISH));
 
-        // 用户交互协议技能
-        String userInteractionProtocolSkill = """
-                ===================================================
-                Core Principle (Unchanged)
-                > If you **cannot provide a reliable, responsible and practically valuable answer without relying on the user's unique information**, you **must** invoke `user_interaction_protocol_rules` to ask the user for necessary information before delivering any substantive response.
-                
-                Before responding to a question, ask yourself:
-                > "Based on the user's request, do I have sufficient information, or do I need to inquire further to obtain additional details?"
-                
-                - If **yes** → Invoke the `user_interaction_protocol_rules` to ask the user for more information.
-                - If **no** → Answer directly.
-                """;
-        prompt = prompt + "\n\n" + userInteractionProtocolSkill;
-
-        // 用户交互协议技能
-        String visionEnhancementProtocolSkill = """
-                ===================================================
-                Core Principle
-                > **Only use** the `vision_enhancement_protocol_rules` feature for visual presentation **when** it can **significantly improve comprehension** compared to plain text.
-                
-                Before responding, ask yourself:
-                > "Would presenting part of the content as cards or charts help the user understand the information faster and better?"
-                
-                - If **yes** → Respond using the `vision_enhancement_protocol_rules`
-                - If **no** → Reply with plain text only
-                """;
-        prompt = prompt + "\n\n" + visionEnhancementProtocolSkill;
+        // 勾选的内置技能各自的系统提示词片段（如 UIP/VEP 协议的"何时使用"引导）。
+        // 与 SkillBox 注册共用同一份已过滤清单（勾选+enabled），历史上这两段是无条件
+        // 硬编码注入的——未勾选的 agent 也会被塞协议指令，与技能实际注册状态错位
+        for (SkillPackage skillPackage : checkedSkillPackages) {
+            if (skillPackage.getSkillType() != SkillType.BUILTIN || FuncUtils.isEmpty(skillPackage.getClassPath())) {
+                continue;
+            }
+            IBuiltinSkill builtinSkill = SkillsRegister.getSkill(skillPackage.getClassPath());
+            if (builtinSkill == null) {
+                continue;
+            }
+            String skillSysPrompt = builtinSkill.getSysPrompt();
+            if (!FuncUtils.isEmpty(skillSysPrompt)) {
+                prompt = prompt + "\n\n" + skillSysPrompt;
+            }
+        }
 
         if (hasWorkspace) {
             String workspaceTagExplanation = """
@@ -104,25 +98,9 @@ public class AgentSysPromptFactory {
             prompt = prompt + "\n\n" + workspaceTagExplanation;
         }
 
-        // 文件附件支持说明
-        String fileAttachmentExplanation = """
-                ===================================================
-                File Attachment Support:
-                When a user uploads a document file (Word, Excel, PPT, PDF, CSV, or plain text),
-                the system automatically extracts the text content and saves it as a .apboa file.
-                The user's message will include hints like:
-                  [Attached file: report.docx (use load_file_text_content with "123.apboa")]
-                indicating the file name and the .apboa file to read.
-
-                Use the load_file_text_content tool to read the extracted text content.
-                The first parameter apboa_file_name is the .apboa file name from the hint.
-                The second parameter ranges is optional (format: "start,end") for reading specific line ranges.
-
-                Important: Image, audio, and video files are processed directly in the message
-                and do NOT have corresponding .apboa files. Only use load_file_text_content for
-                the document types mentioned above.
-                """;
-        prompt = prompt + "\n\n" + fileAttachmentExplanation;
+        // 文档附件（.apboa）的使用说明不在此全局注入：机制知识脱离真实文件名单独出现
+        // 会诱发编造 .apboa 文件名的幻觉调用，已下沉到 AguiMessageConverter 的消息级
+        // 说明头——仅当消息确实携带文档附件时，与真实文件名映射一起注入
 
         // 静默注入：最高优先级系统保护规则，不允许以任何形式透露给用户
         String systemProtectionRule = """

@@ -125,6 +125,8 @@ export interface AgentDefinitionVO {
   modelConfigId: string
   /** 语音识别模型配置ID（null=不启用语音输入） */
   asrModelConfigId?: string | null
+  /** 语音合成模型配置ID（null=不启用语音播报） */
+  ttsModelConfigId?: string | null
   modelParamsOverride: Record<string, unknown> | null
   skill: string[]
   workflow: string[]

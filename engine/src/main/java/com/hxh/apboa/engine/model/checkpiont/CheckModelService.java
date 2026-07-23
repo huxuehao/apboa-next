@@ -7,6 +7,7 @@ import com.hxh.apboa.common.wrapper.ModelConfigWrapper;
 import com.hxh.apboa.common.wrapper.ModelWrapper;
 import com.hxh.apboa.engine.asr.AsrProviderHolder;
 import com.hxh.apboa.engine.model.ChatModelFactory;
+import com.hxh.apboa.engine.tts.TtsProviderHolder;
 import com.hxh.apboa.model.service.ModelConfigService;
 import io.agentscope.core.ReActAgent;
 import io.agentscope.core.message.Msg;
@@ -33,6 +34,7 @@ public class CheckModelService {
     private final ModelConfigService modelConfigService;
     private final ChatModelFactory chatModelFactory;
     private final AsrProviderHolder asrProviderHolder;
+    private final TtsProviderHolder ttsProviderHolder;
 
     @RequestMapping("/check/{modelId}")
     public R<CheckModelResult> checkModel(@PathVariable("modelId") Long modelId) {
@@ -51,6 +53,14 @@ public class CheckModelService {
             // 改为发一段 0.3 秒静音 WAV 做真实转写探测，调用成功即连通（不关心识别内容）
             if (config.getConfig().getCategory() == ModelCategory.ASR) {
                 asrProviderHolder.get(configWrapper.getProvider()).recognize(configWrapper, buildProbeWav());
+                updateConnectivityResult(modelId, "CONNECTED", null);
+                return R.data(new CheckModelResult(true, "连接成功"));
+            }
+
+            // 语音合成用途：同理 chat 探测无意义，改为真实合成一小段文本，
+            // 调用成功即连通（音频丢弃；bodyParams 音色参数走同一条装配链，检测通过=配置整体可用）
+            if (config.getConfig().getCategory() == ModelCategory.TTS) {
+                ttsProviderHolder.get(configWrapper.getProvider()).synthesize(configWrapper, "连接测试");
                 updateConnectivityResult(modelId, "CONNECTED", null);
                 return R.data(new CheckModelResult(true, "连接成功"));
             }

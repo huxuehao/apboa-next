@@ -74,12 +74,19 @@ const isEdit = computed(() => !!props.data?.id)
 /** 是否语音识别用途（隐藏 LLM 专属区块与校验） */
 const isAsr = computed(() => formData.value.category === ModelCategory.ASR)
 
+/** 是否语音合成用途（同样无 LLM 参数，但保留扩展配置区块：音色 instruct/voice 靠 bodyParams 下发） */
+const isTts = computed(() => formData.value.category === ModelCategory.TTS)
+
+/** 是否对话生成用途（LLM 专属参数区块的显隐依据） */
+const isLlm = computed(() => formData.value.category === ModelCategory.LLM)
+
 /**
  * 模型用途选项（单选，编辑时不可改：已被 agent 绑定的用途变更会造成引用错乱）
  */
 const categoryOptions = [
   { label: '对话生成', value: ModelCategory.LLM },
-  { label: '语音识别', value: ModelCategory.ASR }
+  { label: '语音识别', value: ModelCategory.ASR },
+  { label: '语音合成', value: ModelCategory.TTS }
 ]
 
 /**
@@ -173,7 +180,7 @@ const llmRules = {
   ]
 }
 
-const rules = computed(() => (isAsr.value ? baseRules : { ...baseRules, ...llmRules }))
+const rules = computed(() => (isLlm.value ? { ...baseRules, ...llmRules } : baseRules))
 
 /**
  * 重置表单
@@ -207,15 +214,17 @@ async function handleSubmit() {
     await formRef.value?.validate()
     loading.value = true
 
-    // 语音识别用途只保留基础信息，LLM 生成参数与模态类型一概不提交
-    const entity: ModelConfig = (isAsr.value
+    // 语音识别/语音合成用途只保留基础信息（合成额外带扩展配置：音色 instruct/voice 走 bodyParams），
+    // LLM 生成参数与模态类型一概不提交
+    const entity: ModelConfig = (!isLlm.value
       ? {
           providerId: props.providerId,
           category: formData.value.category,
           name: formData.value.name,
           modelId: formData.value.modelId,
           modelType: null,
-          description: formData.value.description
+          description: formData.value.description,
+          ...(isTts.value ? { extendConfig: formData.value.extendConfig || undefined } : {})
         }
       : {
           providerId: props.providerId,
@@ -358,7 +367,7 @@ async function handleViewProvider() {
           <AInput v-model:value="formData.modelId" placeholder="请输入模型ID，如: gpt-4" />
         </AFormItem>
 
-        <AFormItem v-if="!isAsr" label="模型类型" name="modelType">
+        <AFormItem v-if="isLlm" label="模型类型" name="modelType">
           <ASelect
             v-model:value="formData.modelType"
             mode="multiple"
@@ -379,7 +388,7 @@ async function handleViewProvider() {
         </AFormItem>
       </div>
 
-      <div v-if="!isAsr" class="form-section">
+      <div v-if="isLlm" class="form-section">
         <div class="section-title">功能开关</div>
 
         <ARow :gutter="24">
@@ -397,7 +406,7 @@ async function handleViewProvider() {
         </ARow>
       </div>
 
-      <div v-if="!isAsr" class="form-section">
+      <div v-if="isLlm" class="form-section">
         <div class="section-title">参数配置</div>
 
         <AFormItem label="上下文窗口" name="contextWindow">
@@ -492,12 +501,15 @@ async function handleViewProvider() {
         </AFormItem>
       </div>
 
-      <div v-if="!isAsr" class="form-section">
+      <div v-if="isLlm || isTts" class="form-section">
         <div class="section-title">扩展配置</div>
+        <div v-if="isTts" class="text-placeholder text-xs" style="margin-bottom: var(--spacing-xs)">
+          语音合成的音色等参数在 Body 参数中配置（如 OpenAI 兼容的 voice、Qwen3-TTS 的 instruct / lang_code / response_format）
+        </div>
         <AFormItem label="">
           <ExtendConfigEditor
             v-model="formData.extendConfig"
-            :show-fixed-system-message="providerType === 'OPEN_AI'"
+            :show-fixed-system-message="providerType === 'OPEN_AI' && isLlm"
           />
         </AFormItem>
       </div>

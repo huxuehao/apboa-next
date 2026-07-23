@@ -447,6 +447,20 @@ public class AguiAgentAdapter {
                 for (ContentBlock block : msg.getContent()) {
                     if (block instanceof ToolResultBlock toolResult) {
                         Map<String, Object> metadata = toolResult.getMetadata();
+                        // 单工具完成即时标记（ToolExecutor 完成瞬间经 chunk 通道发出）：
+                        // 转 Custom(TOOL_FINISHED) 实时下发，前端即时翻转卡片完成态——
+                        // 批量的 ToolCallEnd/Result 仍走 isLast 消息流（整批完成后）
+                        if (Boolean.TRUE.equals(metadata.get("tool_finished"))) {
+                            Map<String, Object> value = new LinkedHashMap<>();
+                            value.put("toolUseId", toolResult.getId() == null ? "" : toolResult.getId());
+                            value.put("elapsed", metadata.getOrDefault("tool_elapsed", 0L));
+                            events.add(new AguiEvent.Custom(
+                                    state.threadId,
+                                    state.runId,
+                                    AguiCustomEvents.TOOL_FINISHED,
+                                    value));
+                            continue;
+                        }
                         Object subagentName = metadata.get("subagent_name");
                         if (subagentName == null) {
                             continue;

@@ -18,6 +18,7 @@ package io.agentscope.core.tool;
 import com.hxh.apboa.common.consts.SysConst;
 import com.hxh.apboa.common.util.TenantUtils;
 import com.hxh.apboa.engine.agui.AgentContext;
+import com.hxh.apboa.engine.log.ChatLogHook;
 import io.agentscope.core.agent.Agent;
 import io.agentscope.core.message.ToolResultBlock;
 import io.agentscope.core.message.ToolUseBlock;
@@ -30,6 +31,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
 import java.util.function.Predicate;
 import org.slf4j.Logger;
@@ -341,9 +343,16 @@ class ToolExecutor {
         execution = applyRetry(execution, executionConfig, toolCall);
         execution = applyShutdownGuard(execution);
 
+        // 单工具真实计时：订阅时刻=该工具真正开始执行（串行 concat 下前序完成后才订阅本工具，
+        // 排队等待不计入）；compareAndSet 保证 retry 重订阅不重置起点。
+        // 批级 collectList 会抹掉单工具完成时刻，这里是全链路唯一能测到真实起止的位置
+        AtomicLong startedAt = new AtomicLong(0);
+
         // Add tool metadata and error handling
         return execution
+                .doOnSubscribe(s -> startedAt.compareAndSet(0, System.currentTimeMillis()))
                 .map(result -> result.withIdAndName(toolCall.getId(), toolCall.getName()))
+                .doOnNext(result -> emitToolFinished(toolCall, result, startedAt.get()))
                 .onErrorResume(
                         e -> {
                             logger.warn("Tool call failed: {}", toolCall.getName(), e);
@@ -351,6 +360,30 @@ class ToolExecutor {
                             return Mono.just(
                                     ToolResultBlock.error("Tool execution failed: " + errorMsg));
                         });
+    }
+
+    /**
+     * 单工具完成即时通知：真实耗时喂入权威耗时表（落库与 TOOL_ELAPSED 下发同源取用），
+     * 并经 chunk 通道（与 SubAgentTool 冒泡同款）发 tool_finished 标记——AguiAgentAdapter
+     * 转 Custom(TOOL_FINISHED) 实时下发，前端即时翻转完成态，不再等整批 collectList。
+     * HITL 挂起结果不算完成（工具在等人，不是跑完了）；无 callback 时静默降级回批量行为。
+     */
+    private void emitToolFinished(ToolUseBlock toolCall, ToolResultBlock result, long startedAt) {
+        if (result.isSuspended() || startedAt <= 0) {
+            return;
+        }
+        long elapsed = System.currentTimeMillis() - startedAt;
+        ChatLogHook.offerToolElapsed(toolCall.getId(), elapsed);
+        BiConsumer<ToolUseBlock, ToolResultBlock> callback = getEffectiveChunkCallback();
+        if (callback == null) {
+            return;
+        }
+        Map<String, Object> metadata = new HashMap<>();
+        metadata.put("tool_finished", true);
+        metadata.put("tool_elapsed", elapsed);
+        callback.accept(
+                toolCall,
+                new ToolResultBlock(toolCall.getId(), toolCall.getName(), List.of(), metadata));
     }
 
     // ==================== Infrastructure Methods ====================

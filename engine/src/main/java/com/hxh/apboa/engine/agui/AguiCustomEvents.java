@@ -55,6 +55,19 @@ public final class AguiCustomEvents {
     public static final String SUBAGENT_CONFIRM_REQUIRED = "SUBAGENT_CONFIRM_REQUIRED";
 
     /**
+     * 单工具完成即时通知（工具真正执行完的瞬间下发，不等同批其余工具跑完——
+     * 批量结果受 ToolExecutor 的 collectList 屏障约束，要到整批完成才随消息流走）。
+     * 载荷：{@code {toolUseId, elapsed}}，elapsed 为该工具真实执行耗时
+     * （订阅→结果，串行时排队等待不计入；与落库/TOOL_ELAPSED 同一次测量）。
+     * <ul>
+     *   <li>前端收到即把对应工具卡片翻转完成态并定格耗时；结果详情仍等 ToolCallResult</li>
+     *   <li>串行执行下第 N 个完成同时意味着第 N+1 个开始执行（排队态→执行态推导依据）</li>
+     *   <li>HITL 挂起的工具不发本事件（挂起在等人，不是完成）</li>
+     * </ul>
+     */
+    public static final String TOOL_FINISHED = "TOOL_FINISHED";
+
+    /**
      * 主 agent 工具调用的权威耗时（唯一计时者 ChatLogHook 的落库同源值，实时下发消除
      * 前端掐表与落库两次测量的误差；先于对应 ToolCallResult 下发）。
      * 载荷：{@code {toolUseId, elapsed}}

@@ -13,7 +13,8 @@ import lombok.Getter;
 @AllArgsConstructor
 public enum ModelCategory {
     LLM("对话生成"),
-    ASR("语音识别");
+    ASR("语音识别"),
+    TTS("语音合成");
 
     private final String description;
 }

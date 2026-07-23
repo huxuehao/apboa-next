@@ -41,6 +41,24 @@ public class RedisChannelTopic {
     public static final String CHAT_AUTO_APPROVE_KEY_PREFIX = "apboa:chat:auto-approve:";
 
     /**
+     * TTS 播报控制频道（websocket 服务 → runtime）：JSON 的 TtsCtrlMessage，
+     * open=有人订阅该 thread 的播报（runtime 建合成会话）/ close=退订（打断并释放会话）。
+     */
+    public static final String TTS_CTRL_CHANNEL = "apboa:tts:ctrl";
+
+    /**
+     * TTS 流事件频道（runtime → websocket 服务）：JSON 的 TtsStreamEvent，
+     * start（含音频格式）/ end / error，由 websocket 服务转发给订阅该 thread 的前端。
+     */
+    public static final String TTS_EVENT_CHANNEL = "apboa:tts:event";
+
+    /**
+     * TTS 音频帧频道（runtime → websocket 服务）：二进制 TtsAudioFrame 封包，
+     * 必须经 BinaryChannelSubscriber 订阅（字符串通道会破坏字节）。
+     */
+    public static final String TTS_AUDIO_CHANNEL = "apboa:tts:audio";
+
+    /**
      * 会话级思考模式覆盖 key 前缀（key = 前缀 + threadId）。
      * 值 "1"=强制开 / "0"=强制关 / 无 key=默认开（仅对支持开关的供应商生效，当前 DASH_SCOPE）。
      * ChatModelFactory 构建模型时读取合成，AguiRequestProcessor 检测变化触发 agent 重建。

@@ -1,5 +1,6 @@
 package com.hxh.apboa.common.cluster.config;
 
+import com.hxh.apboa.common.cluster.core.BinaryChannelSubscriber;
 import com.hxh.apboa.common.cluster.core.ChannelSubscriber;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -57,6 +58,46 @@ public class ClusterRedisConfig {
                     }
                 }, subscriber.getTopic());
                 log.info("注册Redis订阅者: {} -> {}", subscriber.getClass().getSimpleName(), subscriber.getTopic());
+            }
+        }
+
+        return container;
+    }
+
+    /**
+     * 二进制订阅专用监听容器（音频流等）：与文本容器分离，用单线程分发——
+     * Lettuce 事件循环按到达顺序提交、单线程按提交顺序执行，保证帧序；
+     * 多线程池会把几乎同时到达的音频帧并发转发导致乱序。
+     * 二进制处理都是轻量转发（路由+写出），单线程吞吐足够。
+     */
+    @Bean
+    public RedisMessageListenerContainer binaryRedisMessageListenerContainer(
+            RedisConnectionFactory connectionFactory,
+            @Autowired(required = false) List<BinaryChannelSubscriber> binarySubscribers) {
+
+        RedisMessageListenerContainer container = new RedisMessageListenerContainer();
+        container.setConnectionFactory(connectionFactory);
+        ThreadPoolTaskExecutor serialExecutor = new ThreadPoolTaskExecutor();
+        serialExecutor.setCorePoolSize(1);
+        serialExecutor.setMaxPoolSize(1);
+        serialExecutor.setQueueCapacity(2048);
+        serialExecutor.setThreadNamePrefix("redis-binary-listener-");
+        serialExecutor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        serialExecutor.initialize();
+        container.setTaskExecutor(serialExecutor);
+
+        if (binarySubscribers != null && !binarySubscribers.isEmpty()) {
+            for (BinaryChannelSubscriber subscriber : binarySubscribers) {
+                container.addMessageListener((message, pattern) -> {
+                    try {
+                        String channel = new String(message.getChannel(), StandardCharsets.UTF_8);
+                        subscriber.onMessage(channel, message.getBody());
+                    } catch (Exception e) {
+                        log.error("处理Redis二进制消息失败 - channel: {}, error: {}",
+                                new String(message.getChannel(), StandardCharsets.UTF_8), e.getMessage(), e);
+                    }
+                }, subscriber.getTopic());
+                log.info("注册Redis二进制订阅者: {} -> {}", subscriber.getClass().getSimpleName(), subscriber.getTopic());
             }
         }
 

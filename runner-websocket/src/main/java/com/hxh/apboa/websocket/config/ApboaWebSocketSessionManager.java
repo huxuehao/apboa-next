@@ -7,6 +7,7 @@ import com.hxh.apboa.websocket.handler.server.ServerMessageHandler;
 import com.hxh.apboa.websocket.model.WsServerMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.web.socket.BinaryMessage;
 import org.springframework.web.socket.TextMessage;
 
 import java.util.ArrayList;
@@ -135,16 +136,38 @@ public class ApboaWebSocketSessionManager {
      * @param session 目标session
      * @param content 消息内容
      */
+    /**
+     * 发送锁改为 session 包装实例：原先锁 clientId 字符串，在客户端尚未发 CLIENT
+     * 登记时为 null 直接 NPE 断连，且依赖 String intern、同 clientId 跨连接会互相串行。
+     * 锁实例语义不变（同一连接串行写出）且永不为空。
+     */
     public static void sendBySession(ApboaWebSocketSession session, WsServerMessage content) {
         try {
             if (session != null) {
-                synchronized (session.getClientId()) {
+                synchronized (session) {
                     session.getWebSocketSession().sendMessage(new TextMessage(content.toJson()));
                 }
             }
         } catch (Exception e) {
             session.close();
             logger.warn("ApboaWebSocketSessionManager发送WebSocket消息失败: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 给指定的session发送二进制帧（TTS 音频等）。
+     * 与文本发送共用同一把 session 锁，保证同一连接上两类帧串行写出。
+     */
+    public static void sendBinaryBySession(ApboaWebSocketSession session, byte[] payload) {
+        try {
+            if (session != null) {
+                synchronized (session) {
+                    session.getWebSocketSession().sendMessage(new BinaryMessage(payload));
+                }
+            }
+        } catch (Exception e) {
+            session.close();
+            logger.warn("ApboaWebSocketSessionManager发送WebSocket二进制帧失败: {}", e.getMessage());
         }
     }
 

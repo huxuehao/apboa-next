@@ -67,6 +67,11 @@ public class AgentDefinition extends BaseTenantEntity {
     private Long asrModelConfigId;
 
     /**
+     * 语音合成模型配置ID（NULL 表示该智能体不启用语音播报）
+     */
+    private Long ttsModelConfigId;
+
+    /**
      * 模型参数覆盖
      */
     @TableField(typeHandler = JsonNodeTypeHandler.class)

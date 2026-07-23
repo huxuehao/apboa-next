@@ -6,6 +6,7 @@ import { useAccountStore, useChatStore } from '@/stores'
 import { formatSessionTitle } from '@/utils/chat/format'
 import { useAgentDetail } from '@/composables/chat/useAgentDetail'
 import { useVoiceInput, type VoiceInputState, type VoicePressAction } from '@/composables/chat/useVoiceInput'
+import { useTtsPlayback } from '@/composables/chat/useTtsPlayback'
 import { useSessions } from '@/composables/chat/useSessions'
 import { useCurrentSession } from '@/composables/chat/useCurrentSession'
 import { useChatStream } from '@/composables/chat/useChatStream'
@@ -51,6 +52,8 @@ const enablePlanning = computed(() => agentDetail.value?.enablePlanning === true
 const showToolProcess = computed(() => agentDetail.value?.showToolProcess === true)
 // 语音输入是否可用（智能体绑定了 ASR 模型才显示麦克风）
 const voiceEnabled = computed(() => !!agentDetail.value?.asrModelConfigId)
+// 语音播报是否可用（智能体绑定了 TTS 模型才显示播报开关与朗读按钮）
+const ttsEnabled = computed(() => !!agentDetail.value?.ttsModelConfigId)
 // 是否配置了代码执行
 const hasCodeExecutionConfig = computed(() => agentDetail.value?.codeExecutionConfigId)
 
@@ -371,6 +374,42 @@ const voiceState = computed<VoiceInputState>(() => ({
   cancelIntent: voiceCancelIntent.value
 }))
 
+// ==================== 语音播报（TTS） ====================
+// 合成全部在服务端会话内完成；前端职责收敛为「订阅音频流 + 流式播放」。
+// 订阅即会话：开着播报开关进入会话即订阅（服务端懒合成，无订阅不烧算力）。
+const {
+  autoBroadcast: ttsBroadcastActive,
+  setContext: setTtsContext,
+  syncSubscription: syncTtsSubscription,
+  toggleAutoBroadcast: toggleTtsBroadcast,
+  interrupt: ttsInterrupt,
+  localStop: ttsLocalStop
+} = useTtsPlayback()
+
+// 上下文与订阅对齐：agent / 会话 / 开关 / 能力任一变化都重算
+watch([agentId, currentSessionId, ttsBroadcastActive, ttsEnabled], ([aid, sid]) => {
+  setTtsContext(String(aid ?? ''), String(sid ?? ''))
+  syncTtsSubscription(ttsEnabled.value)
+}, { immediate: true })
+
+/** 播报开关（Toolbar 菜单）：toggle 在用户手势内执行，顺势解锁移动端音频通道 */
+const handleTtsBroadcastChange = (v: boolean) => {
+  if (v !== ttsBroadcastActive.value) {
+    toggleTtsBroadcast()
+    // 开关 = 静音键语义：关闭时若当前条在播则仅静音（时间轴继续，重开从当前进度
+    // 续声），本条播完自动退订；后续新回复不合成，除非重开开关或手动点消息朗读
+    syncTtsSubscription(ttsEnabled.value)
+  }
+}
+
+// 录音避让（半双工原则）：扬声器播报会灌进麦克风污染识别，录音开始即打断播报
+// （interrupt 会让服务端 abort 会话断绝帧源，仅 localStop 会被后续到帧重新出声）
+watch(voiceStatus, (s) => {
+  if (s === 'recording') {
+    ttsInterrupt()
+  }
+})
+
 /**
  * 按住说话手势映射。voicePressActive 闭环首次麦克风授权的竞态：
  * 授权弹窗会打断触摸流，用户授权完成时手指早已松开（end/cancel 先到而
@@ -617,6 +656,8 @@ const handleSelectSession = async (session: ChatSessionVO) => {
 // route.name 守卫防止离开对话页时（params 已清空、组件尚未卸载）watch 误改写目标路由
 const isStandaloneChatRoute = computed(() => !props.chatAgentId && route.name === RouteNames.CHAT)
 
+// 会话切换的订阅迁移由上方 [agentId, currentSessionId, ...] watch 统一处理（先退订旧 thread 再订新）
+
 // 状态 -> URL：会话变化（选择/新建/发消息懒创建/删除当前会话）统一同步到地址栏；
 // replace 不堆浏览器历史，返回键保持"离开对话页"语义
 watch(currentSessionId, (sid) => {
@@ -800,6 +841,9 @@ const handleSend = async () => {
 
   const finalText = hasFiles ? buildFilesPrefix(filesToSend) + text : text
   const fileIdsToSend = filesToSend.map((f) => f.id)
+
+  // 新一轮提问：本地立即静音（服务端会话由新 run 的 RunStarted 自动推平，订阅保持）
+  ttsLocalStop()
 
   // 立即清空输入框和附件，提升交互体验
   inputText.value = ''
@@ -988,6 +1032,8 @@ watch(isRunning, (running) => {
       :confirm-mode="confirmMode"
       :thinking-supported="thinkingSupported"
       :thinking-active="thinkingActive"
+      :tts-enabled="ttsEnabled"
+      :tts-broadcast-active="ttsBroadcastActive"
       :workspace-panel-open="workspacePanelOpen"
       :has-code-execution-config="!!hasCodeExecutionConfig"
       :session-id="currentSessionId"
@@ -1005,6 +1051,7 @@ watch(isRunning, (running) => {
       @toolProcess="handelToolProcess"
       @confirm-mode="handleConfirmModeChange"
       @thinking="handleThinkingChange"
+      @tts-broadcast="handleTtsBroadcastChange"
       @toolContent="handelToolContent"
       @sub-confirm="handleSubConfirm"
       @send="handleSend"

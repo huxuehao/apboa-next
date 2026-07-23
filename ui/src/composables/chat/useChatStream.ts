@@ -60,9 +60,10 @@ export function useChatStream(
   const streamingRole = ref<'user' | 'assistant' | 'system' | 'tool' | 'thinking'>('system')
   const streamingContent = ref('')
 
-  // 工具调用进度（subSteps 为子智能体实时过程步骤，SUBAGENT_STEP 事件按 parentToolCallId 追加）
+  // 工具调用进度（subSteps 为子智能体实时过程步骤，SUBAGENT_STEP 事件按 parentToolCallId 追加；
+  // finished 由 TOOL_FINISHED 事件即时置位——工具真正跑完的瞬间翻转完成态，结果详情仍等批量 Result）
   const toolCallsInProgress = ref<
-    Array<{ id: string; name: string; args: string; result?: string; startTime: number; elapsed?: number, needConfirm?: boolean, subSteps?: Array<Record<string, unknown>> }>
+    Array<{ id: string; name: string; args: string; result?: string; startTime: number; elapsed?: number, finished?: boolean, needConfirm?: boolean, subSteps?: Array<Record<string, unknown>> }>
   >([])
 
   // HITL §6.5：逐工具确认决策（toolUseId → 状态），所有项决策完即调 /agui/resume
@@ -365,6 +366,26 @@ export function useChatStream(
         // 子智能体 HITL 确认请求（子智能体内需确认工具挂起等待，契约见 SUBAGENT_CONFIRM_REQUIRED）
         else if (event.name === 'SUBAGENT_CONFIRM_REQUIRED') {
           restoreSubPending([event.value as unknown as SubPendingInfo])
+        }
+        // 单工具完成即时通知（工具真正跑完的瞬间到达，先于批量 Result——后者受
+        // 批级 collectList 屏障要等整批完成）：翻转完成态+定格真实耗时；
+        // 串行执行下本工具完成=下一个未完成工具此刻开始执行，重置其掐表起点
+        // （其 startTime 原是 ToolCallStart 到达时刻，含排队等待，直接用会虚大）
+        else if (event.name === 'TOOL_FINISHED') {
+          const v = event.value as { toolUseId?: string; elapsed?: number }
+          if (v?.toolUseId != null) {
+            const arr = [...toolCallsInProgress.value]
+            const idx = arr.findIndex(t => t.id === String(v.toolUseId))
+            if (idx >= 0) {
+              const cur = arr[idx]!
+              arr[idx] = { ...cur, finished: true, elapsed: typeof v.elapsed === 'number' ? v.elapsed : cur.elapsed }
+              const next = arr.find(t => !t.finished && t.result == null)
+              if (next) {
+                next.startTime = Date.now()
+              }
+              toolCallsInProgress.value = arr
+            }
+          }
         }
         // 工具权威耗时（后端唯一计时者的落库同源值，先于对应结果事件到达）
         else if (event.name === 'TOOL_ELAPSED') {

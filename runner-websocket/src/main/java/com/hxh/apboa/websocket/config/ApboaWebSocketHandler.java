@@ -1,12 +1,17 @@
 package com.hxh.apboa.websocket.config;
 
 import com.hxh.apboa.common.UserDetail;
+import com.hxh.apboa.common.cluster.core.MessagePublisher;
+import com.hxh.apboa.common.consts.RedisChannelTopic;
 import com.hxh.apboa.common.consts.SysConst;
+import com.hxh.apboa.common.tts.TtsCtrlMessage;
 import com.hxh.apboa.common.util.JsonUtils;
 import com.hxh.apboa.websocket.context.ApboaWebSocketSession;
 import com.hxh.apboa.websocket.handler.ClientMessageHandlerAdapter;
 import com.hxh.apboa.websocket.handler.client.ClientMessageHandler;
 import com.hxh.apboa.websocket.model.WsClientMessage;
+import com.hxh.apboa.websocket.tts.TtsSubscriptionRegistry;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
@@ -21,7 +26,11 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
  **/
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class ApboaWebSocketHandler extends TextWebSocketHandler {
+
+    private final TtsSubscriptionRegistry ttsSubscriptionRegistry;
+    private final MessagePublisher messagePublisher;
 
     /**
      * 连接建立后
@@ -52,6 +61,12 @@ public class ApboaWebSocketHandler extends TextWebSocketHandler {
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
         ApboaWebSocketSession apboaSession = ApboaWebSocketSession.from(session);
+
+        // 清理该连接的 TTS 播报订阅，无人订阅的 thread 通知 runtime 释放合成会话
+        for (String drainedThreadId : ttsSubscriptionRegistry.removeSession(apboaSession)) {
+            messagePublisher.publish(RedisChannelTopic.TTS_CTRL_CHANNEL, JsonUtils.toJsonStr(
+                    TtsCtrlMessage.builder().action(TtsCtrlMessage.ACTION_CLOSE).threadId(drainedThreadId).build()));
+        }
 
         // 从本地缓存移除
         ApboaWebSocketSessionManager.remove(apboaSession);

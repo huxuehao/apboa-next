@@ -22,6 +22,15 @@ public interface IBuiltinSkill extends SmartInitializingSingleton {
      */
     AgentSkill getAgentSkill();
 
+    /**
+     * 勾选该技能后追加到 agent 系统提示词的使用引导片段（何时该用此技能的判断准则）。
+     * 空串表示不追加。由 AgentSysPromptFactory 按 agent 勾选的内置技能遍历注入——
+     * 与 SkillBox 注册共用同一份勾选清单，不会出现"提示词提到但技能未注册"的错位。
+     */
+    default String getSysPrompt() {
+        return "";
+    }
+
     default String getName() {
         return getAgentSkill().getName();
     }

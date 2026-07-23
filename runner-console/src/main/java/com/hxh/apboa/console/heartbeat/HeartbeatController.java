@@ -39,7 +39,7 @@ public class HeartbeatController {
     public Mono<R<Void>> report(@RequestBody HeartbeatPayload payload) {
         return Mono.fromRunnable(() -> nodeRegistry.report(payload))
                 .subscribeOn(Schedulers.boundedElastic())
-                .then(Mono.just(R.data(null)));
+                .then(Mono.just(R.success("操作成功")));
     }
 
     /**
@@ -64,7 +64,7 @@ public class HeartbeatController {
     public Mono<R<Void>> reportWebSocket(@RequestBody HeartbeatPayload payload) {
         return Mono.fromRunnable(() -> webSocketNodeRegistry.report(payload))
                 .subscribeOn(Schedulers.boundedElastic())
-                .then(Mono.just(R.data(null)));
+                .then(Mono.just(R.success("操作成功")));
     }
 
     /**

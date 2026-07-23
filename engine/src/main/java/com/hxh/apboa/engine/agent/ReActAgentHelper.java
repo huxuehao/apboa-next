@@ -5,6 +5,7 @@ import com.hxh.apboa.agent.service.AgentCodeExecutionService;
 import com.hxh.apboa.agent.service.CodeExecutionConfigService;
 import com.hxh.apboa.common.entity.AgentDefinition;
 import com.hxh.apboa.common.entity.CodeExecutionConfig;
+import com.hxh.apboa.common.entity.SkillPackage;
 import com.hxh.apboa.common.util.FuncUtils;
 import com.hxh.apboa.common.util.JsonUtils;
 import com.hxh.apboa.common.wrapper.KnowledgeWrapper;
@@ -108,16 +109,18 @@ public class ReActAgentHelper {
         Model model = chatModelFactory.getModel(definition);
         Toolkit toolkit = toolkitFactory.getToolkit(definition);
         CodeExecutionConfig codeExecutionConfig = getCodeExecutionConfig(definition.getId());
+        // 勾选技能包查一次传两处：系统提示词注入与 SkillBox 注册共用同一份清单
+        List<SkillPackage> checkedSkillPackages = skillBoxFactory.getCheckedSkillPackages(definition.getId());
         ReActAgent.Builder builder = ReActAgent.builder()
                 .name(definition.getAgentCode())
                 .description(FuncUtils.isEmpty(definition.getDescription()) ? definition.getName() : definition.getDescription())
                 .maxIters(definition.getMaxIterations())
                 .model(model)
-                .sysPrompt(agentSysPromptFactory.getAgentSysPrompt(definition, codeExecutionConfig != null))
+                .sysPrompt(agentSysPromptFactory.getAgentSysPrompt(definition, codeExecutionConfig != null, checkedSkillPackages))
                 .toolkit(toolkit)
                 .skillBox(toolkit != null
-                        ? skillBoxFactory.getSkillBox(definition, toolkit, codeExecutionConfig)
-                        : skillBoxFactory.getSkillBox(definition, codeExecutionConfig));
+                        ? skillBoxFactory.getSkillBox(toolkit, codeExecutionConfig, checkedSkillPackages)
+                        : skillBoxFactory.getSkillBox(codeExecutionConfig, checkedSkillPackages));
 
         KnowledgeWrapper knowledgeWrapper = knowledgeFactory.getKnowledge(definition);
         if (knowledgeWrapper != null) {

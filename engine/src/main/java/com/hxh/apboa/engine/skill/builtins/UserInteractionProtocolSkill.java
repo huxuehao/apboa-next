@@ -17,6 +17,21 @@ public class UserInteractionProtocolSkill implements IBuiltinSkill {
     private static final String SKILL_NAME = "user_interaction_protocol_rules";
 
     @Override
+    public String getSysPrompt() {
+        return """
+                ===================================================
+                Core Principle (Unchanged)
+                > If you **cannot provide a reliable, responsible and practically valuable answer without relying on the user's unique information**, you **must** invoke `user_interaction_protocol_rules` to ask the user for necessary information before delivering any substantive response.
+
+                Before responding to a question, ask yourself:
+                > "Based on the user's request, do I have sufficient information, or do I need to inquire further to obtain additional details?"
+
+                - If **yes** → Invoke the `user_interaction_protocol_rules` to ask the user for more information.
+                - If **no** → Answer directly.
+                """;
+    }
+
+    @Override
     public AgentSkill getAgentSkill() {
         return AgentSkill.builder()
                 .name(SKILL_NAME)

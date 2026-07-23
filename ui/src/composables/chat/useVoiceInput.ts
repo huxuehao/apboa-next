@@ -60,6 +60,8 @@ export function useVoiceInput(options: {
 
   let handle: PcmRecorderHandle | null = null
   let timer: ReturnType<typeof setInterval> | null = null
+  /** start() 的 await 窗口重入锁：getUserMedia 可挂起数秒且期间 status 仍是 idle，无锁会双开录音并泄漏 timer */
+  let starting = false
   /** 录音起始时刻（毫秒级，判定按住说话的超短误触） */
   let recordStartedAt = 0
   /** PTT 长按判定定时器（keydown 后 300ms 触发录音） */
@@ -89,7 +91,8 @@ export function useVoiceInput(options: {
   }
 
   async function start(m: Exclude<VoiceInputMode, null> = 'click') {
-    if (status.value !== 'idle') return
+    if (starting || status.value !== 'idle') return
+    starting = true
     try {
       handle = await startPcmRecording({
         onLevel: (v) => {
@@ -99,6 +102,8 @@ export function useVoiceInput(options: {
     } catch (e) {
       message.warning((e as Error)?.message || '录音启动失败')
       return
+    } finally {
+      starting = false
     }
     mode.value = m
     status.value = 'recording'
@@ -107,17 +112,30 @@ export function useVoiceInput(options: {
     cancelIntent.value = false
     recordStartedAt = performance.now()
     window.addEventListener('keydown', onEscape)
-    timer = setInterval(() => {
+    // 自持 id 而非依赖共享 timer 变量：引用一旦被覆盖（历史竞态）interval 将无法从外部清除，
+    // 因此回调内部自检自清，保证任何状态不一致下都不会变成每秒弹窗的孤儿
+    const id = setInterval(() => {
+      if (status.value !== 'recording') {
+        clearInterval(id)
+        if (timer === id) timer = null
+        return
+      }
       elapsedSeconds.value += 1
       if (elapsedSeconds.value >= maxSeconds) {
+        clearInterval(id)
+        if (timer === id) timer = null
         message.info(`已达最长 ${maxSeconds} 秒，自动结束录音`)
         stop()
       }
     }, 1000)
+    timer = id
   }
 
   async function stop() {
-    if (status.value !== 'recording' || !handle) return
+    if (status.value !== 'recording' || !handle) {
+      clearTimer()
+      return
+    }
     const modeWas = mode.value
     clearTimer()
     window.removeEventListener('keydown', onEscape)

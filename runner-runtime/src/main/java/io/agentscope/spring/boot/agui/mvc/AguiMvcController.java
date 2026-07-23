@@ -39,8 +39,11 @@ public class AguiMvcController {
     private final ExecutorService executorService;
     private final ThreadSessionManager sessionManager;
     private final RunTracker runTracker;
+    // Apboa 语音播报：AGUI 事件旁路分叉（可空，未配置时零开销）
+    private final java.util.function.Consumer<AguiEvent> ttsEventTap;
 
     private AguiMvcController(Builder builder) {
+        this.ttsEventTap = builder.ttsEventTap;
         Session session = builder.session;
         JdbcTemplate jdbcTemplate = builder.jdbcTemplate;
         this.processor =
@@ -267,7 +270,13 @@ public class AguiMvcController {
                             return Flux.empty();
                         })
                         .subscribe(
-                                event -> runTracker.pushEvent(threadId, event),
+                                event -> {
+                                    // Apboa 语音播报旁路（tap 自吞异常，不影响主流）
+                                    if (ttsEventTap != null) {
+                                        ttsEventTap.accept(event);
+                                    }
+                                    runTracker.pushEvent(threadId, event);
+                                },
                                 error -> {
                                     // 理论上不应到达这里（已被 onErrorResume 拦截）
                                     logger.error(
@@ -388,6 +397,8 @@ public class AguiMvcController {
         private Session session;
         private JdbcTemplate jdbcTemplate;
         private RunTracker runTracker;
+        // Apboa 语音播报事件分叉
+        private java.util.function.Consumer<AguiEvent> ttsEventTap;
 
         /**
          * Set the agent registry.
@@ -485,6 +496,15 @@ public class AguiMvcController {
          */
         public Builder runTracker(RunTracker runTracker) {
             this.runTracker = runTracker;
+            return this;
+        }
+
+        /**
+         * Apboa 语音播报：设置 AGUI 事件旁路分叉（事件推入 RunTracker 前同步调用，
+         * 实现方必须自吞异常且不得阻塞）。
+         */
+        public Builder ttsEventTap(java.util.function.Consumer<AguiEvent> ttsEventTap) {
+            this.ttsEventTap = ttsEventTap;
             return this;
         }
 

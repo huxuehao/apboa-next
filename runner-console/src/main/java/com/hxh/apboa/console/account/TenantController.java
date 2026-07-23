@@ -315,7 +315,7 @@ public class TenantController {
         // 如果无需审批，直接加入
         if (!Boolean.TRUE.equals(tenant.getJoinApprovalRequired())) {
             tenantService.addMember(tenantId, UserUtils.getId(), TenantRole.TENANT_VIEWER.name());
-            return R.data(null, "加入成功");
+            return R.success("加入成功");
         }
 
         TenantJoinRequest request = tenantJoinRequestService.submitRequest(

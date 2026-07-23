@@ -5,8 +5,11 @@ import {
   FolderOutlined,
   FolderOpenOutlined,
   LoadingOutlined,
-  DownOutlined
+  DownOutlined,
+  SoundFilled,
+  AudioMutedOutlined
 } from '@ant-design/icons-vue'
+import { message } from 'ant-design-vue'
 import { resolveCommonQuestionIcon } from '@/components/agent/commonQuestionIcons'
 import MessageList from './MessageList.vue'
 import MessageNavigator from './MessageNavigator.vue'
@@ -46,6 +49,10 @@ const props = defineProps<{
   confirmMode?: import('@/api/chatSession').ConfirmMode
   thinkingSupported?: boolean
   thinkingActive?: boolean
+  /** 会话 agent 是否绑定语音合成模型 */
+  ttsEnabled?: boolean
+  /** 自动语音播报是否开启 */
+  ttsBroadcastActive?: boolean
   allowUploadFileType?: string[]
   agentHasResult?: boolean
   workspacePanelOpen?: boolean
@@ -75,6 +82,7 @@ const emit = defineEmits<{
   (e: 'toolProcess', value: boolean): void
   (e: 'confirmMode', value: import('@/api/chatSession').ConfirmMode): void
   (e: 'thinking', value: boolean): void
+  (e: 'ttsBroadcast', value: boolean): void
   (e: 'voiceToggle'): void
   (e: 'voicePress', action: import('@/composables/chat/useVoiceInput').VoicePressAction): void
   (e: 'toggleSidebar'): void
@@ -92,6 +100,13 @@ const emit = defineEmits<{
   /** 切换常驻常用问题折叠状态 */
   (e: 'toggleQuestionsCollapsed'): void
 }>()
+
+/** 语音播报开关：右上角按钮无 hover tooltip，改用切换后的即时消息反馈告知当前状态 */
+const handleTtsToggle = () => {
+  const next = !props.ttsBroadcastActive
+  emit('ttsBroadcast', next)
+  message.info(next ? '已开启自动朗读' : '已关闭自动朗读')
+}
 
 // 滚动容器 ref
 const messagesScrollRef = ref<HTMLElement | null>(null)
@@ -314,19 +329,33 @@ defineExpose({
         <MenuOutlined />
       </button>
       <h1 class="chat-main-title" :title="title">{{ title }}</h1>
-      <!-- 工作空间入口按钮（与左侧菜单按钮对称） -->
-      <ATooltip placement="left" title="工作空间">
+      <!-- 右上角操作组：语音播报 + 工作空间（持续性界面控制，与左侧菜单按钮对称）。
+           v-if 必须落在最外层元素上——ATooltip 直接包裹 v-if 的 button 时，条件为假会
+           留下空触发节点致其挂载抛错，中断同容器后续兄弟节点的 patch（曾致工作区按钮被连累消失） -->
+      <div class="chat-header-actions">
+        <!-- 语音播报：无 hover tooltip（避免悬浮文案），点击后由 message 即时反馈状态 -->
         <button
-          v-if="sessionId && hasCodeExecutionConfig"
+          v-if="ttsEnabled"
           type="button"
-          class="chat-workspace-btn"
-          :class="{ 'is-active': workspacePanelOpen }"
-          @click="$emit('toggleWorkspace')"
+          class="chat-header-action-btn"
+          :class="{ 'is-active': ttsBroadcastActive }"
+          @click="handleTtsToggle"
         >
-          <FolderOpenOutlined v-if="workspacePanelOpen" />
-          <FolderOutlined v-else />
+          <SoundFilled v-if="ttsBroadcastActive" />
+          <AudioMutedOutlined v-else />
         </button>
-      </ATooltip>
+        <ATooltip v-if="sessionId && hasCodeExecutionConfig" placement="bottom" title="工作空间">
+          <button
+            type="button"
+            class="chat-header-action-btn"
+            :class="{ 'is-active': workspacePanelOpen }"
+            @click="$emit('toggleWorkspace')"
+          >
+            <FolderOpenOutlined v-if="workspacePanelOpen" />
+            <FolderOutlined v-else />
+          </button>
+        </ATooltip>
+      </div>
 
     </header>
 
@@ -398,6 +427,7 @@ defineExpose({
               :agent-has-result="agentHasResult"
               :messages="messages"
               :tool-calls="toolCalls"
+              :tts-enabled="ttsEnabled"
               @inputTagPreview="inputTagPreviewHandle"
               @toolContent="(content: any) => $emit('toolContent', content)"
               @sub-confirm="$emit('subConfirm', $event)"
@@ -463,8 +493,8 @@ defineExpose({
             :show-tool-process="showToolProcess"
             :tool-process-active="toolProcessActive"
             :confirm-mode="confirmMode"
-        :thinking-supported="thinkingSupported"
-        :thinking-active="thinkingActive"
+            :thinking-supported="thinkingSupported"
+            :thinking-active="thinkingActive"
             :voice-state="voiceState"
             :session-id="sessionId"
             :mention-allowed="true"
@@ -475,7 +505,7 @@ defineExpose({
             @plan="$emit('plan', $event)"
             @toolProcess="$emit('toolProcess', $event)"
             @confirm-mode="$emit('confirmMode', $event)"
-        @thinking="$emit('thinking', $event)"
+            @thinking="$emit('thinking', $event)"
             @voice-toggle="$emit('voiceToggle')"
             @voice-press="$emit('voicePress', $event)"
             @send="handleSend"

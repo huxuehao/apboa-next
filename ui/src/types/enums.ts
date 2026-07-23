@@ -76,12 +76,13 @@ export enum ModelProviderType {
 }
 
 /**
- * 模型用途（单选）：LLM=对话生成 / ASR=语音识别。
+ * 模型用途（单选）：LLM=对话生成 / ASR=语音识别 / TTS=语音合成。
  * 与 ModelType（LLM 输入模态能力，多选）是正交维度。
  */
 export enum ModelCategory {
   LLM = 'LLM',
-  ASR = 'ASR'
+  ASR = 'ASR',
+  TTS = 'TTS'
 }
 
 /**

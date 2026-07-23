@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { LoadingOutlined, BulbOutlined, CopyOutlined, CheckOutlined, ToolOutlined, RightOutlined, DownOutlined, CheckCircleFilled, CloseCircleFilled, ClockCircleOutlined, RetweetOutlined, ThunderboltOutlined } from '@ant-design/icons-vue'
+import { LoadingOutlined, BulbOutlined, CopyOutlined, CheckOutlined, ToolOutlined, RightOutlined, DownOutlined, CheckCircleFilled, CloseCircleFilled, ClockCircleOutlined, RetweetOutlined, ThunderboltOutlined, SoundOutlined, PauseCircleOutlined } from '@ant-design/icons-vue'
+import { useTtsPlayback } from '@/composables/chat/useTtsPlayback'
 import MediaPreview from '@/components/common/MediaPreview.vue'
 import type { UploadedFileItem } from '@/types'
 import MediaIcon from '@/components/common/MediaIcon.vue'
@@ -51,6 +52,8 @@ const props = defineProps<{
   meta?: string
   agentHasResult?: boolean
   isStreaming?: boolean
+  /** 会话 agent 是否绑定了语音合成模型（未绑定不显示朗读按钮） */
+  ttsEnabled?: boolean
 }>()
 
 defineEmits<{
@@ -59,6 +62,18 @@ defineEmits<{
   uipRetry: [uipCode: string]
   vepRetry: [vepCode: string]
 }>()
+
+const { speakingMessageId, speakMessage, interrupt: interruptSpeak } = useTtsPlayback()
+/** 本条消息是否正处于手动朗读中，按钮在朗读/停止两态间切换 */
+const isSpeakingThis = computed(() => speakingMessageId.value === props.id)
+
+function handleSpeak() {
+  if (isSpeakingThis.value) {
+    interruptSpeak()
+  } else {
+    speakMessage(props.id, props.content)
+  }
+}
 
 const isUser = computed(() => props.role === 'user')
 const isThinking = computed(() => props.role === 'thinking')
@@ -383,6 +398,16 @@ const openPreview = (index: number) => {
           <CheckOutlined v-if="copied" />
           <CopyOutlined v-else />
         </span>
+        <span
+          v-if="ttsEnabled && !isStreaming"
+          class="msg-copy-btn"
+          :class="{ 'is-speaking': isSpeakingThis }"
+          :title="isSpeakingThis ? '停止朗读' : '朗读'"
+          @click="handleSpeak"
+        >
+          <PauseCircleOutlined v-if="isSpeakingThis" />
+          <SoundOutlined v-else />
+        </span>
       </div>
     </template>
     <template v-else-if="isTool">
@@ -542,6 +567,10 @@ const openPreview = (index: number) => {
 
   &.is-done {
     color: #52c41a;
+  }
+
+  &.is-speaking {
+    color: var(--color-primary);
   }
 }
 </style>

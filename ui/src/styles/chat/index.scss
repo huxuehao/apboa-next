@@ -398,6 +398,10 @@ $small-mobile-breakpoint: 375px;
   flex-shrink: 0;
   min-width: 0;
   position: relative;
+  /* 稳定高度：欢迎态标题为空串，h1 塌缩致 header 变矮，右上角绝对定位按钮组
+     (top:50% 居中) 顶部溢出被裁。取值贴合对话态整体高（padding 24 + 标题行高 ~27），
+     border-box 下含 padding，两态一致不跳动。移动端由下方 media query 覆盖为 48px */
+  min-height: 51px;
 
   /* 移动端适配：调整头部间距 */
   @media (max-width: $mobile-breakpoint) {
@@ -422,7 +426,9 @@ $small-mobile-breakpoint: 375px;
   /* 移动端适配：调整标题大小 */
   @media (max-width: $mobile-breakpoint) {
     font-size: var(--font-size-base);
-    max-width: calc(100% - 80px); /* 为菜单按钮留出空间 */
+    /* 两侧各留空间：左菜单按钮 80，右操作组（语音播报+工作空间最多 2 个）80。
+       固定按最大占用预留，不随实际按钮数动态变化——避免切换 agent 时标题宽度跳动 */
+    max-width: calc(100% - 160px);
   }
 }
 
@@ -1452,11 +1458,19 @@ $small-mobile-breakpoint: 375px;
 }
 
 /* 工作空间入口按钮（始终可见，对称于左侧菜单按钮） */
-.chat-workspace-btn {
+/* 右上角操作组：语音播报 + 工作空间，flex 统一排布（间距留足移动端点击热区） */
+.chat-header-actions {
   position: absolute;
   right: var(--spacing-sm);
   top: 50%;
   transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 10;
+}
+
+.chat-header-action-btn {
   width: 36px;
   height: 36px;
   border-radius: 50%;
@@ -1467,8 +1481,8 @@ $small-mobile-breakpoint: 375px;
   align-items: center;
   justify-content: center;
   font-size: 16px;
+  color: var(--color-text-secondary);
   transition: color 0.2s ease, background-color 0.2s ease;
-  z-index: 10;
 
   &:hover {
     color: $chat-primary;
