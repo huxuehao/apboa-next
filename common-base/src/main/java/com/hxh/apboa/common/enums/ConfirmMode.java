@@ -22,6 +22,15 @@ public enum ConfirmMode {
     /** 拒绝授权：需确认工具自动拒绝（喂拒绝结果，模型如实告知不重试） */
     AUTO_REJECT("2");
 
+    /**
+     * 工具被拒时喂回模型的错误结果文案（主 resume / 子智能体 / 定时任务三链路单一出处；
+     * OpenAI/Ollama 协议无结构化 is_error，拒绝语义只能靠文本表达）
+     */
+    public static final String REJECT_RESULT_TEXT =
+            "Error: 用户拒绝授权调用该工具，本轮对话中该工具不可用。请勿重试该工具，"
+                    + "更不得自行编造、虚构或凭常识臆测该工具本应返回的结果数据；"
+                    + "必须如实告知用户：因未获授权调用该工具，无法获取相关信息。";
+
     private final String redisValue;
 
     ConfirmMode(String redisValue) {

@@ -101,8 +101,9 @@
                SUM(CASE WHEN message_id IS NULL THEN 1 ELSE 0 END)                                      AS internalRunCount,
                SUM(CASE WHEN message_id IS NULL AND biz_type = 'SUB_AGENT' THEN 1 ELSE 0 END)           AS subAgentRunCount,
                SUM(CASE WHEN message_id IS NULL AND biz_type = 'WORKFLOW' THEN 1 ELSE 0 END)            AS workflowRunCount,
-               <!-- 定时执行主链行有真实回复（message_id 非空），按行计执行次数而非内部运行 -->
-               SUM(CASE WHEN biz_type = 'SCHEDULED_JOB' THEN 1 ELSE 0 END)                              AS scheduledJobRunCount,
+               <!-- 定时执行次数按 biz_run_id 去重：拒绝授权续跑等场景一次执行产生多条
+                    SCHEDULED_JOB 流水行（每轮 assistant 各一行），按行计会虚高 -->
+               COUNT(DISTINCT CASE WHEN biz_type = 'SCHEDULED_JOB' THEN biz_run_id END)                 AS scheduledJobRunCount,
                SUM(CASE WHEN message_id IS NULL AND (biz_type IS NULL OR biz_type NOT IN ('SUB_AGENT',
                    'WORKFLOW', 'SCHEDULED_JOB')) THEN 1 ELSE 0 END)                                      AS otherInternalRunCount,
                IFNULL(SUM(iteration_count), 0)                                                          AS llmCallCount,
@@ -172,8 +173,11 @@
                    MAX(r.created_at)                                                                   AS lastActiveAt,
                    MAX(CASE WHEN r.biz_type = 'WORKFLOW' AND r.biz_run_id IS NULL THEN 1 ELSE 0 END)   AS legacy
             FROM chat_usage_record r
+            <!-- 显式 CAST 对齐类型：qjr.record_id 为 bigint、biz_run_id 为 varchar，混型等值
+                 比较 MySQL 走 double，19 位雪花 ID 超出 53 位精度会把相近 ID 误判相等
+                 （本机实测差 62 判等），导致普通工作流 run 被错标定时单/流水翻倍 -->
             LEFT JOIN quartz_job_records qjr
-                   ON r.biz_type = 'WORKFLOW' AND qjr.record_id = r.biz_run_id
+                   ON r.biz_type = 'WORKFLOW' AND qjr.record_id = CAST(r.biz_run_id AS UNSIGNED)
             WHERE r.created_at >= #{start} AND r.created_at &lt; #{endExclusive}
               AND ((r.biz_type IN ('CHAT', 'SUB_AGENT', 'SCHEDULED_JOB') AND r.session_id IS NOT NULL)
                    OR r.biz_type = 'WORKFLOW')

@@ -426,9 +426,7 @@ public class AguiRequestProcessor {
      * public 供 SubAgentTool 子智能体确认拒绝时复用（主/子 resume 拒绝语义单一出处）。
      */
     public static final String REJECT_RESULT_TEXT =
-            "Error: 用户拒绝授权调用该工具，本轮对话中该工具不可用。请勿重试该工具，"
-                    + "更不得自行编造、虚构或凭常识臆测该工具本应返回的结果数据；"
-                    + "必须如实告知用户：因未获授权调用该工具，无法获取相关信息。";
+            com.hxh.apboa.common.enums.ConfirmMode.REJECT_RESULT_TEXT;
 
     /** 汇总用户修改过参数的 approved 决策，写回暂停态记忆（无命中零开销）。 */
     private void applyEditedInputs(ReActAgent reActAgent, List<ResumeDecision> decisions) {
@@ -539,37 +537,20 @@ public class AguiRequestProcessor {
      */
     private Flux<AguiEvent> checkMonthlyBudget(String threadId, String runId) {
         try {
-            Map<String, Object> budgetRow = jdbcTemplate.query(
-                    "SELECT d.id AS agent_id, d.monthly_budget FROM agent_definition d "
-                            + "JOIN chat_session s ON s.agent_id = d.id WHERE s.id = ?",
-                    rs -> rs.next()
-                            ? Map.of("agentId", rs.getLong("agent_id"),
-                                     "budget", java.util.Optional.ofNullable(rs.getBigDecimal("monthly_budget")))
-                            : null,
+            Long agentId = jdbcTemplate.query(
+                    "SELECT agent_id FROM chat_session WHERE id = ?",
+                    rs -> rs.next() ? rs.getLong("agent_id") : null,
                     Long.valueOf(threadId)
             );
-            if (budgetRow == null) {
+            // 判定收口公共 checker（定时任务链路共用同一口径）
+            java.util.Optional<com.hxh.apboa.engine.log.telemetry.MonthlyBudgetChecker.BudgetExceeded> exceeded =
+                    com.hxh.apboa.engine.log.telemetry.MonthlyBudgetChecker.check(agentId, jdbcTemplate);
+            if (exceeded.isEmpty()) {
                 return null;
             }
-            @SuppressWarnings("unchecked")
-            java.util.Optional<java.math.BigDecimal> budgetOpt = (java.util.Optional<java.math.BigDecimal>) budgetRow.get("budget");
-            if (budgetOpt.isEmpty()) {
-                return null;
-            }
-            java.math.BigDecimal budget = budgetOpt.get();
-            // 月初基准必须应用侧生成：流水 created_at 是应用时区（北京），mysql NOW() 在
-            // 容器里常为 UTC，用 DATE_FORMAT(NOW(),..) 会在每月 1 日 0~8 点错切上月账
-            String monthStart = java.time.LocalDate.now().withDayOfMonth(1).toString();
-            java.math.BigDecimal spent = jdbcTemplate.queryForObject(
-                    "SELECT IFNULL(SUM(cost), 0) FROM chat_usage_record "
-                            + "WHERE agent_id = ? AND created_at >= ?",
-                    java.math.BigDecimal.class,
-                    budgetRow.get("agentId"), monthStart
-            );
-            if (spent == null || spent.compareTo(budget) < 0) {
-                return null;
-            }
-            logger.warn("智能体 {} 月度预算熔断：已用 {} / 预算 {}，拒绝 run {}", budgetRow.get("agentId"), spent, budget, runId);
+            java.math.BigDecimal spent = exceeded.get().spent();
+            java.math.BigDecimal budget = exceeded.get().budget();
+            logger.warn("智能体 {} 月度预算熔断：已用 {} / 预算 {}，拒绝 run {}", agentId, spent, budget, runId);
             String messageId = "budget-" + UUID.randomUUID();
             String text = String.format("本智能体本月的成本预算已用完（已用 ¥%.2f / 预算 ¥%.2f），暂时无法继续对话。请联系管理员调整预算或等下月自动恢复。",
                     spent, budget);

@@ -5,6 +5,7 @@ import com.hxh.apboa.common.entity.JobRecord;
 import com.hxh.apboa.common.util.BeanUtils;
 import com.hxh.apboa.common.util.FuncUtils;
 import com.hxh.apboa.common.util.TenantUtils;
+import com.hxh.apboa.engine.agui.AgentContext;
 import com.hxh.apboa.scheduler.consts.JobConst;
 import com.hxh.apboa.scheduler.core.enums.QuartzEnum;
 import com.hxh.apboa.scheduler.core.enums.QuartzResult;
@@ -86,6 +87,10 @@ public abstract class QuartzJob implements Job {
             if (tenantId != null) {
                 TenantUtils.clear();
             }
+            // 清理智能体上下文（ThreadLocal）：AgentScheduler 执行会 init 且 Quartz 线程池
+            // 复用线程，不清则残留被后续 WorkflowScheduler 任务的智能体节点读到、误判为
+            // "对话内触发"，工作流消耗串账到无关 agent/会话/用户名下并污染其月预算
+            AgentContext.clean();
         }
     }
 
