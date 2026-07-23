@@ -1,5 +1,7 @@
 package com.hxh.apboa.agent.service;
 
+import com.hxh.apboa.common.enums.ConfirmMode;
+
 import com.hxh.apboa.common.dto.ChatMessageAppendDTO;
 import com.hxh.apboa.common.dto.ChatSessionCreateDTO;
 import com.hxh.apboa.common.dto.ChatSessionQueryDTO;
@@ -138,17 +140,31 @@ public interface ChatSessionService extends IService<ChatSession> {
      * 查询会话「一键授权」开关（Redis，无记录=false 逐步确认）
      *
      * @param sessionId 会话 ID
-     * @return 是否开启一键授权
+     * @return 当前授权模式
      */
-    boolean getAutoApprove(Long sessionId);
+    ConfirmMode getConfirmMode(Long sessionId);
 
     /**
-     * 设置会话「一键授权」开关：开启写 Redis（TTL 30 天滚动刷新），关闭删 key。
-     * runtime 侧 IConfirmationHook 在 stopAgent 前实时读取，开着则直接放行需确认工具。
+     * 设置会话 HITL 授权模式（三态）：AUTO_APPROVE/AUTO_REJECT 写 Redis（TTL 30 天滚动刷新），
+     * MANUAL 删 key。runtime 侧在 stopAgent 前/暂停处理层实时读取——一键授权直接放行，
+     * 拒绝授权自动全拒续跑，逐步确认冒泡人工决策。
      *
      * @param sessionId 会话 ID
-     * @param enabled   是否开启
+     * @param mode      授权模式
      */
-    void setAutoApprove(Long sessionId, boolean enabled);
+    void setConfirmMode(Long sessionId, ConfirmMode mode);
+
+    /**
+     * 查询会话思考模式覆盖值（Redis）。
+     *
+     * @return true/false=会话覆盖；null=无覆盖（默认开，见 ChatModelFactory 合成语义）
+     */
+    Boolean getThinkingMode(Long sessionId);
+
+    /**
+     * 设置会话思考模式覆盖（写 Redis，TTL 30 天滚动）。
+     * runtime 侧 ChatModelFactory 构建模型时读取，AguiRequestProcessor 检测变化重建 agent。
+     */
+    void setThinkingMode(Long sessionId, boolean enabled);
 }
 

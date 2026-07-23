@@ -27,7 +27,9 @@ const props = withDefaults(
     enablePlanning?: boolean
     toolProcessActive?: boolean
     showToolProcess?: boolean
-    autoApproveActive?: boolean
+    confirmMode?: import('@/api/chatSession').ConfirmMode
+    thinkingSupported?: boolean
+    thinkingActive?: boolean
     allowUploadFileType?: string[]
     sessionId?: string | null
     mentionAllowed?: boolean
@@ -41,7 +43,7 @@ const props = withDefaults(
     enablePlanning: false,
     toolProcessActive: false,
     showToolProcess: false,
-    autoApproveActive: false,
+    confirmMode: 'MANUAL',
     sessionId: null,
     mentionAllowed: false,
     needInit: false
@@ -56,7 +58,8 @@ const emit = defineEmits<{
   (e: 'memory', value: boolean): void
   (e: 'plan', value: boolean): void
   (e: 'toolProcess', value: boolean): void
-  (e: 'autoApprove', value: boolean): void
+  (e: 'confirmMode', value: import('@/api/chatSession').ConfirmMode): void
+  (e: 'thinking', value: boolean): void
   (e: 'inputTagPreview', value: FlatFileItem): void
   (e: 'newSession'): void
 }>()
@@ -166,12 +169,15 @@ onMounted(() => {
         :memory-active="memoryActive"
         :show-tool-process="showToolProcess"
         :tool-process-active="toolProcessActive"
-        :auto-approve-active="autoApproveActive"
+        :confirm-mode="confirmMode"
+        :thinking-supported="thinkingSupported"
+        :thinking-active="thinkingActive"
         :mention-allowed="mentionAllowed"
         :allow-upload-file-type="allowUploadFileType"
         @memory="(v) => emit('memory', v)"
         @tool-process="(v) => emit('toolProcess', v)"
-        @auto-approve="(v) => emit('autoApprove', v)"
+        @confirm-mode="(v: import('@/api/chatSession').ConfirmMode) => emit('confirmMode', v)"
+        @thinking="(v: boolean) => emit('thinking', v)"
         @mention-trigger="editorRef?.triggerMention()"
         @pick-file="fileInputRef?.click()"
         @send="emit('send')"

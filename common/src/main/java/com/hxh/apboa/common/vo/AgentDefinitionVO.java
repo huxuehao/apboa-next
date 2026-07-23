@@ -50,6 +50,12 @@ public class AgentDefinitionVO implements SerializableEnable {
     private Integer maxSubtasks;
     private Boolean requirePlanConfirmation;
     private Boolean showToolProcess;
+
+    /**
+     * 当前模型是否支持会话级思考模式开关（派生字段，detail 时按模型供应商算出，
+     * 当前仅 DASH_SCOPE 全链路支持；前端据此决定是否展示思考按钮）
+     */
+    private Boolean thinkingSwitchSupported;
     private Boolean enableMemory;
     private Boolean enableMemoryCompression;
     private JsonNode memoryCompressionConfig;

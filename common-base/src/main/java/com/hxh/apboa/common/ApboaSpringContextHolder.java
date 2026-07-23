@@ -22,4 +22,9 @@ public class ApboaSpringContextHolder implements ApplicationContextAware {
     public static ObjectMapper getObjectMapper() {
          return context.getBean(ObjectMapper.class);
     }
+
+    /** 通用取 bean（供非 Spring 管理对象如 SubAgentTool、静态解析器访问容器组件） */
+    public static <T> T getBean(Class<T> clazz) {
+        return context.getBean(clazz);
+    }
 }

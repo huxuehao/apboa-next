@@ -1205,6 +1205,57 @@ $small-mobile-breakpoint: 375px;
   border-radius: 50%;
 }
 
+/* HITL 授权模式下拉菜单（Dropdown overlay 挂 body，样式须走全局）：图标 + 标题/说明两行 */
+.confirm-mode-menu {
+  .confirm-mode-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 2px 0;
+  }
+
+  .confirm-mode-option-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    font-size: 14px;
+    flex-shrink: 0;
+
+    &.is-auto_approve {
+      color: #fa8c16;
+      background: rgba(250, 140, 22, 0.12);
+    }
+    &.is-manual {
+      color: #2f54eb;
+      background: rgba(47, 84, 235, 0.1);
+    }
+    &.is-auto_reject {
+      color: #f5222d;
+      background: rgba(245, 34, 45, 0.1);
+    }
+  }
+
+  .confirm-mode-option-text {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.4;
+  }
+
+  .confirm-mode-option-label {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-primary);
+    font-weight: 500;
+  }
+
+  .confirm-mode-option-desc {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-secondary);
+  }
+}
+
 /* 移动端文件项样式 */
 .chat-input-file-item {
   flex-shrink: 0;
@@ -1735,6 +1786,19 @@ $small-mobile-breakpoint: 375px;
 /* 执行中递增计时：等宽数字防抖动，中性色区别于完成/失败 */
 .chat-tool-sub-step-status--running {
   color: #8a919c;
+}
+
+/* 子智能体 HITL 待授权：警示色提示等待人工决策 */
+.chat-tool-sub-step-status--confirm {
+  color: #faad14;
+}
+
+/* 子智能体 HITL 允许/禁止按钮区（header 为 space-between，自然靠右） */
+.chat-tool-sub-confirm-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 /* 工具步展开后的内嵌小节（请求参数/响应结果）：缩进体现层级 */

@@ -43,7 +43,9 @@ const props = defineProps<{
   enablePlanning?: boolean
   toolProcessActive?: boolean
   showToolProcess?: boolean
-  autoApproveActive?: boolean
+  confirmMode?: import('@/api/chatSession').ConfirmMode
+  thinkingSupported?: boolean
+  thinkingActive?: boolean
   allowUploadFileType?: string[]
   agentHasResult?: boolean
   workspacePanelOpen?: boolean
@@ -64,11 +66,13 @@ const emit = defineEmits<{
   (e: 'send'): void
   (e: 'scroll', event: Event): void
   (e: 'toolContent', value: any): void
+  (e: 'subConfirm', value: { subToolUseId: string; approved: boolean }): void
   (e: 'abort'): void
   (e: 'memory', value: boolean): void
   (e: 'plan', value: boolean): void
   (e: 'toolProcess', value: boolean): void
-  (e: 'autoApprove', value: boolean): void
+  (e: 'confirmMode', value: import('@/api/chatSession').ConfirmMode): void
+  (e: 'thinking', value: boolean): void
   (e: 'toggleSidebar'): void
   (e: 'toggleWorkspace'): void
   /** 触发加载更多历史消息 */
@@ -291,7 +295,9 @@ defineExpose({
         :allow-upload-file-type="allowUploadFileType"
         :show-tool-process="showToolProcess"
         :tool-process-active="toolProcessActive"
-        :auto-approve-active="autoApproveActive"
+        :confirm-mode="confirmMode"
+        :thinking-supported="thinkingSupported"
+        :thinking-active="thinkingActive"
         :session-id="sessionId"
         :mention-allowed="true"
         @update:input-value="$emit('update:inputValue', $event)"
@@ -299,7 +305,8 @@ defineExpose({
         @memory="$emit('memory', $event)"
         @plan="$emit('plan', $event)"
         @toolProcess="$emit('toolProcess', $event)"
-        @auto-approve="$emit('autoApprove', $event)"
+        @confirm-mode="$emit('confirmMode', $event)"
+        @thinking="$emit('thinking', $event)"
         @send="handleSend"
         @new-session="$emit('newSession')"
         @quick-question="$emit('quickQuestion', $event)"
@@ -335,6 +342,7 @@ defineExpose({
             :tool-calls="toolCalls"
             @inputTagPreview="inputTagPreviewHandle"
             @toolContent="(content: any) => $emit('toolContent', content)"
+            @sub-confirm="$emit('subConfirm', $event)"
             @interaction-submit="$emit('interactionSubmit', $event)"
             @uip-retry="$emit('uipRetry', $event)"
             @vep-retry="$emit('vepRetry', $event)"
@@ -396,7 +404,9 @@ defineExpose({
             :allow-upload-file-type="allowUploadFileType"
             :show-tool-process="showToolProcess"
             :tool-process-active="toolProcessActive"
-            :auto-approve-active="autoApproveActive"
+            :confirm-mode="confirmMode"
+        :thinking-supported="thinkingSupported"
+        :thinking-active="thinkingActive"
             :session-id="sessionId"
             :mention-allowed="true"
             @inputTagPreview="inputTagPreviewHandle"
@@ -405,7 +415,8 @@ defineExpose({
             @memory="$emit('memory', $event)"
             @plan="$emit('plan', $event)"
             @toolProcess="$emit('toolProcess', $event)"
-            @auto-approve="$emit('autoApprove', $event)"
+            @confirm-mode="$emit('confirmMode', $event)"
+        @thinking="$emit('thinking', $event)"
             @send="handleSend"
             @abort="$emit('abort')"
           />

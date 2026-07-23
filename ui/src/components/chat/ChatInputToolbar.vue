@@ -8,12 +8,15 @@
 import { computed } from 'vue'
 import {
   ArrowUpOutlined,
+  BulbOutlined,
   ClockCircleOutlined,
   LockOutlined,
   PaperClipOutlined,
+  StopOutlined,
   ThunderboltOutlined,
   UnlockOutlined
 } from '@ant-design/icons-vue'
+import type { ConfirmMode } from '@/api/chatSession'
 
 const props = withDefaults(
   defineProps<{
@@ -24,7 +27,12 @@ const props = withDefaults(
     memoryActive?: boolean
     showToolProcess?: boolean
     toolProcessActive?: boolean
-    autoApproveActive?: boolean
+    /** HITL 授权模式（三态） */
+    confirmMode?: ConfirmMode
+    /** 模型是否支持会话级思考开关（DASH_SCOPE，驱动按钮显隐） */
+    thinkingSupported?: boolean
+    /** 会话思考模式有效值 */
+    thinkingActive?: boolean
     mentionAllowed?: boolean
     allowUploadFileType?: string[]
   }>(),
@@ -34,7 +42,9 @@ const props = withDefaults(
     memoryActive: false,
     showToolProcess: false,
     toolProcessActive: false,
-    autoApproveActive: false,
+    confirmMode: 'MANUAL',
+    thinkingSupported: false,
+    thinkingActive: true,
     mentionAllowed: false
   }
 )
@@ -42,7 +52,8 @@ const props = withDefaults(
 const emit = defineEmits<{
   (e: 'memory', value: boolean): void
   (e: 'toolProcess', value: boolean): void
-  (e: 'autoApprove', value: boolean): void
+  (e: 'confirmMode', value: ConfirmMode): void
+  (e: 'thinking', value: boolean): void
   (e: 'mentionTrigger'): void
   (e: 'pickFile'): void
   (e: 'send'): void
@@ -65,12 +76,29 @@ const toggleToolProcess = () => {
   emit('toolProcess', !props.toolProcessActive)
 }
 
-/**
- * 切换授权模式（逐步确认 / 一键授权）。
- * 开启的二次确认 Modal 由上层处理（涉及 pending 全批逻辑）
- */
-const toggleAutoApprove = () => {
-  emit('autoApprove', !props.autoApproveActive)
+/** 授权模式选项（下拉菜单项：标题 + 行为说明），选择即向上冒泡由上层写 Redis 并联动存量 pending */
+const CONFIRM_MODE_OPTIONS: Array<{ key: ConfirmMode; label: string; desc: string }> = [
+  { key: 'AUTO_APPROVE', label: '一键授权', desc: '需确认的工具自动允许执行' },
+  { key: 'MANUAL', label: '逐步确认', desc: '每个需确认的工具等待手动决策' },
+  { key: 'AUTO_REJECT', label: '拒绝授权', desc: '需确认的工具自动拒绝执行' }
+]
+
+/** 触发按钮的 tooltip：当前模式名 + 行为说明 */
+const confirmModeTip = computed(() => {
+  const opt = CONFIRM_MODE_OPTIONS.find((o) => o.key === props.confirmMode)
+  return opt ? `${opt.label}：${opt.desc}（点击切换）` : ''
+})
+
+const handleConfirmModeSelect = ({ key }: { key: string | number }) => {
+  const mode = String(key) as ConfirmMode
+  if (mode !== props.confirmMode) {
+    emit('confirmMode', mode)
+  }
+}
+
+/** 切换会话思考模式（仅支持开关的模型展示本按钮；下一条消息生效） */
+const toggleThinking = () => {
+  emit('thinking', !props.thinkingActive)
 }
 
 /** 多模态类型扩展名集合（用于 tooltip 分类） */
@@ -116,6 +144,7 @@ const uploadTooltip = computed(() => {
         </button>
       </ATooltip>
 
+      <!-- 工具调用历史开关：暂不对外展示（仅隐藏 UI，props/事件链与后端逻辑保留，放开取消注释即可）
       <ATooltip placement="bottom">
         <template #title>
           <span v-if="showToolProcess">{{ (toolProcessActive && showToolProcess) ? '点击关闭工具调用历史' : '点击显示工具调用历史' }}</span>
@@ -131,21 +160,56 @@ const uploadTooltip = computed(() => {
           <ThunderboltOutlined />
         </button>
       </ATooltip>
+      -->
 
-      <ATooltip placement="bottom" :overlay-style="{ maxWidth: 'none' }" :overlay-inner-style="{ whiteSpace: 'nowrap' }">
+      <ATooltip v-if="thinkingSupported" placement="bottom" :overlay-style="{ maxWidth: 'none' }" :overlay-inner-style="{ whiteSpace: 'nowrap' }">
         <template #title>
-          {{ autoApproveActive ? '一键授权：需确认的工具将自动允许执行' : '逐步确认：需确认的工具将等待手动允许' }}
+          {{ thinkingActive ? '点击关闭思考模式' : '点击开启思考模式' }}
         </template>
         <button
           type="button"
           class="chat-toolbar-btn chat-toolbar-btn-icon chat-toolbar-btn-circle"
-          :class="autoApproveActive ? 'is-warn-active' : 'is-active'"
-          @click="toggleAutoApprove"
+          :class="{ 'is-active': thinkingActive }"
+          @click="toggleThinking"
         >
-          <UnlockOutlined v-if="autoApproveActive" />
-          <LockOutlined v-else />
+          <BulbOutlined />
         </button>
       </ATooltip>
+
+      <ADropdown :trigger="['click']" placement="topLeft">
+        <ATooltip placement="bottom" :overlay-style="{ maxWidth: 'none' }" :overlay-inner-style="{ whiteSpace: 'nowrap' }" :title="confirmModeTip">
+          <button
+            type="button"
+            class="chat-toolbar-btn chat-toolbar-btn-icon chat-toolbar-btn-circle"
+            :class="{
+              'is-warn-active': confirmMode === 'AUTO_APPROVE',
+              'is-active': confirmMode === 'MANUAL',
+              'is-danger-active': confirmMode === 'AUTO_REJECT'
+            }"
+          >
+            <UnlockOutlined v-if="confirmMode === 'AUTO_APPROVE'" />
+            <StopOutlined v-else-if="confirmMode === 'AUTO_REJECT'" />
+            <LockOutlined v-else />
+          </button>
+        </ATooltip>
+        <template #overlay>
+          <AMenu class="confirm-mode-menu" :selected-keys="[confirmMode]" @click="handleConfirmModeSelect">
+            <AMenuItem v-for="opt in CONFIRM_MODE_OPTIONS" :key="opt.key">
+              <div class="confirm-mode-option">
+                <span class="confirm-mode-option-icon" :class="'is-' + opt.key.toLowerCase()">
+                  <UnlockOutlined v-if="opt.key === 'AUTO_APPROVE'" />
+                  <StopOutlined v-else-if="opt.key === 'AUTO_REJECT'" />
+                  <LockOutlined v-else />
+                </span>
+                <span class="confirm-mode-option-text">
+                  <span class="confirm-mode-option-label">{{ opt.label }}</span>
+                  <span class="confirm-mode-option-desc">{{ opt.desc }}</span>
+                </span>
+              </div>
+            </AMenuItem>
+          </AMenu>
+        </template>
+      </ADropdown>
     </div>
     <div class="chat-input-toolbar-right">
       <!-- @ 添加上下文按钮 -->
@@ -160,7 +224,7 @@ const uploadTooltip = computed(() => {
           @
         </button>
       </ATooltip>
-      <ATooltip placement="bottom" :title="uploadTooltip">
+      <ATooltip placement="bottom" :overlay-style="{ maxWidth: 'none' }" :overlay-inner-style="{ whiteSpace: 'nowrap' }" :title="uploadTooltip">
         <button
           type="button"
           class="chat-toolbar-btn chat-toolbar-btn-icon chat-toolbar-btn-circle"
@@ -237,6 +301,18 @@ const uploadTooltip = computed(() => {
     &:hover {
       color: #fa8c16;
       background-color: rgba(250, 140, 22, 0.18);
+    }
+  }
+
+  /* 拒绝授权激活态：危险色，提示需确认工具将被自动拒绝 */
+  &.is-danger-active {
+    color: #f5222d;
+    background-color: rgba(245, 34, 45, 0.1);
+    font-weight: 500;
+
+    &:hover {
+      color: #f5222d;
+      background-color: rgba(245, 34, 45, 0.16);
     }
   }
 

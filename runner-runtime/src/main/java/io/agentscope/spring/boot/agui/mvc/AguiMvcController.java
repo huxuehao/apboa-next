@@ -57,6 +57,7 @@ public class AguiMvcController {
                                         : AguiAdapterConfig.defaultConfig())
                         .session(session)
                         .jdbcTemplate(jdbcTemplate)
+                        .sessionManager(builder.sessionManager)
                         .build();
         this.encoder = new AguiEventEncoder();
         this.agentIdHeader =

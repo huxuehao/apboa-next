@@ -20,7 +20,9 @@ defineProps<{
   enablePlanning?: boolean
   toolProcessActive?: boolean
   showToolProcess?: boolean
-  autoApproveActive?: boolean
+  confirmMode?: import('@/api/chatSession').ConfirmMode
+  thinkingSupported?: boolean
+  thinkingActive?: boolean
   allowUploadFileType?: string[]
   sessionId?: string | null
   mentionAllowed?: boolean
@@ -33,7 +35,8 @@ defineEmits<{
   (e: 'memory', value: boolean): void
   (e: 'plan', value: boolean): void
   (e: 'toolProcess', value: boolean): void
-  (e: 'autoApprove', value: boolean): void
+  (e: 'confirmMode', value: import('@/api/chatSession').ConfirmMode): void
+  (e: 'thinking', value: boolean): void
   (e: 'newSession'): void
   (e: 'quickQuestion', question: string): void
 }>()
@@ -82,7 +85,9 @@ defineEmits<{
         :allow-upload-file-type="allowUploadFileType"
         :show-tool-process="showToolProcess"
         :tool-process-active="toolProcessActive"
-        :auto-approve-active="autoApproveActive"
+        :confirm-mode="confirmMode"
+        :thinking-supported="thinkingSupported"
+        :thinking-active="thinkingActive"
         :session-id="sessionId"
         :mention-allowed="mentionAllowed"
         @update:model-value="$emit('update:inputValue', $event)"
@@ -90,7 +95,8 @@ defineEmits<{
         @memory="$emit('memory', $event)"
         @plan="$emit('plan', $event)"
         @toolProcess="$emit('toolProcess', $event)"
-        @auto-approve="$emit('autoApprove', $event)"
+        @confirm-mode="$emit('confirmMode', $event)"
+        @thinking="$emit('thinking', $event)"
         @send="$emit('send')"
         @new-session="$emit('newSession')"
       />

@@ -3,6 +3,7 @@ package com.hxh.apboa.engine.model;
 import com.hxh.apboa.common.entity.AgentDefinition;
 import com.hxh.apboa.common.enums.ModelProviderType;
 import com.hxh.apboa.common.util.ExtendConfigHelper;
+import com.hxh.apboa.engine.agui.AgentContext;
 import com.hxh.apboa.common.wrapper.ModelConfigWrapper;
 import com.hxh.apboa.common.wrapper.ModelWrapper;
 import com.hxh.apboa.model.service.ModelConfigService;
@@ -96,6 +97,18 @@ public class ChatModelFactory {
         configWrapper.setMulti(multi);
         configWrapper.setToolChoiceStrategy(agentDefinition.getToolChoiceStrategy());
         configWrapper.setSpecificToolName(agentDefinition.getSpecificToolName());
+
+        // 会话级思考模式（仅 DASH_SCOPE 全链路支持——enable_thinking 为百炼官方参数；
+        // 其他供应商的思考参数在各自服务端不受控）：有会话上下文时 thinking = 覆盖 ?? 默认开；
+        // 非会话场景（调试等无 threadId）保持模型配置现状。开关变化由
+        // AguiRequestProcessor 检测触发 agent 重建，本处在重建时读到新值
+        if (configWrapper.getProvider() == ModelProviderType.DASH_SCOPE) {
+            String threadId = AgentContext.getIfExists().map(AgentContext::getThreadId).orElse(null);
+            if (threadId != null && !threadId.isEmpty()) {
+                Boolean override = ThinkingModeResolver.resolveOverride(threadId);
+                configWrapper.setThinking(override == null || override);
+            }
+        }
 
         IChatModel IChatModel = MODEL_MAP.get(configWrapper.getProvider());
         if (IChatModel == null) {

@@ -15,15 +15,25 @@
  */
 package io.agentscope.core.tool.subagent;
 
+import com.hxh.apboa.common.enums.ConfirmMode;
+import com.hxh.apboa.common.util.AgentMetadataStore;
 import com.hxh.apboa.common.util.TenantUtils;
 import com.hxh.apboa.engine.agui.AgentContext;
+import com.hxh.apboa.engine.hitl.ConfirmModeResolver;
+import com.hxh.apboa.engine.hitl.PendingSubConfirmRegistry;
+import com.hxh.apboa.engine.hook.builtins.IConfirmationHook;
+import com.hxh.apboa.engine.log.ChatLogHook;
 import io.agentscope.core.agent.Agent;
 import io.agentscope.core.agent.Event;
 import io.agentscope.core.agent.StreamOptions;
+import io.agentscope.core.agui.processor.AguiRequestProcessor;
+import io.agentscope.core.message.ContentBlock;
+import io.agentscope.core.message.GenerateReason;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
 import io.agentscope.core.message.TextBlock;
 import io.agentscope.core.message.ToolResultBlock;
+import io.agentscope.core.message.ToolUseBlock;
 import io.agentscope.core.session.Session;
 import io.agentscope.core.state.StateModule;
 import io.agentscope.core.tool.AgentTool;
@@ -31,7 +41,9 @@ import io.agentscope.core.tool.ToolCallParam;
 import io.agentscope.core.tool.ToolEmitter;
 import io.agentscope.core.util.JsonUtils;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -251,6 +263,10 @@ public class SubAgentTool implements AgentTool {
      * <p>Uses the agent's streaming API and forwards each event to the provided emitter as JSON.
      * The final response is extracted from the last event.
      *
+     * <p>HITL：子智能体内需确认工具触发暂停（REASONING_STOP_REQUESTED）时不再直接收尾
+     * （旧行为返回 "(No response)"，确认被静默吞掉），而是把确认请求冒泡到主会话并挂起等待，
+     * 用户决策后就地续跑，见 {@link #streamRound}。
+     *
      * @param agent The agent to execute
      * @param userMsg The user message to send
      * @param sessionId The session ID for result building
@@ -267,15 +283,7 @@ public class SubAgentTool implements AgentTool {
 
         return Mono.deferContextual(
                 ctxView ->
-                        agent.stream(List.of(userMsg), streamOptions)
-                                .doOnNext(event -> forwardEvent(event, emitter, agent, sessionId, parentToolCallId))
-                                .filter(Event::isLast)
-                                .last()
-                                .map(
-                                        lastEvent -> {
-                                            Msg response = lastEvent.getMessage();
-                                            return buildResult(response, sessionId);
-                                        })
+                        streamRound(agent, List.of(userMsg), streamOptions, sessionId, emitter, parentToolCallId)
                                 .contextWrite(context -> context.putAll(ctxView))
                                 .onErrorResume(
                                         e -> {
@@ -287,6 +295,228 @@ public class SubAgentTool implements AgentTool {
                                                     ToolResultBlock.error(
                                                             "Execution error: " + e.getMessage()));
                                         }));
+    }
+
+    /**
+     * 跑一轮 agent.stream 并处理收尾：正常结束 → buildResult 照旧；HITL 确认暂停 →
+     * 冒泡确认请求 + 挂起等待 + 决策后续跑并递归回本方法（一次子运行可能多次暂停）。
+     *
+     * <p>续跑输入与主流程 resume 同款语义（全允许=空列表继续 pending 工具；拒绝=喂回
+     * TOOL 错误结果），子 agent 实例全程在内存，无需 loadFrom。
+     */
+    private Mono<ToolResultBlock> streamRound(
+            Agent agent,
+            List<Msg> input,
+            StreamOptions streamOptions,
+            String sessionId,
+            ToolEmitter emitter,
+            String parentToolCallId) {
+        return agent.stream(input, streamOptions)
+                .doOnNext(event -> forwardEvent(event, emitter, agent, sessionId, parentToolCallId))
+                .filter(Event::isLast)
+                .last()
+                .flatMap(
+                        lastEvent -> {
+                            Msg response = lastEvent.getMessage();
+                            if (response != null
+                                    && response.getGenerateReason()
+                                            == GenerateReason.REASONING_STOP_REQUESTED) {
+                                return suspendForConfirmation(
+                                        agent, response, streamOptions, sessionId, emitter, parentToolCallId);
+                            }
+                            return Mono.just(buildResult(response, sessionId));
+                        });
+    }
+
+    /**
+     * HITL 暂停处理：提取待确认工具 → 冒泡确认请求块 → 注册挂起等待主会话决策 → 续跑。
+     *
+     * <p>pending 口径与 AguiAgentAdapter AGENT_RESULT 分支一致：只取
+     * {@link IConfirmationHook#isNeedConfirm} 登记命中的工具，过滤同轮被 stopAgent
+     * 连累的普通工具。超时由 registry 兜底发全拒绝决策，走同一续跑路径。
+     */
+    private Mono<ToolResultBlock> suspendForConfirmation(
+            Agent agent,
+            Msg pausedMsg,
+            StreamOptions streamOptions,
+            String sessionId,
+            ToolEmitter emitter,
+            String parentToolCallId) {
+        List<Map<String, Object>> pending = new ArrayList<>();
+        for (ToolUseBlock toolUse : pausedMsg.getContentBlocks(ToolUseBlock.class)) {
+            if (IConfirmationHook.isNeedConfirm(toolUse.getName())) {
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("toolUseId", toolUse.getId());
+                item.put("name", toolUse.getName());
+                item.put("input", toolUse.getInput());
+                pending.add(item);
+            }
+        }
+        if (pending.isEmpty()) {
+            // 防御：暂停但无需确认工具命中（理论不可达），按原收尾返回避免悬挂
+            logger.warn("SubAgent session {} paused without confirmable tools", sessionId);
+            return Mono.just(buildResult(pausedMsg, sessionId));
+        }
+
+        String parentThreadId = AgentMetadataStore.get(agent.getAgentId(), "subParentThreadId");
+
+        // 「拒绝授权」模式：不挂起不冒泡，直接按人工全拒同款路径就地续跑
+        // （模式实时读主会话 Redis，与主 agent 的 AguiAgentAdapter 自动拒绝对称）
+        if (ConfirmModeResolver.resolveByThreadId(parentThreadId) == ConfirmMode.AUTO_REJECT) {
+            logger.info("SubAgent session {} auto-rejected {} tools (confirm mode AUTO_REJECT)",
+                    sessionId, pending.size());
+            List<PendingSubConfirmRegistry.Decision> rejectAll = new ArrayList<>();
+            for (Map<String, Object> tool : pending) {
+                rejectAll.add(new PendingSubConfirmRegistry.Decision(
+                        String.valueOf(tool.get("toolUseId")),
+                        String.valueOf(tool.get("name")),
+                        false));
+            }
+            return resumeAfterDecisions(
+                    agent, rejectAll, streamOptions, sessionId, emitter, parentToolCallId);
+        }
+
+        PendingSubConfirmRegistry.PendingInfo info =
+                new PendingSubConfirmRegistry.PendingInfo(
+                        sessionId,
+                        parentThreadId,
+                        parentToolCallId,
+                        agent.getName() == null ? "" : agent.getName(),
+                        pending);
+
+        // 先注册（register 调用即入表，决策先于订阅到达也会被 Sinks.One 缓存重放）再冒泡，
+        // 避免前端秒回决策时 complete 查不到挂起条目
+        Mono<List<PendingSubConfirmRegistry.Decision>> decisionsMono =
+                PendingSubConfirmRegistry.register(info);
+        emitConfirmRequired(emitter, agent, sessionId, parentToolCallId, pending);
+
+        return decisionsMono.flatMap(
+                decisions ->
+                        resumeAfterDecisions(
+                                agent, decisions, streamOptions, sessionId, emitter, parentToolCallId));
+    }
+
+    /**
+     * 按决策续跑（人工决策到达 / 超时全拒 / 拒绝授权模式短路 共用）：
+     * 被拒的工具不会真实执行、无 PostActingEvent 也无 TOOL_RESULT 事件——
+     * 落库侧直接补偿工具步 result（否则历史渲染兜底显示「完成」造成误导），
+     * 实时侧经转发通道直发拒绝完成步（否则前端只剩本地占位文案，与落库不同构）；
+     * 然后按主 resume 同款语义构造输入就地续跑。
+     */
+    private Mono<ToolResultBlock> resumeAfterDecisions(
+            Agent agent,
+            List<PendingSubConfirmRegistry.Decision> decisions,
+            StreamOptions streamOptions,
+            String sessionId,
+            ToolEmitter emitter,
+            String parentToolCallId) {
+        logger.info(
+                "SubAgent session {} confirm decided: {} approved / {} total",
+                sessionId,
+                decisions.stream().filter(PendingSubConfirmRegistry.Decision::approved).count(),
+                decisions.size());
+        for (PendingSubConfirmRegistry.Decision d : decisions) {
+            if (d != null && !d.approved()) {
+                Long elapsed = ChatLogHook.completeSubToolStepRejected(
+                        agent.getAgentId(),
+                        d.toolUseId(),
+                        AguiRequestProcessor.REJECT_RESULT_TEXT);
+                emitRejectedStep(emitter, agent, sessionId, parentToolCallId, d, elapsed);
+            }
+        }
+        return streamRound(
+                agent,
+                buildSubResumeInput(decisions),
+                streamOptions,
+                sessionId,
+                emitter,
+                parentToolCallId);
+    }
+
+    /**
+     * 把确认请求经 {@link #forwardEvent} 同款事件通道冒泡给主流：AguiAgentAdapter 识别
+     * metadata 的 subagent_confirm 标记后转为 Custom(SUBAGENT_CONFIRM_REQUIRED) 下发前端。
+     */
+    private void emitConfirmRequired(
+            ToolEmitter emitter,
+            Agent agent,
+            String sessionId,
+            String parentToolCallId,
+            List<Map<String, Object>> pending) {
+        try {
+            Map<String, Object> metadata = new HashMap<>();
+            metadata.put("subagent_confirm", true);
+            metadata.put("subagent_pending", pending);
+            metadata.put("subagent_name", agent.getName() == null ? "" : agent.getName());
+            metadata.put("subagent_id", agent.getAgentId() == null ? "" : agent.getAgentId());
+            metadata.put("subagent_session_id", sessionId == null ? "" : sessionId);
+            metadata.put("parent_tool_call_id", parentToolCallId == null ? "" : parentToolCallId);
+            emitter.emit(new ToolResultBlock(null, null, List.of(), metadata));
+        } catch (Exception e) {
+            logger.warn("Failed to emit sub-agent confirm request: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 拒绝的工具无真实执行、不会产生可转发的 TOOL_RESULT 事件，把「工具完成（拒绝）」
+     * 步骤经 metadata 直发标记冒泡给主流：AguiAgentAdapter 识别 subagent_step_direct 后
+     * 原样转为 Custom(SUBAGENT_STEP)，前端按 subToolUseId 配对合并——实时显示与落库
+     * 同构（文案同 {@link AguiRequestProcessor#REJECT_RESULT_TEXT}、elapsed 同落库补偿值）。
+     */
+    private void emitRejectedStep(
+            ToolEmitter emitter,
+            Agent agent,
+            String sessionId,
+            String parentToolCallId,
+            PendingSubConfirmRegistry.Decision decision,
+            Long elapsed) {
+        try {
+            Map<String, Object> step = new LinkedHashMap<>();
+            step.put("type", "tool");
+            step.put("name", decision.name());
+            step.put("result", AguiRequestProcessor.REJECT_RESULT_TEXT);
+            if (elapsed != null) {
+                step.put("elapsed", elapsed);
+            }
+            Map<String, Object> metadata = new HashMap<>();
+            metadata.put("subagent_step_direct", step);
+            metadata.put("subagent_sub_tool_use_id", decision.toolUseId());
+            metadata.put("subagent_name", agent.getName() == null ? "" : agent.getName());
+            metadata.put("subagent_id", agent.getAgentId() == null ? "" : agent.getAgentId());
+            metadata.put("subagent_session_id", sessionId == null ? "" : sessionId);
+            metadata.put("parent_tool_call_id", parentToolCallId == null ? "" : parentToolCallId);
+            emitter.emit(new ToolResultBlock(null, null, List.of(), metadata));
+        } catch (Exception e) {
+            logger.warn("Failed to emit rejected step: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 按主流程 resume 同款语义构造续跑输入（对齐 AguiRequestProcessor.buildResumeInput）：
+     * 全允许 → 空列表，agent 继续执行暂停前的 pending 工具；含拒绝 → 喂回「授权被拒/工具
+     * 不可用」错误结果（文案复用 {@link AguiRequestProcessor#REJECT_RESULT_TEXT}，
+     * 防模型把拒绝理解成"重试"），允许的仍留给 agent 自己执行。
+     */
+    private List<Msg> buildSubResumeInput(List<PendingSubConfirmRegistry.Decision> decisions) {
+        if (decisions == null || decisions.isEmpty()) {
+            return List.of();
+        }
+        List<ContentBlock> rejects = new ArrayList<>();
+        for (PendingSubConfirmRegistry.Decision d : decisions) {
+            if (d != null && !d.approved()) {
+                rejects.add(
+                        ToolResultBlock.of(
+                                d.toolUseId(),
+                                d.name(),
+                                TextBlock.builder()
+                                        .text(AguiRequestProcessor.REJECT_RESULT_TEXT)
+                                        .build()));
+            }
+        }
+        if (rejects.isEmpty()) {
+            return List.of();
+        }
+        return List.of(Msg.builder().role(MsgRole.TOOL).content(rejects).build());
     }
 
     /**

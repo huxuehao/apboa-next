@@ -6,6 +6,7 @@ import com.hxh.apboa.agent.service.AgentDefinitionService;
 import com.hxh.apboa.agent.service.ChatMessageService;
 import com.hxh.apboa.agent.service.ChatSessionService;
 import com.hxh.apboa.common.consts.RedisChannelTopic;
+import com.hxh.apboa.common.enums.ConfirmMode;
 import com.hxh.apboa.common.consts.SysConst;
 import com.hxh.apboa.common.dto.ChatMessageAppendDTO;
 import com.hxh.apboa.common.dto.ChatSessionCreateDTO;
@@ -399,23 +400,48 @@ public class ChatSessionServiceImpl extends ServiceImpl<ChatSessionMapper, ChatS
     }
 
     @Override
-    public boolean getAutoApprove(Long sessionId) {
-        return "1".equals(redisUtils.get(RedisChannelTopic.CHAT_AUTO_APPROVE_KEY_PREFIX + sessionId));
+    public ConfirmMode getConfirmMode(Long sessionId) {
+        return ConfirmMode.fromRedisValue(
+                redisUtils.get(RedisChannelTopic.CHAT_AUTO_APPROVE_KEY_PREFIX + sessionId));
     }
 
     @Override
-    public void setAutoApprove(Long sessionId, boolean enabled) {
+    public void setConfirmMode(Long sessionId, ConfirmMode mode) {
         // 校验会话归属（MP 租户拦截器过滤，非本租户查不到），防越权改他人会话开关
         ChatSession session = getById(sessionId);
         if (session == null) {
             throw new RuntimeException("会话不存在");
         }
         String key = RedisChannelTopic.CHAT_AUTO_APPROVE_KEY_PREFIX + sessionId;
-        if (enabled) {
-            redisUtils.setEx(key, "1", AUTO_APPROVE_TTL_DAYS, TimeUnit.DAYS);
-        } else {
+        if (mode == null || mode.getRedisValue() == null) {
+            // MANUAL：无记录即逐步确认
             redisUtils.delete(key);
+        } else {
+            redisUtils.setEx(key, mode.getRedisValue(), AUTO_APPROVE_TTL_DAYS, TimeUnit.DAYS);
         }
+    }
+
+    @Override
+    public Boolean getThinkingMode(Long sessionId) {
+        String value = redisUtils.get(RedisChannelTopic.CHAT_THINKING_KEY_PREFIX + sessionId);
+        if ("1".equals(value)) {
+            return true;
+        }
+        if ("0".equals(value)) {
+            return false;
+        }
+        return null;
+    }
+
+    @Override
+    public void setThinkingMode(Long sessionId, boolean enabled) {
+        // 校验会话归属（MP 租户拦截器过滤，非本租户查不到），防越权改他人会话开关
+        ChatSession session = getById(sessionId);
+        if (session == null) {
+            throw new RuntimeException("会话不存在");
+        }
+        redisUtils.setEx(RedisChannelTopic.CHAT_THINKING_KEY_PREFIX + sessionId,
+                enabled ? "1" : "0", AUTO_APPROVE_TTL_DAYS, TimeUnit.DAYS);
     }
 
     private ChatSessionVO toSessionVO(ChatSession session) {

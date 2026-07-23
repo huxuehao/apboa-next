@@ -39,4 +39,11 @@ public class RedisChannelTopic {
      * 开着则直接放行需确认工具（不走 暂停→确认→resume 循环）。
      */
     public static final String CHAT_AUTO_APPROVE_KEY_PREFIX = "apboa:chat:auto-approve:";
+
+    /**
+     * 会话级思考模式覆盖 key 前缀（key = 前缀 + threadId）。
+     * 值 "1"=强制开 / "0"=强制关 / 无 key=默认开（仅对支持开关的供应商生效，当前 DASH_SCOPE）。
+     * ChatModelFactory 构建模型时读取合成，AguiRequestProcessor 检测变化触发 agent 重建。
+     */
+    public static final String CHAT_THINKING_KEY_PREFIX = "apboa:chat:thinking:";
 }

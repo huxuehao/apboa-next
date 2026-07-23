@@ -3,6 +3,7 @@ import { computed, onUnmounted, ref, watch } from 'vue'
 import { useToolCallDisplayName } from '@/composables/chat/useToolCallDisplayName'
 import SubProcessSteps from './SubProcessSteps.vue'
 import type { SubProcessStep } from '@/types'
+import { vStickBottom } from '@/utils/chat/stickBottom'
 
 const props = defineProps<{
   id: string,
@@ -53,6 +54,7 @@ const runningElapsed = computed(() => {
 
 const emit = defineEmits<{
   (e: 'toolContent', value: any): void
+  (e: 'subConfirm', value: { subToolUseId: string; approved: boolean }): void
 }>()
 
 const foldArgs = ref<boolean>(true)
@@ -114,9 +116,9 @@ const handleShowArgs = () => {
         <div class="chat-tool-section-header">
           <span class="chat-tool-section-label">请求参数</span>
         </div>
-        <pre class="chat-tool-item-code">{{ prettyRunningArgs }}</pre>
+        <pre v-stick-bottom class="chat-tool-item-code">{{ prettyRunningArgs }}</pre>
       </div>
-      <SubProcessSteps v-if="subSteps?.length" :steps="subSteps" />
+      <SubProcessSteps v-if="subSteps?.length" :steps="subSteps" @sub-confirm="emit('subConfirm', $event)" />
     </div>
   </div>
 </template>

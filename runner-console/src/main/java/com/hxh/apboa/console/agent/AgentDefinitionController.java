@@ -17,6 +17,9 @@ import com.hxh.apboa.common.vo.AgentDefinitionVO;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.hxh.apboa.studio.mapper.AgentStudioMapper;
 import com.hxh.apboa.longterm.mapper.AgentLongTermMemoryMapper;
+import com.hxh.apboa.common.enums.ModelProviderType;
+import com.hxh.apboa.common.wrapper.ModelWrapper;
+import com.hxh.apboa.model.service.ModelConfigService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -35,6 +38,8 @@ import java.util.stream.Collectors;
 public class AgentDefinitionController {
 
     private final AgentDefinitionService agentDefinitionService;
+    private final ModelConfigService modelConfigService;
+    private final IJobInfoMapper iJobInfoMapper;
     private final AgentStudioMapper agentStudioMapper;
     private final AgentLongTermMemoryMapper agentLongTermMemoryMapper;
     private final MessagePublisher messagePublisher;
@@ -79,8 +84,34 @@ public class AgentDefinitionController {
     public R<AgentDefinitionVO> detail(@PathVariable("id") Long id) {
         AgentDefinitionVO vo = agentDefinitionService.agentDefinitionDetail(id);
         vo.setUsed(agentDefinitionService.usedWithAgent(List.of(id)));
+        vo.setThinkingSwitchSupported(resolveThinkingSwitchSupported(vo.getModelConfigId()));
+        List<JobInfo> agent = iJobInfoMapper.selectList(
+                new LambdaQueryWrapper<JobInfo>()
+                        .eq(JobInfo::getType, "AGENT")
+                        .eq(JobInfo::getBizId, String.valueOf(id)));
+        if (agent.size() == 1) {
+            vo.setJobInfo(agent.getFirst());
+        }
 
         return R.data(vo);
+    }
+
+    /**
+     * 当前模型是否支持会话级思考模式开关：仅 DASH_SCOPE 全链路支持
+     * （enable_thinking 为百炼官方参数；其他供应商的思考参数在各自服务端不受控，
+     * 见 ChatModelFactory 合成点）。查询失败按不支持处理（按钮宁缺勿误）。
+     */
+    private Boolean resolveThinkingSwitchSupported(Long modelConfigId) {
+        if (modelConfigId == null) {
+            return false;
+        }
+        try {
+            ModelWrapper wrapper = modelConfigService.getModelWrapperById(modelConfigId);
+            return wrapper != null && wrapper.getProvider() != null
+                    && wrapper.getProvider().getType() == ModelProviderType.DASH_SCOPE;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /**

@@ -38,4 +38,33 @@ public final class AguiCustomEvents {
      * 载荷：{@code {durationMs, iterationCount, inputTokens, outputTokens, totalTokens}}
      */
     public static final String RUN_META = "RUN_META";
+
+    /**
+     * 子智能体 HITL 确认请求（子智能体内需确认工具触发暂停、SubAgentTool 挂起等待时下发）。
+     * 载荷：{@code {parentToolCallId, subagentName, subSessionId, pending: [{toolUseId, name, input}]}}
+     * <ul>
+     *   <li>前端按 parentToolCallId 定位工具卡片，把 pending 标注到对应 subSteps 工具步上
+     *       渲染「允许/禁止」；决策齐了调 {@code POST /agui/subagent/resume}
+     *       （body: {subSessionId, decisions:[{toolUseId, name, approved}]}）唤醒续跑</li>
+     *   <li>刷新/重进会话经 {@code GET /agui/subagent/pending?threadId=} 重建（载荷同构，
+     *       字段名对齐 PendingSubConfirmRegistry.PendingInfo）</li>
+     *   <li>挂起超时（默认 10 分钟）后端按全拒绝自动续跑，前端确认 UI 决策提交会得到
+     *       resumed=false，按已失效清理即可</li>
+     * </ul>
+     */
+    public static final String SUBAGENT_CONFIRM_REQUIRED = "SUBAGENT_CONFIRM_REQUIRED";
+
+    /**
+     * 主 agent 工具调用的权威耗时（唯一计时者 ChatLogHook 的落库同源值，实时下发消除
+     * 前端掐表与落库两次测量的误差；先于对应 ToolCallResult 下发）。
+     * 载荷：{@code {toolUseId, elapsed}}
+     * <ul>
+     *   <li>正常完成：Adapter 转换 TOOL_RESULT 时经 pollToolElapsed 取走落库值随发</li>
+     *   <li>拒绝（自动/手动）：落库补偿函数的返回值随拒绝结果事件下发</li>
+     *   <li>前端 onCustom 记 toolUseId→elapsed 权威表，onToolCallResult 只查表不掐表，
+     *       表无值时不显示耗时（宁缺毋错）；子过程步的权威耗时不走本事件，
+     *       随 SUBAGENT_STEP 完成步的 elapsed 字段下发（同一出处）</li>
+     * </ul>
+     */
+    public static final String TOOL_ELAPSED = "TOOL_ELAPSED";
 }

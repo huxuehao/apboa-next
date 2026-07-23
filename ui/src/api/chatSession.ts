@@ -95,20 +95,39 @@ export function getSessionDetail(id: string) {
   return request.get<ApiResponse<ChatSessionVO>>(`${BASE}/${id}`)
 }
 
+/** 会话 HITL 授权模式：一键授权（自动允许）/ 逐步确认（人工决策）/ 拒绝授权（自动拒绝） */
+export type ConfirmMode = 'AUTO_APPROVE' | 'MANUAL' | 'AUTO_REJECT'
+
 /**
- * 查询会话「一键授权」开关（无记录=false 逐步确认）
- * GET /agent/chat/session/{sessionId}/auto-approve
+ * 查询会话 HITL 授权模式（无记录=MANUAL 逐步确认）
+ * GET /agent/chat/session/{sessionId}/confirm-mode
  */
-export function getAutoApprove(sessionId: string) {
-  return request.get<ApiResponse<boolean>>(`${BASE}/${sessionId}/auto-approve`)
+export function getConfirmMode(sessionId: string) {
+  return request.get<ApiResponse<ConfirmMode>>(`${BASE}/${sessionId}/confirm-mode`)
 }
 
 /**
- * 设置会话「一键授权」开关
- * PUT /agent/chat/session/{sessionId}/auto-approve?enabled=
+ * 设置会话 HITL 授权模式
+ * PUT /agent/chat/session/{sessionId}/confirm-mode?mode=
  */
-export function setAutoApprove(sessionId: string, enabled: boolean) {
-  return request.put<ApiResponse<boolean>>(`${BASE}/${sessionId}/auto-approve?enabled=${enabled}`)
+export function setConfirmMode(sessionId: string, mode: ConfirmMode) {
+  return request.put<ApiResponse<boolean>>(`${BASE}/${sessionId}/confirm-mode?mode=${mode}`)
+}
+
+/**
+ * 查询会话思考模式有效值（会话覆盖 ?? 默认开；仅 thinkingSwitchSupported 的模型有意义）
+ * GET /agent/chat/session/{sessionId}/thinking-mode
+ */
+export function getThinkingMode(sessionId: string) {
+  return request.get<ApiResponse<boolean>>(`${BASE}/${sessionId}/thinking-mode`)
+}
+
+/**
+ * 设置会话思考模式（下一条消息生效——后端检测变化重建 agent）
+ * PUT /agent/chat/session/{sessionId}/thinking-mode?enabled=
+ */
+export function setThinkingMode(sessionId: string, enabled: boolean) {
+  return request.put<ApiResponse<boolean>>(`${BASE}/${sessionId}/thinking-mode?enabled=${enabled}`)
 }
 
 /**

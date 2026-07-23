@@ -27,6 +27,12 @@ export interface SubProcessStep {
   startTime?: number
   /** 实时态：思考/回复步正在逐字流式生成（轮末完整步定稿时清除） */
   streaming?: boolean
+  /** 实时态：子智能体内 HITL 待确认（挂起等待主会话决策，渲染允许/禁止按钮） */
+  needConfirm?: boolean
+  /** 实时态：子确认已决策（允许/拒绝），等待续跑完成事件按 subToolUseId 配对；配对时清除 */
+  decided?: boolean
+  /** 子智能体内工具调用 id（工具完成事件配对 / 确认决策回传） */
+  subToolUseId?: string
 }
 
 /** run 级元数据（RUN_META 事件载荷 / 落库 meta JSON 解析后），由后端 RunStatAccumulator 生成 */

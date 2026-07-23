@@ -145,6 +145,8 @@ export interface AgentDefinitionVO {
   enableMemory: boolean
   enableMemoryCompression: boolean
   showToolProcess: boolean
+  /** 当前模型是否支持会话级思考模式开关（派生字段，仅 DASH_SCOPE；驱动思考按钮显隐） */
+  thinkingSwitchSupported?: boolean
   memoryCompressionConfig: Record<string, unknown> | null
   structuredOutputEnabled: boolean
   structuredOutputSchema: Record<string, unknown> | null

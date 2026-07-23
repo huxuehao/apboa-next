@@ -15,8 +15,11 @@
  */
 package io.agentscope.core.agui.adapter;
 
+import com.hxh.apboa.common.enums.ConfirmMode;
 import com.hxh.apboa.engine.agui.AguiCustomEvents;
+import com.hxh.apboa.engine.hitl.ConfirmModeResolver;
 import com.hxh.apboa.engine.hook.builtins.IConfirmationHook;
+import com.hxh.apboa.engine.log.ChatLogHook;
 import com.hxh.apboa.engine.log.telemetry.RunStatAccumulator;
 import com.hxh.apboa.engine.log.telemetry.RunTelemetryExtractor;
 import io.agentscope.core.agent.Agent;
@@ -26,9 +29,11 @@ import io.agentscope.core.agent.StreamOptions;
 import io.agentscope.core.agui.converter.AguiMessageConverter;
 import io.agentscope.core.agui.event.AguiEvent;
 import io.agentscope.core.agui.model.RunAgentInput;
+import io.agentscope.core.agui.processor.AguiRequestProcessor;
 import io.agentscope.core.message.ContentBlock;
 import io.agentscope.core.message.GenerateReason;
 import io.agentscope.core.message.Msg;
+import io.agentscope.core.message.MsgRole;
 import io.agentscope.core.message.TextBlock;
 import io.agentscope.core.message.ThinkingBlock;
 import io.agentscope.core.message.ToolResultBlock;
@@ -69,11 +74,11 @@ public class AguiAgentAdapter {
 
     /**
      * run 遥测（Adapter 实例即 run 级生命周期，事件流串行无并发）：
-     * runStat 供收尾下发 RUN_META（与落库 meta 同源 RunStatAccumulator，起点差异见其 javadoc）；
-     * subToolStartMs 为子智能体工具步计时（subToolUseId → 发起时刻，完成事件带 elapsed）
+     * runStat 供收尾下发 RUN_META（与落库 meta 同源 RunStatAccumulator，起点差异见其 javadoc）。
+     * 工具耗时不在此计时——唯一计时者是 ChatLogHook（落库权威），实时下发经
+     * pollToolElapsed 取走同一个值。
      */
     private final RunStatAccumulator runStat = new RunStatAccumulator();
-    private final Map<String, Long> subToolStartMs = new HashMap<>();
 
     public boolean isSuspended() {
         return suspended;
@@ -129,9 +134,8 @@ public class AguiAgentAdapter {
                         // Emit RUN_STARTED
                         Flux.just(new AguiEvent.RunStarted(threadId, runId)),
                         // Stream agent events and convert to AG-UI events
-                        // Use concatMapIterable to preserve strict event ordering
-                        agent.stream(msgs, options)
-                                .concatMapIterable(event -> convertEvent(event, state)),
+                        // （含 AUTO_REJECT 模式的暂停自动全拒续跑，见 streamConverted）
+                        streamConverted(msgs, options, state),
                         // Emit any pending end events and RUN_FINISHED
                         Flux.defer(() -> finishRun(state)))
                 .onErrorResume(
@@ -146,6 +150,97 @@ public class AguiAgentAdapter {
                                             threadId, runId, Map.of("error", errorMessage)),
                                     new AguiEvent.RunFinished(threadId, runId));
                         });
+    }
+
+    /**
+     * 跑一轮 agent.stream 并逐事件转换（concatMap 保序）。
+     *
+     * <p>「拒绝授权」模式（{@link ConfirmMode#AUTO_REJECT}）：检测到 HITL 确认暂停时不发
+     * TOOL_CONFIRM_REQUIRED，而是直接下发拒绝工具结果事件（前端工具卡正常收尾、照常落库
+     * tool 消息），并按人工全拒同款语义喂回 {@link AguiRequestProcessor#REJECT_RESULT_TEXT}
+     * 就地续跑（agent 实例在内存，同一 state/SSE 流续接），递归处理可能的多次暂停——
+     * 与 SubAgentTool 的挂起循环同构。模式实时读 Redis：挂起前用户切换即刻生效。
+     */
+    private Flux<AguiEvent> streamConverted(
+            List<Msg> msgs, StreamOptions options, EventConversionState state) {
+        return agent.stream(msgs, options)
+                .concatMap(event -> {
+                    List<ToolUseBlock> pending = confirmPausePending(event);
+                    if (pending != null && !pending.isEmpty()
+                            && ConfirmModeResolver.resolveByThreadId(state.threadId)
+                                    == ConfirmMode.AUTO_REJECT) {
+                        // 本次暂停已就地处理，重置挂起标记（否则 run 正常收尾仍被 processor
+                        // 当暂停态保存）；续跑若再暂停且模式已改，会重新置位
+                        this.suspended = false;
+                        List<AguiEvent> rejectEvents = new ArrayList<>();
+                        List<ContentBlock> rejectBlocks = new ArrayList<>();
+                        for (ToolUseBlock toolUse : pending) {
+                            String toolUseId = toolUse.getId();
+                            if (!state.hasStartedToolCall(toolUseId)) {
+                                rejectEvents.add(new AguiEvent.ToolCallStart(
+                                        state.threadId, state.runId, toolUseId, toolUse.getName()));
+                                state.startToolCall(toolUseId);
+                            }
+                            // 被拒工具无 PostActingEvent，tool 消息落库由 ChatLogHook 补偿
+                            // （否则实时可见的拒绝工具卡刷新后丢失）；补偿返回的落库同源耗时
+                            // 先于结果事件下发，前端只消费不掐表
+                            Long authElapsed = ChatLogHook.completeMainToolRejected(
+                                    state.threadId, toolUseId, AguiRequestProcessor.REJECT_RESULT_TEXT);
+                            if (authElapsed != null) {
+                                rejectEvents.add(new AguiEvent.Custom(
+                                        state.threadId,
+                                        state.runId,
+                                        AguiCustomEvents.TOOL_ELAPSED,
+                                        Map.of("toolUseId", toolUseId, "elapsed", authElapsed)));
+                            }
+                            rejectEvents.add(new AguiEvent.ToolCallEnd(
+                                    state.threadId, state.runId, toolUseId));
+                            rejectEvents.add(new AguiEvent.ToolCallResult(
+                                    state.threadId,
+                                    state.runId,
+                                    toolUseId,
+                                    AguiRequestProcessor.REJECT_RESULT_TEXT,
+                                    "tool",
+                                    event.getMessage().getId()));
+                            state.endToolCall(toolUseId);
+                            rejectBlocks.add(ToolResultBlock.of(
+                                    toolUseId,
+                                    toolUse.getName(),
+                                    TextBlock.builder()
+                                            .text(AguiRequestProcessor.REJECT_RESULT_TEXT)
+                                            .build()));
+                        }
+                        List<Msg> rejectInput = List.of(
+                                Msg.builder().role(MsgRole.TOOL).content(rejectBlocks).build());
+                        return Flux.concat(
+                                Flux.fromIterable(rejectEvents),
+                                streamConverted(rejectInput, options, state));
+                    }
+                    return Flux.fromIterable(convertEvent(event, state));
+                });
+    }
+
+    /**
+     * 检测 HITL 确认暂停事件并提取待确认工具（口径与 AGENT_RESULT 转换分支一致：
+     * 只取 isNeedConfirm 登记命中的，过滤同轮被 stopAgent 连累的普通工具）。
+     *
+     * @return 非暂停事件返回 null；暂停但无命中返回空列表（走常规转换）
+     */
+    private List<ToolUseBlock> confirmPausePending(Event event) {
+        if (event.getType() != EventType.AGENT_RESULT) {
+            return null;
+        }
+        Msg msg = event.getMessage();
+        if (msg == null || msg.getGenerateReason() != GenerateReason.REASONING_STOP_REQUESTED) {
+            return null;
+        }
+        List<ToolUseBlock> pending = new ArrayList<>();
+        for (ToolUseBlock toolUse : msg.getContentBlocks(ToolUseBlock.class)) {
+            if (IConfirmationHook.isNeedConfirm(toolUse.getName())) {
+                pending.add(toolUse);
+            }
+        }
+        return pending;
     }
 
     /**
@@ -319,6 +414,17 @@ public class AguiAgentAdapter {
                         // Ensure ToolCallEnd is emitted to close arguments phase
                         events.add(new AguiEvent.ToolCallEnd(state.threadId, state.runId, toolCallId));
 
+                        // 权威耗时先于结果事件下发（ChatLogHook 落库同源值；PostActing hook 在
+                        // 事件进流前执行完毕，此刻表内已有值），前端只消费不掐表
+                        Long authElapsed = ChatLogHook.pollToolElapsed(toolCallId);
+                        if (authElapsed != null) {
+                            events.add(new AguiEvent.Custom(
+                                    state.threadId,
+                                    state.runId,
+                                    AguiCustomEvents.TOOL_ELAPSED,
+                                    Map.of("toolUseId", toolCallId, "elapsed", authElapsed)));
+                        }
+
                         events.add(
                                 new AguiEvent.ToolCallResult(
                                         state.threadId,
@@ -340,13 +446,40 @@ public class AguiAgentAdapter {
             else {
                 for (ContentBlock block : msg.getContent()) {
                     if (block instanceof ToolResultBlock toolResult) {
-                        Object subagentName = toolResult.getMetadata().get("subagent_name");
+                        Map<String, Object> metadata = toolResult.getMetadata();
+                        Object subagentName = metadata.get("subagent_name");
                         if (subagentName == null) {
+                            continue;
+                        }
+                        // 子智能体 HITL 确认请求块（SubAgentTool 挂起前冒泡，无 output）：
+                        // 转为 Custom(SUBAGENT_CONFIRM_REQUIRED)，载荷契约见 AguiCustomEvents
+                        if (Boolean.TRUE.equals(metadata.get("subagent_confirm"))) {
+                            Map<String, Object> value = new LinkedHashMap<>();
+                            value.put("parentToolCallId", metadata.getOrDefault("parent_tool_call_id", ""));
+                            value.put("subagentName", subagentName);
+                            value.put("subSessionId", metadata.getOrDefault("subagent_session_id", ""));
+                            value.put("pending", metadata.getOrDefault("subagent_pending", List.of()));
+                            events.add(new AguiEvent.Custom(
+                                    state.threadId,
+                                    state.runId,
+                                    AguiCustomEvents.SUBAGENT_CONFIRM_REQUIRED,
+                                    value));
+                            continue;
+                        }
+                        // 后端直发的子过程步骤（HITL 拒绝结果等无真实事件可解析的场景，
+                        // SubAgentTool 直接给出步骤体）：原样转为 SUBAGENT_STEP
+                        Object directStep = metadata.get("subagent_step_direct");
+                        if (directStep instanceof Map) {
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> stepMap = (Map<String, Object>) directStep;
+                            Object subToolUseId = metadata.get("subagent_sub_tool_use_id");
+                            events.add(subagentStepEvent(state, metadata, stepMap,
+                                    subToolUseId == null ? null : String.valueOf(subToolUseId)));
                             continue;
                         }
                         for (ContentBlock contentBlock : toolResult.getOutput()) {
                             if (contentBlock instanceof TextBlock textBlock) {
-                                emitSubagentSteps(events, state, textBlock.getText(), toolResult.getMetadata());
+                                emitSubagentSteps(events, state, textBlock.getText(), metadata);
                             }
                         }
                     }
@@ -483,11 +616,7 @@ public class AguiAgentAdapter {
                     Map<String, Object> step =
                             RunTelemetryExtractor.toolStep(block.getName(), block.getContent());
                     step.put("running", true);
-                    String subToolUseId = block.getId();
-                    if (subToolUseId != null) {
-                        subToolStartMs.put(subToolUseId, System.currentTimeMillis());
-                    }
-                    events.add(subagentStepEvent(state, metadata, step, subToolUseId));
+                    events.add(subagentStepEvent(state, metadata, step, block.getId()));
                 }
             });
         } else if (subType == EventType.TOOL_RESULT) {
@@ -498,9 +627,11 @@ public class AguiAgentAdapter {
                 step.put("name", toolResultBlock.getName());
                 step.put("result", RunTelemetryExtractor.truncate(
                         RunTelemetryExtractor.toolResultText(toolResultBlock)));
-                Long start = subToolUseId != null ? subToolStartMs.remove(subToolUseId) : null;
-                if (start != null) {
-                    step.put("elapsed", System.currentTimeMillis() - start);
+                // 权威耗时：子 agent 的 PostActing hook（ChatLogHook 计时落库）先于本
+                // TOOL_RESULT 事件转发到达，取走落库同一个值——实时与刷新后零误差
+                Long authElapsed = ChatLogHook.pollToolElapsed(subToolUseId);
+                if (authElapsed != null) {
+                    step.put("elapsed", authElapsed);
                 }
                 events.add(subagentStepEvent(state, metadata, step, subToolUseId));
             });

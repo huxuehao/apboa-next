@@ -7,7 +7,11 @@ import com.hxh.apboa.common.entity.ChatSession;
 import com.hxh.apboa.common.util.AgentMetadataStore;
 import com.hxh.apboa.common.util.TenantUtils;
 import com.hxh.apboa.engine.agui.AgentContext;
+import com.hxh.apboa.engine.agui.AguiCustomEvents;
 import com.hxh.apboa.engine.hook.builtins.IConfirmationHook;
+import com.hxh.apboa.engine.log.ChatLogHook;
+import com.hxh.apboa.engine.model.ThinkingModeResolver;
+import io.agentscope.spring.boot.agui.common.ThreadSessionManager;
 import io.agentscope.core.ReActAgent;
 import io.agentscope.core.agent.Agent;
 import io.agentscope.core.agent.AgentBase;
@@ -43,6 +47,7 @@ public class AguiRequestProcessor {
     private static final Logger logger = LoggerFactory.getLogger(AguiRequestProcessor.class);
 
     private final AgentResolver agentResolver;
+    private final ThreadSessionManager sessionManager;
     private final AguiAdapterConfig config;
     private final Session session;
     private final JdbcTemplate jdbcTemplate;
@@ -50,9 +55,33 @@ public class AguiRequestProcessor {
     private AguiRequestProcessor(Builder builder) {
         this.agentResolver =
                 Objects.requireNonNull(builder.agentResolver, "agentResolver cannot be null");
+        this.sessionManager = builder.sessionManager;
         this.config = builder.config != null ? builder.config : AguiAdapterConfig.defaultConfig();
         this.session = builder.session != null ? builder.session : new InMemorySession();
         this.jdbcTemplate = builder.jdbcTemplate;
+    }
+
+    /**
+     * 解析 agent，并检测会话思考模式覆盖变化：变化则重建（模型 thinking 在构建期固化，
+     * 无法动态改；重建后上下文由前端传入的全量历史消息恢复——与 runtime 重启后续聊同机制）。
+     * 只比覆盖值（构建时记录 vs Redis 当前），无覆盖态之间零开销。
+     */
+    private Agent resolveAgentWithThinkingCheck(String agentId, String threadId) {
+        Agent agent = agentResolver.resolveAgent(agentId, threadId);
+        if (sessionManager == null || !(agent instanceof AgentBase built)) {
+            return agent;
+        }
+        String builtOverride = AgentMetadataStore.get(built.getAgentId(), "builtThinkingOverride");
+        if (builtOverride == null) {
+            return agent;
+        }
+        String current = ThinkingModeResolver.overrideKey(ThinkingModeResolver.resolveOverride(threadId));
+        if (builtOverride.equals(current)) {
+            return agent;
+        }
+        logger.info("会话思考模式变化（{} -> {}），重建 agent: threadId={}", builtOverride, current, threadId);
+        sessionManager.removeSession(threadId);
+        return agentResolver.resolveAgent(agentId, threadId);
     }
 
     /**
@@ -79,8 +108,8 @@ public class AguiRequestProcessor {
         // Resolve agent ID
         String agentId = resolveAgentId(input, headerAgentId, pathAgentId);
 
-        // Resolve agent
-        Agent agent = agentResolver.resolveAgent(agentId, threadId);
+        // Resolve agent（含思考模式覆盖变化的重建检查）
+        Agent agent = resolveAgentWithThinkingCheck(agentId, threadId);
 
         // 添加threadId和租户信息
         if (agent instanceof AgentBase agentBase) {
@@ -208,11 +237,39 @@ public class AguiRequestProcessor {
             reActAgent.loadFrom(session, threadId);
         }
 
+        String runId = UUID.randomUUID().toString();
+
+        // 被拒工具不会真实执行、无 PostActingEvent：tool 消息落库由 ChatLogHook 补偿
+        // （否则拒绝结果刷新后丢失；缓存跨重启丢失时静默跳过），并在续跑流头下发拒绝
+        // 结果事件——权威耗时（补偿返回的落库同源值）先于结果事件，前端只消费不掐表，
+        // 与自动拒绝（Adapter 侧）的事件路径一致
+        List<AguiEvent> rejectEvents = new ArrayList<>();
+        if (decisions != null) {
+            for (ResumeDecision d : decisions) {
+                if (d == null || d.approved()) {
+                    continue;
+                }
+                Long authElapsed = ChatLogHook.completeMainToolRejected(
+                        threadId, d.toolUseId(), REJECT_RESULT_TEXT);
+                if (authElapsed != null) {
+                    rejectEvents.add(new AguiEvent.Custom(
+                            threadId,
+                            runId,
+                            AguiCustomEvents.TOOL_ELAPSED,
+                            Map.of("toolUseId", d.toolUseId(), "elapsed", authElapsed)));
+                }
+                rejectEvents.add(new AguiEvent.ToolCallEnd(threadId, runId, d.toolUseId()));
+                rejectEvents.add(new AguiEvent.ToolCallResult(
+                        threadId, runId, d.toolUseId(), REJECT_RESULT_TEXT, "tool", null));
+            }
+        }
+
         List<Msg> resumeInput = buildResumeInput(decisions);
 
-        String runId = UUID.randomUUID().toString();
         AguiAgentAdapter adapter = new AguiAgentAdapter(agent, config);
-        Flux<AguiEvent> events = adapter.runWithMessages(resumeInput, threadId, runId)
+        Flux<AguiEvent> events = Flux.concat(
+                        Flux.fromIterable(rejectEvents),
+                        adapter.runWithMessages(resumeInput, threadId, runId))
                 .doFinally(signalType -> {
                     try {
                         if (agent instanceof ReActAgent reActAgent) {
@@ -307,8 +364,9 @@ public class AguiRequestProcessor {
      * 降低 ReAct 模型把「拒绝」理解成「诉求未满足→重试」的倾向
      * （实测中性「用户已拒绝执行」会触发模型重调被拒工具）。
      * 注意：OpenAI/Ollama 协议无结构化 is_error，错误只能靠喂回的文本语义表达。
+     * public 供 SubAgentTool 子智能体确认拒绝时复用（主/子 resume 拒绝语义单一出处）。
      */
-    private static final String REJECT_RESULT_TEXT =
+    public static final String REJECT_RESULT_TEXT =
             "Error: 用户拒绝授权调用该工具，本轮对话中该工具不可用。请勿重试该工具，"
                     + "更不得自行编造、虚构或凭常识臆测该工具本应返回的结果数据；"
                     + "必须如实告知用户：因未获授权调用该工具，无法获取相关信息。";
@@ -514,6 +572,7 @@ public class AguiRequestProcessor {
         private AguiAdapterConfig config;
         private Session session;
         private JdbcTemplate jdbcTemplate;
+        private ThreadSessionManager sessionManager;
 
         /**
          * Set the agent resolver.
@@ -523,6 +582,15 @@ public class AguiRequestProcessor {
          */
         public Builder agentResolver(AgentResolver agentResolver) {
             this.agentResolver = agentResolver;
+            return this;
+        }
+
+        /**
+         * 会话级 agent 缓存管理器（可选）：思考模式等构建期固化参数变化时，
+         * 由 process 检测并 removeSession 强制重建 agent。null 时跳过检测。
+         */
+        public Builder sessionManager(ThreadSessionManager sessionManager) {
+            this.sessionManager = sessionManager;
             return this;
         }
 

@@ -1,10 +1,9 @@
 package com.hxh.apboa.engine.hook.builtins;
 
 import com.hxh.apboa.common.annotation.Scope;
-import com.hxh.apboa.common.consts.RedisChannelTopic;
+import com.hxh.apboa.common.enums.ConfirmMode;
 import com.hxh.apboa.common.enums.ScopeType;
-import com.hxh.apboa.common.util.AgentMetadataStore;
-import com.hxh.apboa.common.util.RedisUtils;
+import com.hxh.apboa.engine.hitl.ConfirmModeResolver;
 import com.hxh.apboa.engine.hook.IAgentHook;
 import io.agentscope.core.agent.AgentBase;
 import io.agentscope.core.hook.HookEvent;
@@ -33,8 +32,6 @@ import java.util.Map;
 public class IConfirmationHook implements IAgentHook {
     // 需要确认的工具列表
     private static final List<String> NEED_CONFIRM_TOOLS = new ArrayList<>();
-
-    private final RedisUtils redisUtils;
 
     @Override
     public <T extends HookEvent> Mono<T> onEvent(T event) {
@@ -66,14 +63,18 @@ public class IConfirmationHook implements IAgentHook {
 
             // 如果有需要确认的工具
             if (!toolsNeedConfirm.isEmpty()) {
-                // 一键授权：stopAgent 前实时读 Redis 最新开关（会话级，前端切换即写入），
-                // 开着则直接放行，避免白跑整套 暂停持久化→确认事件→前端确认→resume 循环
-                if (isAutoApproved(event)) {
+                // 授权模式三态（stopAgent 前实时读 Redis 最新值，会话级，前端切换即写入）：
+                // AUTO_APPROVE 直接放行（避免白跑整套 暂停持久化→确认事件→前端确认→resume 循环）；
+                // MANUAL / AUTO_REJECT 都暂停——自动拒绝的差异化在暂停处理层
+                // （主 agent: AguiAgentAdapter 全拒续跑；子智能体: SubAgentTool 挂起前短路），
+                // Hook 层无法向 memory 注入工具拒绝结果，不在此实现拒绝
+                ConfirmMode mode = resolveMode(event);
+                if (mode == ConfirmMode.AUTO_APPROVE) {
                     log.info("会话已开启一键授权，自动放行需确认工具: {}",
                             toolsNeedConfirm.stream().map(t -> t.get("name")).toList());
                     return Mono.just(event);
                 }
-                // 暂停 Agent 执行，等待用户确认
+                // 暂停 Agent 执行，等待用户确认（或由暂停处理层按 AUTO_REJECT 自动全拒）
                 postReasoning.stopAgent();
             }
         }
@@ -81,25 +82,12 @@ public class IConfirmationHook implements IAgentHook {
         return Mono.just(event);
     }
 
-    /**
-     * 查询当前会话是否开启「一键授权」。
-     * threadId 经 AgentMetadataStore 反查（AguiRequestProcessor 已登记）；
-     * Redis 读取异常降级为逐步确认——宁可多确认一次，不可静默放行。
-     */
-    private boolean isAutoApproved(HookEvent event) {
-        try {
-            if (!(event.getAgent() instanceof AgentBase agentBase)) {
-                return false;
-            }
-            String threadId = AgentMetadataStore.get(agentBase.getAgentId(), "threadId");
-            if (threadId == null) {
-                return false;
-            }
-            return "1".equals(redisUtils.get(RedisChannelTopic.CHAT_AUTO_APPROVE_KEY_PREFIX + threadId));
-        } catch (Exception e) {
-            log.warn("读取一键授权开关失败，降级为逐步确认: {}", e.getMessage());
-            return false;
+    /** 解析当前会话授权模式（主 agent 凭 threadId、子智能体回退 subParentThreadId，异常降级 MANUAL） */
+    private ConfirmMode resolveMode(HookEvent event) {
+        if (!(event.getAgent() instanceof AgentBase agentBase)) {
+            return ConfirmMode.MANUAL;
         }
+        return ConfirmModeResolver.resolveByAgentId(agentBase.getAgentId());
     }
 
     @SuppressWarnings("unchecked")

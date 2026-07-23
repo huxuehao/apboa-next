@@ -10,9 +10,10 @@ import com.hxh.apboa.common.util.JsonUtils;
 import com.hxh.apboa.common.wrapper.KnowledgeWrapper;
 import com.hxh.apboa.engine.agui.AgentContext;
 import com.hxh.apboa.engine.hook.HooksFactory;
-import com.hxh.apboa.engine.hook.builtins.IConfirmationHook;
 import com.hxh.apboa.engine.knowledge.KnowledgeFactory;
+import com.hxh.apboa.common.util.AgentMetadataStore;
 import com.hxh.apboa.engine.model.ChatModelFactory;
+import com.hxh.apboa.engine.model.ThinkingModeResolver;
 import com.hxh.apboa.engine.prompt.AgentSysPromptFactory;
 import com.hxh.apboa.engine.skill.SkillBoxFactory;
 import com.hxh.apboa.engine.memory.LongTermMemoryFactory;
@@ -71,14 +72,22 @@ public class ReActAgentHelper {
      * 获取 ReActAgent
      *
      * @param definition  agent 定义
-     * @param asSubAgent 是否作为子智能体构建：子智能体运行在主 agent 的一次工具调用内部，
-     *                   其 HITL 确认暂停无法冒泡到主事件流（主流会一直等工具返回，会话卡死），
-     *                   故一律剥离确认 Hook（授权语义收敛在主 agent 层）。
-     *                   TODO: 支持子智能体确认冒泡到主流后，允许用户配置子智能体内工具是否需确认
+     * @param asSubAgent 是否作为子智能体构建（ToolkitFactory.createTrackedSubAgent 传 true）。
+     *                   子智能体的 HITL 确认沿用主 agent 授权机制：主会话一键授权经
+     *                   IConfirmationHook 的 subParentThreadId 回退下行继承；逐步确认经
+     *                   SubAgentTool 挂起-唤醒冒泡到主会话界面（PendingSubConfirmRegistry）
      */
     public ReActAgent getReActAgent(AgentDefinition definition, boolean asSubAgent) {
         // 构建reActAgent
-        return getReactAgentBuilder(definition, asSubAgent).build();
+        ReActAgent agent = getReactAgentBuilder(definition, asSubAgent).build();
+
+        // 记录构建时的会话思考覆盖值（"1"/"0"/"follow"），供 AguiRequestProcessor 每次 run
+        // 对比 Redis 当前值——变化则重建 agent（模型 thinking 在构建期固化，无法动态改）
+        AgentContext.getIfExists().map(AgentContext::getThreadId).ifPresent(threadId ->
+                AgentMetadataStore.put(agent.getAgentId(), "builtThinkingOverride",
+                        ThinkingModeResolver.overrideKey(ThinkingModeResolver.resolveOverride(threadId))));
+
+        return agent;
     }
 
     /**
@@ -137,11 +146,6 @@ public class ReActAgentHelper {
         // 使用可变列表，避免 getHooks 返回 List.of() 时 add 抛 UnsupportedOperationException
         List<Hook> hooks = hooksFactory.getHooks(definition);
         hooks = hooks != null ? new ArrayList<>(hooks) : new ArrayList<>();
-
-        // 子智能体一律免确认（原因与 TODO 见方法 javadoc）
-        if (asSubAgent) {
-            hooks.removeIf(hook -> hook instanceof IConfirmationHook);
-        }
 
         // 配置记忆
         Boolean isMemoryActive = AgentContext.getIfExists().map(AgentContext::isMemoryActive).orElse(false);

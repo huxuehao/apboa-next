@@ -14,6 +14,7 @@ import type { SubProcessStep } from '@/types';
 import type { InteractionSubmitPayload } from '@/components/markdown/uip/types'
 import { useToolCallDisplayName } from '@/composables/chat/useToolCallDisplayName'
 import { formatElapsed, fmtFullTime, fmtRelativeTime, fmtDuration, fmtTokens, fmtTokensPerSec } from '@/utils/chat/format'
+import { vStickBottom } from '@/utils/chat/stickBottom'
 
 const FILE_SEP = '@==##::::##==@'
 
@@ -319,7 +320,7 @@ const openPreview = (index: number) => {
           </div>
           <!-- 思考内容是标准 Markdown（列表/加粗/行内代码），按 markdown 渲染恢复结构；
                故意不包 chat-md-content 类：让元素继承本容器的灰色小字弱化样式，结构成型但不抢正文的戏 -->
-          <div class="chat-reasoning-content" :class="{ 'is-expanded': reasoningExpanded }">
+          <div v-stick-bottom="isStreaming === true" class="chat-reasoning-content" :class="{ 'is-expanded': reasoningExpanded }">
             <MarkdownRenderer :content="content" :is-streaming="isStreaming" />
           </div>
         </div>

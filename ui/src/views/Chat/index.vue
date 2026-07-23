@@ -15,7 +15,8 @@ import RenameModal from '@/components/chat/RenameModal.vue'
 import WorkspacePanel from '@/components/workspace/WorkspacePanel.vue'
 import type { DisplayMessage, ChatMessageVO, UploadedFileItem, ChatSessionVO } from '@/types'
 import * as chatSessionApi from '@/api/chatSession'
-import { getActiveRuns, getStatus, getPending } from '@/api/agui'
+import type { ConfirmMode } from '@/api/chatSession'
+import { getActiveRuns, getStatus, getPending, getSubagentPending } from '@/api/agui'
 import { LoadingOutlined } from '@ant-design/icons-vue'
 import {
   buildUserTextFromPayload,
@@ -159,6 +160,10 @@ const {
   decideConfirm,
   pendingConfirms,
   restorePending,
+  decideSubConfirm,
+  pendingSubConfirms,
+  restoreSubPending,
+  decideAllSubPending,
   abortRun,
   reconnect: reconnectStream,
   disconnect: disconnectStream,
@@ -183,75 +188,150 @@ const {
     }
   })
 
-// 一键授权（会话级，source of truth 在 Redis：换端/刷新一致；无记录默认逐步确认）
-const autoApproveActive = ref(false)
+// HITL 授权模式（会话级三态，source of truth 在 Redis：换端/刷新一致；无记录=逐步确认）
+const confirmMode = ref<ConfirmMode>('MANUAL')
 // 新会话尚未创建（懒创建，首条消息才有 sessionId）时的本地暂存：
-// 会话创建后由 watch 回放写入 Redis（false 无需回放，默认即逐步确认）
-let pendingAutoApprove = false
+// 会话创建后由 watch 回放写入 Redis（null 不回放）
+let pendingConfirmMode: ConfirmMode | null = null
 
-// 会话切换/进入时拉取开关状态；读取失败按逐步确认兜底
+/** 归一化接口返回的模式值，未知回退 MANUAL */
+const normalizeMode = (m: unknown): ConfirmMode =>
+  m === 'AUTO_APPROVE' || m === 'AUTO_REJECT' ? m : 'MANUAL'
+
+// 加载中间态只可能发生在首次触发（刷新/URL 直达时 currentSessionId 短暂为 null）；
+// 运行期的置空（点开启新对话、删除当前会话）都是主动进入新对话——URL 里残留的旧
+// sessionId 不代表加载中，不得据其误判成 MANUAL（否则从旧会话点新对话默认变逐步确认）
+let firstConfirmModeWatch = true
+
+// 会话切换/进入时拉取模式；读取失败按逐步确认兜底
 watch(currentSessionId, async (sid) => {
+  const isFirstWatch = firstConfirmModeWatch
+  firstConfirmModeWatch = false
   if (!sid) {
-    // 新会话默认开启一键授权（免每次手动开），本地先行生效；
-    // 首条消息创建会话后由暂存回放写入 Redis，手动关闭则暂存清零、不回放（Redis 无记录=逐步确认）
-    autoApproveActive.value = true
-    pendingAutoApprove = true
+    // 新对话预设默认一键授权（免每次手动开），本地先行生效，首条消息创建会话后由
+    // 暂存回放写入 Redis。仅「首次触发且 URL 带会话」是刷新/直达的加载中间态，不预设——
+    // 否则暂存回放会把该会话的既有模式强制翻转，恢复中的挂起确认被误放行/误拒
+    const isLoadingExistingSession = isFirstWatch && !!route.params.sessionId
+    confirmMode.value = isLoadingExistingSession ? 'MANUAL' : 'AUTO_APPROVE'
+    pendingConfirmMode = isLoadingExistingSession ? null : 'AUTO_APPROVE'
     return
   }
-  if (pendingAutoApprove) {
-    // 有暂存（无会话状态下用户已切开）：回放写入并跳过 GET，避免 GET 的 false 冲掉预设
-    pendingAutoApprove = false
+  if (pendingConfirmMode) {
+    // 有暂存（无会话状态下用户已选模式）：回放写入并跳过 GET，避免 GET 的默认值冲掉预设
+    const mode = pendingConfirmMode
+    pendingConfirmMode = null
     try {
-      await chatSessionApi.setAutoApprove(sid, true)
-      autoApproveActive.value = true
+      await chatSessionApi.setConfirmMode(sid, mode)
+      confirmMode.value = mode
     } catch {
-      autoApproveActive.value = false
+      confirmMode.value = 'MANUAL'
     }
     return
   }
   try {
-    const res = await chatSessionApi.getAutoApprove(sid)
-    autoApproveActive.value = res.data?.data === true
+    const res = await chatSessionApi.getConfirmMode(sid)
+    confirmMode.value = normalizeMode(res.data?.data)
   } catch {
-    autoApproveActive.value = false
+    confirmMode.value = 'MANUAL'
   }
 }, { immediate: true })
 
-/** 把当前所有待确认工具全部允许（凑齐决策后 useChatStream 自动提交 resume） */
-const approveAllPending = () => {
+/** 把当前所有待确认工具统一决策（一键授权→全批 / 拒绝授权→全拒；凑齐决策后 useChatStream 自动提交 resume） */
+const decideAllPending = (approved: boolean) => {
   Object.entries(pendingConfirms.value).forEach(([toolUseId, state]) => {
-    if (state === 'pending') decideConfirm(toolUseId, true)
+    if (state === 'pending') decideConfirm(toolUseId, approved)
   })
 }
 
-const handleAutoApproveChange = (v: boolean) => {
+const handleConfirmModeChange = (mode: ConfirmMode) => {
   const sid = currentSessionId.value
   if (!sid) {
     // 会话未创建：本地先行生效，首条消息创建会话后由 watch 回放写入 Redis
-    autoApproveActive.value = v
-    pendingAutoApprove = v
+    confirmMode.value = mode
+    pendingConfirmMode = mode
     return
   }
-  if (v) {
-    chatSessionApi.setAutoApprove(sid, true).then(() => {
-      autoApproveActive.value = true
-      // 已弹出的待确认项一并放行
-      approveAllPending()
-    })
-  } else {
-    chatSessionApi.setAutoApprove(sid, false).then(() => {
-      autoApproveActive.value = false
-    })
-  }
+  chatSessionApi.setConfirmMode(sid, mode).then(() => {
+    confirmMode.value = mode
+    // 已弹出的待确认项按新模式一并处置（主流程 + 子智能体挂起中的）；逐步确认保持等待
+    if (mode === 'AUTO_APPROVE') {
+      decideAllPending(true)
+      decideAllSubPending(true)
+    } else if (mode === 'AUTO_REJECT') {
+      decideAllPending(false)
+      decideAllSubPending(false)
+    }
+  })
 }
 
-// 兜底：一键授权开启时，任何新到达的待确认项（跑动中切开关的竞态窗口、刷新恢复的遗留 pending）自动全批
+// 兜底：自动模式下任何新到达的待确认项（跑动中切模式的竞态窗口、刷新恢复的遗留 pending）
+// 按模式自动处置：一键授权全批 / 拒绝授权全拒
 watch(pendingConfirms, (confirms) => {
-  if (!autoApproveActive.value) return
+  if (confirmMode.value === 'MANUAL') return
   if (Object.values(confirms).some((s) => s === 'pending')) {
-    approveAllPending()
+    decideAllPending(confirmMode.value === 'AUTO_APPROVE')
   }
 })
+
+// 同款兜底：子智能体挂起中确认（后端已自动处置新触发的，这里兜住「逐步确认模式
+// 挂起后、用户中途切换模式」的存量批次）
+watch(pendingSubConfirms, (batches) => {
+  if (confirmMode.value === 'MANUAL') return
+  const hasPending = Object.values(batches).some((b) =>
+    Object.values(b.decisions).some((s) => s === 'pending')
+  )
+  if (hasPending) {
+    decideAllSubPending(confirmMode.value === 'AUTO_APPROVE')
+  }
+})
+
+// ========== 会话级思考模式（仅 thinkingSwitchSupported 的模型展示按钮） ==========
+// 有效值 = Redis 覆盖 ?? 默认开；切换写覆盖值，下一条消息生效（后端检测变化重建 agent）
+const thinkingSupported = computed(() => agentDetail.value?.thinkingSwitchSupported === true)
+const thinkingActive = ref(true)
+// 会话未创建时的本地暂存（复刻 pendingConfirmMode 模式）：创建后回放写入
+let pendingThinkingMode: boolean | null = null
+
+// 双源触发：会话切换 + thinkingSupported 就绪（agent 详情异步加载可能晚于会话 watch，
+// 只依赖会话会在刷新进入"已关思考"的会话时跳过 GET，按钮显示默认开与实际不符）
+watch([currentSessionId, thinkingSupported], async ([sid]) => {
+  if (!sid) {
+    // 新会话默认开思考；刷新/直达加载中间态同样显示默认，稍后 GET 校正
+    thinkingActive.value = true
+    pendingThinkingMode = null
+    return
+  }
+  if (pendingThinkingMode !== null) {
+    const v = pendingThinkingMode
+    pendingThinkingMode = null
+    try {
+      await chatSessionApi.setThinkingMode(sid, v)
+      thinkingActive.value = v
+    } catch {
+      thinkingActive.value = true
+    }
+    return
+  }
+  if (!thinkingSupported.value) return
+  try {
+    const res = await chatSessionApi.getThinkingMode(sid)
+    thinkingActive.value = res.data?.data !== false
+  } catch {
+    thinkingActive.value = true
+  }
+}, { immediate: true })
+
+const handleThinkingChange = (v: boolean) => {
+  const sid = currentSessionId.value
+  if (!sid) {
+    thinkingActive.value = v
+    pendingThinkingMode = v
+    return
+  }
+  chatSessionApi.setThinkingMode(sid, v).then(() => {
+    thinkingActive.value = v
+  })
+}
 
 // 输入框内容
 const inputText = ref('')
@@ -325,49 +405,75 @@ const renameSessionRef = ref<any>(null)
 const renameTitle = ref('')
 const renameSubmitting = ref(false)
 
-// 新会话
-const handleNewSession = async () => {
-  // 断开当前 SSE 连接，旧会话继续后台运行
-  preserveRunningSession.value = true
-  disconnectStream()
-
-  // 开启工作空间的情况特殊处理
-  if (hasCodeExecutionConfig.value) {
-    if (currentSessionTitle.value === '新对话') {
-      preserveRunningSession.value = false
-      return
-    }
-
-    const existNewSession = otherSessions.value.find((s) => s.title === '新对话')
-    if (existNewSession) {
-      // 开启新对话默认一键授权：预置暂存，交由 currentSessionId watch 的回放分支写入 Redis
-      // （此路径 sessionId 非空，不会走 !sid 的默认开分支）
-      pendingAutoApprove = true
-      await selectSession({
-        id: existNewSession.id,
-        title: existNewSession.title || '新对话',
-      } as ChatSessionVO)
-
-      preserveRunningSession.value = false
-      return
-    }
-
-    const newSession = await createSession(formatSessionTitle(null), true)
-    if (!newSession) {
-      preserveRunningSession.value = false
-      return
-    }
-    // 同上：预创建会话路径的默认一键授权
-    pendingAutoApprove = true
-    resetSession({
-      id: String(newSession.id),
-      title:'新对话'
-    } as ChatSessionVO)
-  } else {
-    resetSession(null)
+/**
+ * 会话是否没有任何对话消息。复用/短路「新对话」标题的会话前必须校验——标题只是占位约定，
+ * 历史竞态可能留下"有消息但标题仍是新对话"的脏会话，只认标题会把用户跳进旧会话。
+ * 判空口径排除 system 角色（initWorkspace 预创建会话时后端自动写入一条 system
+ * 初始化消息，展示层同样过滤它——按"消息数为 0"判会让预创建空会话永远判非空）。
+ * 查询失败按非空处理：宁可多建一个新会话，不可误入旧会话。
+ */
+const isSessionEmpty = async (sessionId: string): Promise<boolean> => {
+  try {
+    const res = await chatSessionApi.getCurrentMessagesPaged(sessionId, { size: 5 })
+    return (res.data?.data?.messages ?? []).every((m) => m.role === 'system')
+  } catch {
+    return false
   }
+}
 
-  preserveRunningSession.value = false
+// 新会话（重入锁：空会话校验/创建均为异步 HTTP，连点会并发多次 createSession
+// 冒出一堆空会话——进行中直接忽略后续点击，配合下方复用逻辑保证至多一个空「新对话」）
+let creatingNewSession = false
+const handleNewSession = async () => {
+  if (creatingNewSession) return
+  creatingNewSession = true
+  try {
+    // 断开当前 SSE 连接，旧会话继续后台运行
+    preserveRunningSession.value = true
+    disconnectStream()
+
+    // 开启工作空间的情况特殊处理
+    if (hasCodeExecutionConfig.value) {
+      // 当前已在真·空白新对话（标题占位且确实无消息）→ 无需任何动作；
+      // 脏会话（有消息但标题仍是占位）不短路，继续往下走复用/新建
+      if (currentSessionTitle.value === '新对话' && currentSessionId.value
+          && await isSessionEmpty(currentSessionId.value)) {
+        return
+      }
+
+      // 复用列表中真·空白的「新对话」会话（避免反复新建空会话与工作空间目录）；
+      // 逐个校验为空，跳过脏标题会话
+      for (const candidate of otherSessions.value.filter((s) => s.title === '新对话')) {
+        if (!(await isSessionEmpty(String(candidate.id)))) {
+          continue
+        }
+        // 开启新对话默认一键授权：预置暂存，交由 currentSessionId watch 的回放分支写入 Redis
+        // （此路径 sessionId 非空，不会走 !sid 的默认开分支）
+        pendingConfirmMode = 'AUTO_APPROVE'
+        await selectSession({
+          id: candidate.id,
+          title: candidate.title || '新对话',
+        } as ChatSessionVO)
+        return
+      }
+
+      const newSession = await createSession(formatSessionTitle(null), true)
+      if (!newSession) {
+        return
+      }
+      // 同上：预创建会话路径的默认一键授权
+      pendingConfirmMode = 'AUTO_APPROVE'
+      resetSession({
+        id: String(newSession.id),
+        title:'新对话'
+      } as ChatSessionVO)
+    } else {
+      resetSession(null)
+    }
+  } finally {
+    preserveRunningSession.value = false
+    creatingNewSession = false
+  }
 }
 
 /**
@@ -385,8 +491,27 @@ const restoreConfirm = async (sid: string) => {
   }
 }
 
+/**
+ * 子智能体 HITL 刷新恢复：查挂起中的子确认（进程内注册表）重建子过程确认 UI。
+ * 与主流程 restoreConfirm 独立：子确认挂起时主 run 仍在 active-runs（SubAgentTool 在等），
+ * 会话切换走 reconnect 分支，SSE 回放会重放 SUBAGENT_CONFIRM_REQUIRED 事件，
+ * 本函数兜住回放缓冲已过期等场景（restoreSubPending 幂等，双到达无害）。
+ */
+const restoreSubConfirm = async (sid: string) => {
+  try {
+    const pending = await getSubagentPending(sid)
+    if (pending.length) restoreSubPending(pending)
+  } catch {
+    // 忽略：无挂起或网络错误
+  }
+}
+
 // 选择会话
 const handleSelectSession = async (session: ChatSessionVO) => {
+  // 暂存只服务「懒创建新会话 / 新对话复用」路径：切到已有会话时作废，
+  // 防止欢迎屏里改了模式但未发消息、切走后被回放误写进目标旧会话
+  pendingConfirmMode = null
+  pendingThinkingMode = null
   // 切换前断开当前 SSE，但不中断后台 Agent
   preserveRunningSession.value = true
   disconnectStream()
@@ -396,9 +521,12 @@ const handleSelectSession = async (session: ChatSessionVO) => {
   if (runningSessions.value.has(String(session.id))) {
     // 注意：不要加 await，否则会阻塞会话切换
     reconnectStream(String(session.id))
+    // 子确认挂起时主 run 仍在运行中（走本分支），恢复子确认 UI（与 SSE 回放幂等互补）
+    void restoreSubConfirm(String(session.id))
   } else {
     // 非运行中：尝试恢复 HITL 确认暂停态（不加 await，避免阻塞会话切换）
     void restoreConfirm(String(session.id))
+    void restoreSubConfirm(String(session.id))
   }
   preserveRunningSession.value = false
 }
@@ -510,6 +638,12 @@ const handelToolContent = (value: any) => {
   decideConfirm(value.toolUseId, value.approved)
 }
 
+// 子智能体 HITL：value = { subToolUseId, approved }，记录子工具决策
+// （批次决策齐 useChatStream 内部自动调 /agui/subagent/resume 唤醒子智能体）
+const handleSubConfirm = (value: { subToolUseId: string; approved: boolean }) => {
+  decideSubConfirm(value.subToolUseId, value.approved)
+}
+
 // 处理交互提交
 const handleInteractionSubmit = async (payload: InteractionSubmitPayload) => {
   if (!currentSessionId.value || isRunning.value) return
@@ -603,9 +737,12 @@ const handleSend = async () => {
 
   // 保存用户消息
   const userMsg = await chatSessionApi.appendMessage(currentSessionId.value, { role: 'user', content: finalText })
-  // 如果是新会话，更新标题
-  if (messagesList.value.length <= 1) {
-    const title = formatSessionTitle(text || '新对话')
+  // 标题仍是占位「新对话」且本次有文字 → 用首条消息刷新标题。按占位判断而非消息数
+  // （旧条件 messagesList.length<=1 在双发竞态下会漏更，留下"有消息但标题还是新对话"
+  // 的脏会话，被 handleNewSession 的复用逻辑误命中跳进旧会话），幂等且与时序无关，
+  // 保证不变量：有消息的会话标题必不是「新对话」
+  if (currentSessionTitle.value === '新对话' && text) {
+    const title = formatSessionTitle(text)
     await updateSessionTitle(currentSessionId.value, title)
     currentSessionTitle.value = title
   }
@@ -769,7 +906,9 @@ watch(isRunning, (running) => {
       :agent-has-result="agentHasResult"
       :show-tool-process="showToolProcess"
       :tool-process-active="toolProcessActive"
-      :auto-approve-active="autoApproveActive"
+      :confirm-mode="confirmMode"
+      :thinking-supported="thinkingSupported"
+      :thinking-active="thinkingActive"
       :workspace-panel-open="workspacePanelOpen"
       :has-code-execution-config="!!hasCodeExecutionConfig"
       :session-id="currentSessionId"
@@ -782,8 +921,10 @@ watch(isRunning, (running) => {
       @memory="handleMemoryChange"
       @plan="handlePlanChange"
       @toolProcess="handelToolProcess"
-      @auto-approve="handleAutoApproveChange"
+      @confirm-mode="handleConfirmModeChange"
+      @thinking="handleThinkingChange"
       @toolContent="handelToolContent"
+      @sub-confirm="handleSubConfirm"
       @send="handleSend"
       @quick-question="handleQuickQuestion"
       @toggle-questions-collapsed="handleToggleQuestionsCollapsed"

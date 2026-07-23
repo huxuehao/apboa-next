@@ -10,10 +10,21 @@ import { CopyOutlined, CheckOutlined, RightOutlined, DownOutlined, LoadingOutlin
 import type { SubProcessStep } from '@/types'
 import { useToolCallDisplayName } from '@/composables/chat/useToolCallDisplayName'
 import { formatElapsed } from '@/utils/chat/format'
+import { vStickBottom } from '@/utils/chat/stickBottom'
 
 const props = defineProps<{
   steps: SubProcessStep[]
 }>()
+
+/** 子智能体 HITL：工具步「允许/禁止」决策，逐层冒泡到 Chat/index.vue 调 decideSubConfirm */
+const emit = defineEmits<{
+  (e: 'subConfirm', value: { subToolUseId: string; approved: boolean }): void
+}>()
+
+const emitConfirm = (step: SubProcessStep, approved: boolean) => {
+  if (!step.subToolUseId) return
+  emit('subConfirm', { subToolUseId: step.subToolUseId, approved })
+}
 
 // 执行中工具步的耗时递增（100ms 刷新，与主工具卡片计时一致）；无 running 步时不跑计时器
 const nowTick = ref(Date.now())
@@ -87,12 +98,12 @@ const toggle = (i: number) => {
 }
 
 // 进行中的步骤自动展开（仅未被用户手动操作过时）：流式思考/回复的逐字增长、
-// 执行中工具步的请求参数即时可见；历史数据无实时标记，维持默认收起
+// 执行中工具步的请求参数即时可见、待确认工具步的参数供决策查看；历史数据无实时标记，维持默认收起
 watch(
-  () => props.steps.map((s) => s.streaming || s.running),
+  () => props.steps.map((s) => s.streaming || s.running || s.needConfirm),
   () => {
     props.steps.forEach((s, i) => {
-      if ((s.streaming || s.running) && expanded.value[i] === undefined) {
+      if ((s.streaming || s.running || s.needConfirm) && expanded.value[i] === undefined) {
         expanded.value[i] = true
       }
     })
@@ -128,8 +139,14 @@ async function copyContent(key: string, raw?: string) {
             </span>
             <span class="chat-tool-sub-step-tag is-tool">{{ subStepLabel(step.type) }}</span>
             <span class="chat-tool-sub-step-name">{{ resolveToolCallName(step.name || '') }}</span>
-            <span v-if="step.running" class="chat-tool-sub-step-status chat-tool-sub-step-status--running">
+            <span v-if="step.needConfirm" class="chat-tool-sub-step-status chat-tool-sub-step-status--confirm">
+              待授权
+            </span>
+            <span v-else-if="step.running" class="chat-tool-sub-step-status chat-tool-sub-step-status--running">
               <LoadingOutlined spin /> 执行中<template v-if="runningElapsed(step)"> · {{ runningElapsed(step) }}</template>
+            </span>
+            <span v-else-if="step.decided && step.result == null" class="chat-tool-sub-step-status chat-tool-sub-step-status--running">
+              <LoadingOutlined spin /> 已决策
             </span>
             <span
               v-else
@@ -138,6 +155,11 @@ async function copyContent(key: string, raw?: string) {
             >
               {{ isToolResultFailed(step.result) ? '失败' : '完成' }}<template v-if="step.elapsed != null"> · {{ formatElapsed(step.elapsed) }}</template>
             </span>
+          </span>
+          <!-- 子智能体 HITL：允许/禁止（交互与主卡片 ToolCallItem 确认按钮同款，决策冒泡调 subagent/resume） -->
+          <span v-if="step.needConfirm" class="chat-tool-sub-confirm-actions" @click.stop>
+            <AButton type="primary" size="small" @click="emitConfirm(step, true)">允许</AButton>
+            <AButton size="small" @click="emitConfirm(step, false)">禁止</AButton>
           </span>
         </div>
         <template v-if="expanded[i]">
@@ -182,7 +204,7 @@ async function copyContent(key: string, raw?: string) {
             <CopyOutlined v-else />
           </span>
         </div>
-        <pre v-show="expanded[i]" class="chat-tool-item-code chat-tool-sub-full">{{ step.content ?? step.args ?? step.result }}</pre>
+        <pre v-show="expanded[i]" v-stick-bottom="isActivelyStreaming(step, i)" class="chat-tool-item-code chat-tool-sub-full">{{ step.content ?? step.args ?? step.result }}</pre>
       </template>
     </div>
   </template>

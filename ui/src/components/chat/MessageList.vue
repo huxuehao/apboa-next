@@ -32,6 +32,7 @@ const wrappedMessages = computed(() => {
 
 defineEmits<{
   (e: 'toolContent', value: any): void
+  (e: 'subConfirm', value: { subToolUseId: string; approved: boolean }): void
   (e: 'inputTagPreview', value: FlatFileItem): void
   (e: 'interactionSubmit', payload: InteractionSubmitPayload): void
   (e: 'uipRetry', uipCode: string): void
@@ -73,6 +74,7 @@ defineEmits<{
         :start-time="t.startTime"
         :sub-steps="(t.subSteps as any)"
         @toolContent="(content: any) => $emit('toolContent', content)"
+        @sub-confirm="$emit('subConfirm', $event)"
       />
     </TransitionGroup>
   </div>

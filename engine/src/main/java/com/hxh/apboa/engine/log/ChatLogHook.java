@@ -12,6 +12,8 @@ import io.agentscope.core.hook.*;
 import io.agentscope.core.message.*;
 import reactor.core.publisher.Mono;
 
+import lombok.extern.slf4j.Slf4j;
+
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashMap;
@@ -27,8 +29,35 @@ import java.util.concurrent.ConcurrentLinkedDeque;
  *
  * @author huxuehao
  **/
+@Slf4j
 public class ChatLogHook implements Hook {
-    private final Map<String, Map<String, Object>> TOOL_CACHE_MAP = new ConcurrentHashMap<>();
+    /** 工具调用入参缓存（key = toolUseId 全局唯一；static 供拒绝补偿静态入口跨实例访问） */
+    private static final Map<String, Map<String, Object>> TOOL_CACHE_MAP = new ConcurrentHashMap<>();
+
+    /**
+     * 工具权威耗时表（toolUseId → elapsed）：全链路唯一计时者是本 Hook（落库权威），
+     * 每算出一个耗时（主工具/子步骤、正常完成/拒绝补偿）即存表，下发链（Adapter 的
+     * Custom(TOOL_ELAPSED)、SUBAGENT_STEP 完成步）经 {@link #pollToolElapsed} 取走同一个值
+     * ——实时显示与落库同一次测量，刷新前后零误差。消费即删；防泄漏上限兜底。
+     */
+    private static final Map<String, Long> TOOL_ELAPSED_MAP = new ConcurrentHashMap<>();
+    private static final int TOOL_ELAPSED_MAP_LIMIT = 2000;
+
+    /** 取走某工具的权威耗时（读后删）；无值返回 null（下发链宁缺毋错，不自行计时） */
+    public static Long pollToolElapsed(String toolUseId) {
+        return toolUseId == null ? null : TOOL_ELAPSED_MAP.remove(toolUseId);
+    }
+
+    /** 存权威耗时（异常场景消费缺席导致的滞留由上限兜底清空） */
+    private static void offerToolElapsed(String toolUseId, long elapsed) {
+        if (toolUseId == null) {
+            return;
+        }
+        if (TOOL_ELAPSED_MAP.size() > TOOL_ELAPSED_MAP_LIMIT) {
+            TOOL_ELAPSED_MAP.clear();
+        }
+        TOOL_ELAPSED_MAP.put(toolUseId, elapsed);
+    }
 
     /**
      * run 级统计：threadId → 累积器（提取/字段契约见 telemetry 包）。
@@ -161,12 +190,15 @@ public class ChatLogHook implements Hook {
                             }
                             String toolRes = RunTelemetryExtractor.toolResultText(toolResult);
                             String toolName = toolCache.get("tool_name").toString();
+                            // 权威耗时：算一次，落库与实时下发（Adapter 经 pollToolElapsed 取走）同一个值
+                            long elapsed = System.currentTimeMillis() - (Long) toolCache.get("tool_start");
+                            offerToolElapsed(toolId, elapsed);
                             ConcurrentLogProducer.pushLog(buildChatMessage(
                                     Long.valueOf(threadId),
                                     "tool",
                                     buildToolContent(
                                             toolName,
-                                            System.currentTimeMillis() - (Long) toolCache.get("tool_start"),
+                                            elapsed,
                                             toolCache.get("tool_args").toString(),
                                             toolRes,
                                             pollSubProcess(threadId, toolName)),
@@ -256,7 +288,7 @@ public class ChatLogHook implements Hook {
     }
 
     // 构建工具内容（subProcess 为子智能体中间过程步骤，非子智能体工具为 null 时不写该字段，保持旧格式）
-    private String buildToolContent(String toolName, Long totalTimes, String args, String result,
+    private static String buildToolContent(String toolName, Long totalTimes, String args, String result,
                                     List<Map<String, Object>> subProcess) {
         Map<String, Object> toolContent = new HashMap<>() {{
             put("name", toolName);
@@ -354,8 +386,79 @@ public class ChatLogHook implements Hook {
         step.put("result", RunTelemetryExtractor.truncate(RunTelemetryExtractor.toolResultText(toolResultBlock)));
         Object start = step.remove("_start");
         if (start instanceof Long startMs) {
-            step.put("elapsed", System.currentTimeMillis() - startMs);
+            // 权威耗时：算一次，落库步骤与实时 SUBAGENT_STEP 完成步（Adapter 取走）同一个值
+            long elapsed = System.currentTimeMillis() - startMs;
+            step.put("elapsed", elapsed);
+            offerToolElapsed(toolUseId, elapsed);
         }
+    }
+
+    /**
+     * 主 agent HITL 工具被拒（手动 resume 拒绝 / 拒绝授权自动全拒）：工具未真实执行、
+     * 无 PostActingEvent，落库 tool 消息由此补偿（TOOL_CACHE_MAP 在发起轮的
+     * PostReasoningEvent 已缓存入参），否则实时流的拒绝工具卡刷新后丢失。
+     * toolProcessActive 关闭时缓存本就不写，天然对齐「不落工具消息」。
+     * 耗时口径 = 发起到拒绝处置的间隔（自动拒毫秒级、手动拒含用户决策等待）。
+     * 返回落库的同一个 elapsed，调用方随 Custom(TOOL_ELAPSED) 下发前端——实时与落库
+     * 同一次测量，刷新前后零误差。
+     *
+     * @return 落库的 elapsed（毫秒）；缓存缺失（重启丢失/未开工具过程）或落库失败返回 null
+     */
+    public static Long completeMainToolRejected(String threadId, String toolUseId, String resultText) {
+        if (threadId == null || toolUseId == null) {
+            return null;
+        }
+        Map<String, Object> toolCache = TOOL_CACHE_MAP.remove(toolUseId);
+        if (toolCache == null) {
+            return null;
+        }
+        try {
+            Long tenantId = THREAD_TENANT_CACHE.computeIfAbsent(threadId, ChatLogHook::queryTenantIdBySession);
+            if (tenantId == null) {
+                return null;
+            }
+            long elapsed = System.currentTimeMillis() - (Long) toolCache.get("tool_start");
+            ConcurrentLogProducer.pushLog(buildChatMessage(
+                    Long.valueOf(threadId),
+                    "tool",
+                    buildToolContent(
+                            toolCache.get("tool_name").toString(),
+                            elapsed,
+                            toolCache.get("tool_args").toString(),
+                            resultText,
+                            null),
+                    tenantId));
+            return elapsed;
+        } catch (Exception e) {
+            log.warn("拒绝工具落库补偿失败 threadId={} toolUseId={}: {}", threadId, toolUseId, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 子智能体 HITL 确认被拒：工具未真实执行、不会有 PostActingEvent 来配对，
+     * 由 SubAgentTool 在决策拒绝时直接补拒绝结果，否则落库工具步无 result、
+     * 历史渲染兜底显示「完成」造成误导。
+     * 耗时口径同主工具补偿（发起到拒绝处置的间隔），返回给调用方随直发拒绝步
+     * 下发前端——实时与落库同一个值，刷新前后显示一致。
+     *
+     * @return 补偿的 elapsed（毫秒）；步骤不存在或无起始时刻时返回 null
+     */
+    public static Long completeSubToolStepRejected(String agentId, String toolUseId, String resultText) {
+        if (agentId == null || toolUseId == null) {
+            return null;
+        }
+        Map<String, Object> step = SUB_TOOL_PENDING.remove(agentId + "|" + toolUseId);
+        if (step == null) {
+            return null;
+        }
+        step.put("result", RunTelemetryExtractor.truncate(resultText));
+        Long elapsed = null;
+        if (step.remove("_start") instanceof Long startMs) {
+            elapsed = System.currentTimeMillis() - startMs;
+            step.put("elapsed", elapsed);
+        }
+        return elapsed;
     }
 
     /** 子智能体本次调用结束：步骤列表按 主threadId|工具名 入队，等主 agent 的 tool 消息落库时认领 */
@@ -385,12 +488,12 @@ public class ChatLogHook implements Hook {
     }
 
     // 构建聊天消息
-    private ChatMessage buildChatMessage(Long sessionId, String role, String content, Long tenantId) {
+    private static ChatMessage buildChatMessage(Long sessionId, String role, String content, Long tenantId) {
         return buildChatMessage(sessionId, role, content, tenantId, null);
     }
 
     // 构建聊天消息（带 meta 元数据）
-    private ChatMessage buildChatMessage(Long sessionId, String role, String content, Long tenantId, String meta) {
+    private static ChatMessage buildChatMessage(Long sessionId, String role, String content, Long tenantId, String meta) {
         ChatMessage chatMessage = new ChatMessage();
         chatMessage.setSessionId(sessionId);
         chatMessage.setRole(role);

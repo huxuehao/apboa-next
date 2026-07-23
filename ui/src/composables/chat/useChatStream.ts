@@ -5,12 +5,21 @@ import { usePlanTracking } from '@/composables/chat/usePlanTracking'
 import { buildToolCallsContent, localNowDateTime } from '@/utils/chat/format'
 import type {ChatMessageVO, RawEvent} from '@/types'
 import { useAccountStore } from '@/stores'
-import { stopRun } from '@/api/agui'
+import { stopRun, subagentResume, type SubPendingInfo } from '@/api/agui'
 
 let lastIdBig = BigInt(Date.now()) << 12n;
 function nextIdBig() {
   return String(lastIdBig++);
 }
+
+/**
+ * 子确认拒绝的本地占位结果（与后端 AguiRequestProcessor.REJECT_RESULT_TEXT 保持一致，
+ * 权威版由后端直发拒绝完成步配对覆盖——两者同文时覆盖无视觉变化，事件丢失时兜底同构）
+ */
+const SUB_REJECT_RESULT_TEXT =
+  'Error: 用户拒绝授权调用该工具，本轮对话中该工具不可用。请勿重试该工具，' +
+  '更不得自行编造、虚构或凭常识臆测该工具本应返回的结果数据；' +
+  '必须如实告知用户：因未获授权调用该工具，无法获取相关信息。'
 
 export function useChatStream(
   agentId: import('vue').Ref<string>,
@@ -59,6 +68,22 @@ export function useChatStream(
   // HITL §6.5：逐工具确认决策（toolUseId → 状态），所有项决策完即调 /agui/resume
   const pendingConfirms = ref<Record<string, 'pending' | 'approved' | 'rejected'>>({})
 
+  // 工具权威耗时表（TOOL_ELAPSED 事件先于结果事件到达；非响应式，消费即删）。
+  // 全链路唯一计时者是后端 ChatLogHook——前端不掐表，表无值就不显示耗时（宁缺毋错），
+  // 消除实时显示与落库值两次测量的误差
+  let authoritativeElapsed: Record<string, number> = {}
+
+  // 子智能体 HITL：挂起中确认批次（subSessionId → 批次）。子智能体一次暂停冒泡一批
+  // 待确认工具，批内决策齐即调 /agui/subagent/resume 唤醒（与主流程 pendingConfirms 平行）
+  const pendingSubConfirms = ref<Record<string, {
+    parentToolCallId: string
+    subagentName: string
+    /** subToolUseId → 决策态 */
+    decisions: Record<string, 'pending' | 'approved' | 'rejected'>
+    /** subToolUseId → 工具名（决策回传原始 name） */
+    names: Record<string, string>
+  }>>({})
+
   /**
    * HITL：根据待确认列表重建确认 UI（标记/新建工具项 + 建立逐工具决策态）。两条来源共用：
    * - 实时 TOOL_CONFIRM_REQUIRED 事件：工具项已由 ToolCallStart 建立，只需标记 needConfirm；
@@ -87,6 +112,56 @@ export function useChatStream(
     pendingConfirms.value = next
   }
 
+  /**
+   * 子智能体 HITL：把确认请求装配到对应工具卡片的子过程步骤上（标注/新建工具步 + 建批次决策态）。
+   * 两条来源共用（载荷同构）：
+   * - 实时 SUBAGENT_CONFIRM_REQUIRED 事件：工具步已由 SUBAGENT_STEP 建立（running 转圈中），
+   *   按 subToolUseId 找到并标 needConfirm（清 running——工具没在跑，是在等人，与主卡片一致）；
+   * - 刷新/重进会话（GET /agui/subagent/pending 恢复）：卡片与步骤均已丢失，须新建承载按钮。
+   */
+  const restoreSubPending = (items: SubPendingInfo[]) => {
+    if (!items || items.length === 0) return
+    const arr = [...toolCallsInProgress.value]
+    const nextBatches = { ...pendingSubConfirms.value }
+    items.forEach(info => {
+      if (!info?.subSessionId || !info.pending?.length) return
+      // 找/建主卡片（刷新场景卡片已丢，按 parentToolCallId 重建；name 与子智能体工具名一致）
+      let target = info.parentToolCallId ? arr.find(t => t.id === info.parentToolCallId) : undefined
+      if (!target) {
+        target = {
+          id: info.parentToolCallId || `sub_${info.subSessionId}`,
+          name: String(info.subagentName || '').toLowerCase(),
+          args: '{}',
+          startTime: Date.now()
+        }
+        arr.push(target)
+      }
+      const subSteps = [...(target.subSteps ?? [])]
+      const decisions: Record<string, 'pending' | 'approved' | 'rejected'> = {}
+      const names: Record<string, string> = {}
+      info.pending.forEach(p => {
+        decisions[p.toolUseId] = 'pending'
+        names[p.toolUseId] = p.name
+        const idx = subSteps.findIndex(s => s.subToolUseId === p.toolUseId)
+        if (idx >= 0) {
+          subSteps[idx] = { ...subSteps[idx], needConfirm: true, running: undefined, startTime: undefined }
+        } else {
+          const args = p.input && Object.keys(p.input).length ? JSON.stringify(p.input) : '{}'
+          subSteps.push({ type: 'tool', name: p.name, args, needConfirm: true, subToolUseId: p.toolUseId })
+        }
+      })
+      target.subSteps = subSteps
+      nextBatches[info.subSessionId] = {
+        parentToolCallId: target.id,
+        subagentName: String(info.subagentName ?? ''),
+        decisions,
+        names
+      }
+    })
+    toolCallsInProgress.value = arr
+    pendingSubConfirms.value = nextBatches
+  }
+
   // 使用原有的 useAgentClient
   const { messages, isRunning, isReplaying, run, abort, disconnect, reconnect, resume, addUserMessage, client } = useAgentClient({
     handlers: {
@@ -94,6 +169,7 @@ export function useChatStream(
         toolCallsInProgress.value = []
         streamingContent.value = ''
         streamingMessageId.value = null
+        authoritativeElapsed = {}
       },
       onTextMessageStart: (e) => {
         streamingRole.value = 'assistant'
@@ -106,7 +182,10 @@ export function useChatStream(
       },
       onTextMessageEnd: (_e, finalText) => {
         const sid = currentSessionId.value
-        if (sid && finalText) {
+        // reconnect 回放的事件不再 push 本地：对应内容已由 ChatLogHook 落库、loadMessages
+        // 已加载（id 是后端雪花 id 与事件 messageId 不同，无法按 id 去重），再 push 即重复
+        // 两段。client.isReplaying 由 REPLAY_CAUGHT_UP 即时翻转，追平后的实时事件照常保存
+        if (sid && finalText && !client.isReplaying) {
           // 纯文本保存，不再与推理打包，通过队列保证写入顺序
           onMessageSaved?.({
             id: streamingMessageId.value,
@@ -135,17 +214,20 @@ export function useChatStream(
       onReasoningMessageEnd: () => {
         const sid = currentSessionId.value
         if (sid && streamingContent.value) {
-          // 推理结束时立即保存为独立消息，通过队列保证写入顺序
-          onMessageSaved?.({
-            id: streamingMessageId.value,
-            sessionId: sid,
-            role: streamingRole.value, // 这里必须使用 streamingRole.value，不能写死 thinking
-            content: streamingContent.value,
-            parentId: '',
-            path: '',
-            depth: 0,
-            createdAt: localNowDateTime()
-          } as ChatMessageVO)
+          // 回放事件不重复入列（同 onTextMessageEnd，防思考重复两段），流式状态照常清理
+          if (!client.isReplaying) {
+            // 推理结束时立即保存为独立消息，通过队列保证写入顺序
+            onMessageSaved?.({
+              id: streamingMessageId.value,
+              sessionId: sid,
+              role: streamingRole.value, // 这里必须使用 streamingRole.value，不能写死 thinking
+              content: streamingContent.value,
+              parentId: '',
+              path: '',
+              depth: 0,
+              createdAt: localNowDateTime()
+            } as ChatMessageVO)
+          }
           // 保存完成后清除推理状态，利用 displayMessages 去重避免闪烁
           streamingMessageId.value = null
           streamingContent.value = ''
@@ -164,17 +246,20 @@ export function useChatStream(
 
         const sid = currentSessionId.value
         if (sid && streamingContent.value) {
-          // 推理结束时保存为独立消息，通过队列保证写入顺序
-          onMessageSaved?.({
-            id: streamingMessageId.value,
-            sessionId: sid,
-            role: streamingRole.value,
-            content: streamingContent.value,
-            parentId: '',
-            path: '',
-            depth: 0,
-            createdAt: localNowDateTime()
-          } as ChatMessageVO)
+          // 回放事件不重复入列（防思考重复两段），流式状态照常清理
+          if (!client.isReplaying) {
+            // 推理结束时保存为独立消息，通过队列保证写入顺序
+            onMessageSaved?.({
+              id: streamingMessageId.value,
+              sessionId: sid,
+              role: streamingRole.value,
+              content: streamingContent.value,
+              parentId: '',
+              path: '',
+              depth: 0,
+              createdAt: localNowDateTime()
+            } as ChatMessageVO)
+          }
           // 保存完成后清除推理状态，利用 displayMessages 去重避免闪烁
           streamingMessageId.value = null
           streamingContent.value = ''
@@ -206,11 +291,16 @@ export function useChatStream(
           if (!completed) {
             return
           }
-          const finished = { ...completed, result: e.content, elapsed: Date.now() - completed.startTime }
+          // 耗时只用后端权威值（TOOL_ELAPSED 已先行到达），不掐表；无值则不显示
+          const authElapsed = authoritativeElapsed[e.toolCallId]
+          delete authoritativeElapsed[e.toolCallId]
+          const finished = { ...completed, result: e.content, elapsed: authElapsed }
 
-          // 保存工具调用消息，通过队列保证写入顺序（一次调用一条 tool 消息，与后端历史格式一致）
+          // 保存工具调用消息，通过队列保证写入顺序（一次调用一条 tool 消息，与后端历史格式一致）；
+          // 回放事件不入列——库版已由 loadMessages 加载，回放版 elapsed 是事件到达间隔而非真实
+          // 耗时，重复入列即出现「同一工具卡两份、耗时各异」
           const sid = currentSessionId.value
-          if (sid) {
+          if (sid && !client.isReplaying) {
             const contentToSave = buildToolCallsContent([finished])
             if (contentToSave) {
               onMessageSaved?.({
@@ -272,6 +362,17 @@ export function useChatStream(
         else if (event.name === 'SUBAGENT_STEP') {
           handleSubagentStep(event.value as Record<string, unknown>)
         }
+        // 子智能体 HITL 确认请求（子智能体内需确认工具挂起等待，契约见 SUBAGENT_CONFIRM_REQUIRED）
+        else if (event.name === 'SUBAGENT_CONFIRM_REQUIRED') {
+          restoreSubPending([event.value as unknown as SubPendingInfo])
+        }
+        // 工具权威耗时（后端唯一计时者的落库同源值，先于对应结果事件到达）
+        else if (event.name === 'TOOL_ELAPSED') {
+          const v = event.value as { toolUseId?: string; elapsed?: number }
+          if (v?.toolUseId != null && typeof v.elapsed === 'number') {
+            authoritativeElapsed[String(v.toolUseId)] = v.elapsed
+          }
+        }
         // run 级元数据（RUN_FINISHED 前下发，与落库 meta 同构）：回填最后一条 assistant 消息
         else if (event.name === 'RUN_META') {
           onRunMeta?.(event.value as Record<string, unknown>)
@@ -324,10 +425,16 @@ export function useChatStream(
         subSteps.push({ ...step })
       }
     } else if (step.type === 'tool' && !step.running && subToolUseId) {
-      // 工具完成事件：按 subToolUseId 找回 running 步合并；找不到则降级为独立步
-      const idx = subSteps.findIndex(s => s.subToolUseId === subToolUseId && s.running)
+      // 工具完成事件：按 subToolUseId 找回未落定步骤合并（running=执行中 / decided=已决策
+      // 待续跑 / needConfirm=等确认中被后端超时全拒），找不到才降级为独立步
+      const idx = subSteps.findIndex(s => s.subToolUseId === subToolUseId && (s.running || s.decided || s.needConfirm))
       if (idx >= 0) {
-        subSteps[idx] = { ...subSteps[idx], ...step, running: undefined, startTime: undefined }
+        // 等确认中直接收到完成结果 = 后端已超时按全拒绝处理：按钮随 needConfirm 清除消失，
+        // 同步清掉已失效的批次决策态（防止一键授权联动等再向已死批次提交）
+        if (subSteps[idx]!.needConfirm) {
+          cleanupExpiredSubConfirm(subToolUseId)
+        }
+        subSteps[idx] = { ...subSteps[idx], ...step, running: undefined, startTime: undefined, decided: undefined, needConfirm: undefined }
       } else {
         subSteps.push({ ...step, subToolUseId })
       }
@@ -353,7 +460,9 @@ export function useChatStream(
       ...pendingConfirms.value,
       [toolUseId]: approved ? 'approved' : 'rejected'
     }
-    // 该工具按钮收起（已决策）
+    // 该工具按钮收起（已决策）。拒绝的工具不本地落定：resume 流头会下发
+    // 拒绝结果事件（含 TOOL_ELAPSED 权威耗时），收尾统一走 onToolCallResult
+    // ——实时显示与落库同一次测量，前端不掐表
     toolCallsInProgress.value = toolCallsInProgress.value.map(t =>
       t.id === toolUseId ? { ...t, needConfirm: false } : t
     )
@@ -375,6 +484,101 @@ export function useChatStream(
     pendingConfirms.value = {}
     agentHasResult.value = false
     await resume(sid, decisions, memoryActive?.value ?? false)
+  }
+
+  /**
+   * 清理已失效的子确认决策态：等确认中的工具直接收到完成结果（后端超时全拒/外部决策），
+   * 该工具的决策项已无意义，从批次中移除；批次清空则整体删除。
+   */
+  const cleanupExpiredSubConfirm = (subToolUseId: string) => {
+    const entry = Object.entries(pendingSubConfirms.value)
+      .find(([, b]) => b.decisions[subToolUseId] !== undefined)
+    if (!entry) return
+    const [subSessionId, batch] = entry
+    const decisions = { ...batch.decisions }
+    delete decisions[subToolUseId]
+    const next = { ...pendingSubConfirms.value }
+    if (Object.keys(decisions).length === 0) {
+      delete next[subSessionId]
+    } else {
+      next[subSessionId] = { ...batch, decisions }
+    }
+    pendingSubConfirms.value = next
+  }
+
+  /**
+   * 子智能体 HITL：记录单个子工具的确认决策（subToolUseId 全局唯一，直接反查所属批次）。
+   * 该批次全部决策后自动提交 /agui/subagent/resume 唤醒子智能体续跑（续跑步骤沿原 SSE 流流入）。
+   */
+  const decideSubConfirm = (subToolUseId: string, approved: boolean) => {
+    const entry = Object.entries(pendingSubConfirms.value)
+      .find(([, b]) => b.decisions[subToolUseId] === 'pending')
+    if (!entry) return
+    const [subSessionId, batch] = entry
+    const nextBatch = {
+      ...batch,
+      decisions: { ...batch.decisions, [subToolUseId]: (approved ? 'approved' : 'rejected') as 'approved' | 'rejected' }
+    }
+    pendingSubConfirms.value = { ...pendingSubConfirms.value, [subSessionId]: nextBatch }
+    // 该步按钮收起并标 decided（续跑完成事件按 subToolUseId+decided 配对合并）：
+    // 允许 → 恢复 running 转圈等真实执行结果；拒绝 → 本地预落定拒绝结果兜底
+    // （后端会直发拒绝完成步 SUBAGENT_STEP 配对覆盖，文案/elapsed 同源无视觉变化）
+    const arr = [...toolCallsInProgress.value]
+    const card = arr.find(t => t.id === nextBatch.parentToolCallId)
+    if (card?.subSteps) {
+      card.subSteps = card.subSteps.map(s => {
+        if (s.subToolUseId !== subToolUseId) return s
+        return approved
+          ? { ...s, needConfirm: undefined, decided: true, running: true, startTime: Date.now() }
+          : {
+              ...s,
+              needConfirm: undefined,
+              decided: true,
+              running: undefined,
+              startTime: undefined,
+              result: SUB_REJECT_RESULT_TEXT
+              // elapsed 不本地计算：等后端直发拒绝步的落库同源值配对覆盖（宁缺毋错）
+            }
+      })
+      toolCallsInProgress.value = arr
+    }
+    // 批次决策齐 → 提交
+    if (Object.values(nextBatch.decisions).every(s => s !== 'pending')) {
+      void submitSubResume(subSessionId)
+    }
+  }
+
+  /** 汇总某批次的子确认决策并调用 /agui/subagent/resume 唤醒挂起的子智能体。 */
+  const submitSubResume = async (subSessionId: string) => {
+    const batch = pendingSubConfirms.value[subSessionId]
+    if (!batch) return
+    const decisions = Object.entries(batch.decisions).map(([toolUseId, s]) => ({
+      toolUseId,
+      name: batch.names[toolUseId] ?? '',
+      approved: s === 'approved'
+    }))
+    const next = { ...pendingSubConfirms.value }
+    delete next[subSessionId]
+    pendingSubConfirms.value = next
+    try {
+      const res = await subagentResume(subSessionId, decisions)
+      if (!res.resumed) {
+        // 挂起已失效（超时全拒绝/已决策/实例重启）：后端已自行收尾，前端提示即可
+        message.warning(res.error || '子智能体确认已失效')
+      }
+    } catch (e) {
+      message.error('子智能体确认提交失败')
+      console.error('subagentResume failed:', e)
+    }
+  }
+
+  /** 授权模式联动：把所有挂起中的子确认统一决策（一键授权→全批 true / 拒绝授权→全拒 false） */
+  const decideAllSubPending = (approved: boolean) => {
+    Object.values(pendingSubConfirms.value).forEach(batch => {
+      Object.entries(batch.decisions).forEach(([subToolUseId, state]) => {
+        if (state === 'pending') decideSubConfirm(subToolUseId, approved)
+      })
+    })
   }
 
   // 中止运行
@@ -480,6 +684,8 @@ export function useChatStream(
     toolCallsInProgress.value = []
     agentHasResult.value = true
     currentPlan.value = null
+    // 子确认批次跟随会话内存态清理（重进会话由 GET /agui/subagent/pending 重建）
+    pendingSubConfirms.value = {}
   }
 
   return {
@@ -497,6 +703,10 @@ export function useChatStream(
     decideConfirm,
     pendingConfirms,
     restorePending,
+    decideSubConfirm,
+    pendingSubConfirms,
+    restoreSubPending,
+    decideAllSubPending,
     reconnect,
     disconnect,
     resetStreamingState,

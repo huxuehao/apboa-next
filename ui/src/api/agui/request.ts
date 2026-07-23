@@ -120,3 +120,24 @@ export function getPendingURL(threadId: string): string {
   if (base) return `${base}${path}`
   return path
 }
+
+/**
+ * 获取子智能体 HITL 决策下行 URL（唤醒挂起等待的子智能体，即时返回 JSON 不产生新事件流）
+ */
+export function getSubagentResumeURL(): string {
+  const base = (import.meta.env.VITE_APP_BASE_API as string) || ''
+  const path = `${DEFAULT_SSE_BASE}/subagent/resume`
+  if (base) return `${base}${path}`
+  return path
+}
+
+/**
+ * 获取子智能体 HITL 挂起中确认列表 URL（刷新/重进会话时重建子确认 UI）
+ * @param threadId 主会话 ID
+ */
+export function getSubagentPendingURL(threadId: string): string {
+  const base = (import.meta.env.VITE_APP_BASE_API as string) || ''
+  const path = `${DEFAULT_SSE_BASE}/subagent/pending?threadId=${encodeURIComponent(threadId)}`
+  if (base) return `${base}${path}`
+  return path
+}

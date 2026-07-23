@@ -5,6 +5,7 @@ import com.hxh.apboa.agent.service.ChatSessionService;
 import com.hxh.apboa.common.config.auth.ChatKeyAccess;
 import com.hxh.apboa.common.config.auth.SkAccess;
 import com.hxh.apboa.common.dto.ChatMessageAppendDTO;
+import com.hxh.apboa.common.enums.ConfirmMode;
 import com.hxh.apboa.common.dto.ChatSessionCreateDTO;
 import com.hxh.apboa.common.dto.ChatSessionQueryDTO;
 import com.hxh.apboa.common.mp.support.PageParams;
@@ -108,25 +109,50 @@ public class ChatSessionController {
     }
 
     /**
-     * 查询会话「一键授权」开关（Redis，无记录=false 逐步确认）
+     * 查询会话 HITL 授权模式（Redis，无记录=MANUAL 逐步确认）
      */
     @SkAccess
     @ChatKeyAccess
-    @GetMapping("/{sessionId}/auto-approve")
-    public R<Boolean> getAutoApprove(@PathVariable("sessionId") Long sessionId) {
-        return R.data(chatSessionService.getAutoApprove(sessionId));
+    @GetMapping("/{sessionId}/confirm-mode")
+    public R<String> getConfirmMode(@PathVariable("sessionId") Long sessionId) {
+        return R.data(chatSessionService.getConfirmMode(sessionId).name());
     }
 
     /**
-     * 设置会话「一键授权」开关（开启写 Redis TTL 30 天滚动，关闭删 key；
-     * runtime 侧 IConfirmationHook 在 stopAgent 前实时读取生效）
+     * 设置会话 HITL 授权模式（AUTO_APPROVE 一键授权 / MANUAL 逐步确认 / AUTO_REJECT 拒绝授权；
+     * AUTO_APPROVE/AUTO_REJECT 写 Redis TTL 30 天滚动，MANUAL 删 key。
+     * runtime 侧实时读取生效：Hook 放行 / 暂停处理层自动全拒 / 冒泡人工决策）
      */
     @SkAccess
     @ChatKeyAccess
-    @PutMapping("/{sessionId}/auto-approve")
-    public R<Boolean> setAutoApprove(@PathVariable("sessionId") Long sessionId,
-                                     @RequestParam("enabled") boolean enabled) {
-        chatSessionService.setAutoApprove(sessionId, enabled);
+    @PutMapping("/{sessionId}/confirm-mode")
+    public R<Boolean> setConfirmMode(@PathVariable("sessionId") Long sessionId,
+                                     @RequestParam("mode") String mode) {
+        chatSessionService.setConfirmMode(sessionId, ConfirmMode.fromName(mode));
+        return R.data(true);
+    }
+
+    /**
+     * 查询会话思考模式有效值（会话覆盖 ?? 默认开）。仅支持思考开关的模型
+     * （agent 详情 thinkingSwitchSupported=true，当前 DASH_SCOPE）有实际意义
+     */
+    @SkAccess
+    @ChatKeyAccess
+    @GetMapping("/{sessionId}/thinking-mode")
+    public R<Boolean> getThinkingMode(@PathVariable("sessionId") Long sessionId) {
+        Boolean override = chatSessionService.getThinkingMode(sessionId);
+        return R.data(override == null || override);
+    }
+
+    /**
+     * 设置会话思考模式（写 Redis 覆盖值，下一条消息生效——runtime 检测变化重建 agent）
+     */
+    @SkAccess
+    @ChatKeyAccess
+    @PutMapping("/{sessionId}/thinking-mode")
+    public R<Boolean> setThinkingMode(@PathVariable("sessionId") Long sessionId,
+                                      @RequestParam("enabled") boolean enabled) {
+        chatSessionService.setThinkingMode(sessionId, enabled);
         return R.data(true);
     }
 
