@@ -19,75 +19,25 @@
         background-color: #f5f5f7;
       }
 
-      /* Logo容器 */
-      .logo-container {
-        width: 80px;
-        height: 80px;
+      .loader {
+        width: 42px;
+        height: 42px;
+        border: 4px solid rgba(40, 120, 255, 0.16);
+        border-top-color: #2878ff;
+        border-right-color: #7b42e8;
+        border-radius: 50%;
+        animation: fly-spin 0.75s linear infinite;
       }
 
-      .logo-container svg {
-        width: 100%;
-        height: 100%;
-        overflow: visible;
-      }
-
-      /* 波光扫描动画 */
-      .shimmer-sweep {
-        animation: shimmerMove 2s ease-in-out 0.8s infinite;
-      }
-
-      @keyframes shimmerMove {
-        0%   { transform: translateX(-380px); }
-        50%  { transform: translateX(560px); }
-        100% { transform: translateX(560px); }
+      @keyframes fly-spin {
+        to { transform: rotate(360deg); }
       }
     </style>
   </head>
   <body>
     <div id="doc-app">
       <div class="loading-overlay">
-        <div class="logo-container">
-          <svg viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-              <!-- 波光渐变 -->
-              <linearGradient id="shimmerGrad" x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0%"   stop-color="white" stop-opacity="0"/>
-                <stop offset="25%"  stop-color="white" stop-opacity="0.06"/>
-                <stop offset="45%"  stop-color="white" stop-opacity="0.38"/>
-                <stop offset="55%"  stop-color="white" stop-opacity="0.38"/>
-                <stop offset="75%"  stop-color="white" stop-opacity="0.06"/>
-                <stop offset="100%" stop-color="white" stop-opacity="0"/>
-              </linearGradient>
-
-              <!-- 遮罩 -->
-              <mask id="logoMask">
-                <rect width="300" height="300" fill="black"/>
-                <path d="M 152 212 A 85 85 0 1 1 212 152"
-                      fill="none" stroke="white" stroke-width="42" stroke-linecap="round"/>
-                <circle cx="210" cy="210" r="24" fill="white"/>
-              </mask>
-            </defs>
-
-            <!-- 圆环 -->
-            <path d="M 152 212 A 85 85 0 1 1 212 152"
-                  fill="none"
-                  stroke="#DEDEDE"
-                  stroke-width="42"
-                  stroke-linecap="round"/>
-
-            <!-- 圆点 -->
-            <circle cx="210" cy="210" r="24" fill="#DEDEDE"/>
-
-            <!-- 波光 -->
-            <g mask="url(#logoMask)">
-              <g class="shimmer-sweep">
-                <rect x="0" y="-60" width="620" height="500"
-                      fill="url(#shimmerGrad)"
-                      transform="rotate(-28 60 190)"/>
-              </g>
-            </g>
-          </svg>
-        </div>
+        <div class="loader" aria-label="Apboa Next 加载中"></div>
       </div>
     </div>
     <script type="module" src="/src/doc/main.ts"></script>

@@ -23,6 +23,7 @@ import com.hxh.apboa.engine.log.ChatLogHook;
 import com.hxh.apboa.common.util.AgentMetadataStore;
 import com.hxh.apboa.engine.log.telemetry.RunStatAccumulator;
 import com.hxh.apboa.engine.log.telemetry.RunTelemetryExtractor;
+import com.hxh.apboa.engine.tool.WorkflowProcessSnapshot;
 import io.agentscope.core.ReActAgent;
 import io.agentscope.core.agent.Agent;
 import io.agentscope.core.agent.Event;
@@ -458,6 +459,39 @@ public class AguiAgentAdapter {
                 for (ContentBlock block : msg.getContent()) {
                     if (block instanceof ToolResultBlock toolResult) {
                         Map<String, Object> metadata = toolResult.getMetadata();
+                        // 工具真正被调度执行：并行/串行均以后端订阅时刻为准，前端不再按数组猜测。
+                        if (Boolean.TRUE.equals(metadata.get("tool_started"))) {
+                            events.add(new AguiEvent.Custom(
+                                    state.threadId,
+                                    state.runId,
+                                    AguiCustomEvents.TOOL_STARTED,
+                                    Map.of(
+                                            "toolUseId",
+                                            toolResult.getId() == null ? "" : toolResult.getId())));
+                            continue;
+                        }
+                        // 工作流工具内部阶段：等待模型、生成、重试等实时映射到所属工具卡片。
+                        if (Boolean.TRUE.equals(metadata.get("tool_progress"))) {
+                            Map<String, Object> value = new LinkedHashMap<>();
+                            value.put("toolUseId", toolResult.getId() == null ? "" : toolResult.getId());
+                            value.put("phase", metadata.getOrDefault("phase", ""));
+                            value.put("message", metadata.getOrDefault("message", ""));
+                            if (metadata.get("attempt") != null) {
+                                value.put("attempt", metadata.get("attempt"));
+                            }
+                            if (metadata.get("max_attempts") != null) {
+                                value.put("maxAttempts", metadata.get("max_attempts"));
+                            }
+                            if (metadata.get("detail") != null) {
+                                value.put("detail", metadata.get("detail"));
+                            }
+                            events.add(new AguiEvent.Custom(
+                                    state.threadId,
+                                    state.runId,
+                                    AguiCustomEvents.TOOL_PROGRESS,
+                                    value));
+                            continue;
+                        }
                         // 单工具完成即时标记（ToolExecutor 完成瞬间经 chunk 通道发出）：
                         // 转 Custom(TOOL_FINISHED) 实时下发，前端即时翻转卡片完成态——
                         // 批量的 ToolCallEnd/Result 仍走 isLast 消息流（整批完成后）
@@ -465,6 +499,11 @@ public class AguiAgentAdapter {
                             Map<String, Object> value = new LinkedHashMap<>();
                             value.put("toolUseId", toolResult.getId() == null ? "" : toolResult.getId());
                             value.put("elapsed", metadata.getOrDefault("tool_elapsed", 0L));
+                            value.put("result", extractToolResultText(toolResult));
+                            Object workflowProcess = metadata.get(WorkflowProcessSnapshot.METADATA_KEY);
+                            if (workflowProcess != null) {
+                                value.put("workflowProcess", workflowProcess);
+                            }
                             // need_confirm 工具真实执行完成 = 已授权（人工允许或一键授权模式放行）。
                             // 自动模式下前端没有人工决策事件、无从自行判定确认态，本地落地的
                             // tool 消息会缺 confirmState（快照回显丢失、与落库版不一致），随本

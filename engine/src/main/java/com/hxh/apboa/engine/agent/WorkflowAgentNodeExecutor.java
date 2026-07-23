@@ -14,9 +14,12 @@ import com.hxh.apboa.engine.log.telemetry.UsageRecordWriter;
 import com.hxh.apboa.engine.log.telemetry.WorkflowUsageHook;
 import com.hxh.apboa.engine.mcp.McpClientFactory;
 import com.hxh.apboa.engine.model.ChatModelFactory;
+import com.hxh.apboa.engine.model.WorkflowProgressModel;
 import com.hxh.apboa.engine.skill.SkillBoxFactory;
 import com.hxh.apboa.engine.tool.ToolkitFactory;
+import com.hxh.apboa.engine.tool.ToolProgressBridge;
 import com.hxh.apboa.node.agent.AgentNodeExecutor;
+import com.hxh.apboa.node.agent.AgentModelRequestTrace;
 import com.hxh.apboa.node.agent.AgentNodeRequest;
 import com.hxh.apboa.node.agent.AgentNodeResult;
 import io.agentscope.core.ReActAgent;
@@ -35,8 +38,13 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.UUID;
 
 /**
  * 工作流智能体节点执行器。
@@ -55,19 +63,49 @@ public class WorkflowAgentNodeExecutor implements AgentNodeExecutor {
 
     @Override
     public AgentNodeResult execute(AgentNodeRequest request) {
+        ToolChoiceStrategy toolChoiceStrategy = resolveToolChoiceStrategy(request);
+        Toolkit toolkit;
+        SkillBox skillBox = null;
+        if (toolChoiceStrategy == ToolChoiceStrategy.NONE) {
+            // 禁止工具时不加载任何工具/MCP/技能，既缩短 prompt，也避免第三方 formatter 忽略 NONE。
+            toolkit = new Toolkit();
+        } else {
+            toolkit = toolkitFactory.getToolkit(request.getToolIds());
+            registerMcpTools(toolkit, request);
+            skillBox = createSkillBox(request, toolkit);
+        }
+        int effectiveMaxIterations = resolveEffectiveMaxIterations(
+                request,
+                toolChoiceStrategy,
+                hasCallableCapabilities(toolkit, skillBox));
         AgentDefinition definition = buildAgentDefinition(request);
-        definition.setToolChoiceStrategy(ToolChoiceStrategy.AUTO);
-        Model model = chatModelFactory.getModel(definition);
-        Toolkit toolkit = toolkitFactory.getToolkit(request.getToolIds());
-        registerMcpTools(toolkit, request);
-        SkillBox skillBox = skillBoxFactory.getSkillBox(request.getSkillPackageIds(), toolkit);
+        definition.setToolChoiceStrategy(toolChoiceStrategy);
+        definition.setMaxIterations(effectiveMaxIterations);
+        Model baseModel = chatModelFactory.getModel(definition);
+        String progressToolUseId = ToolProgressBridge.currentToolUseId();
+        // 始终包装以采集可落库遥测；非对话工具场景 toolUseId 为 null，进度发送自动降级为空操作。
+        WorkflowProgressModel progressModel = new WorkflowProgressModel(
+                baseModel,
+                progressToolUseId,
+                request.getNodeId(),
+                request.getNodeName(),
+                UUID.randomUUID().toString());
+        Model model = progressModel;
 
         AgentContext oldContext = AgentContext.getIfExists().orElse(null);
         AgentContext agentContext = buildAgentContext(request, definition, oldContext);
         AgentContext.init(agentContext);
         try {
             WorkflowUsageHook usageHook = new WorkflowUsageHook();
-            ReActAgent agent = buildAgent(request, definition, model, toolkit, skillBox, agentContext, usageHook);
+            ReActAgent agent = buildAgent(
+                    request,
+                    definition,
+                    model,
+                    toolkit,
+                    skillBox,
+                    effectiveMaxIterations,
+                    agentContext,
+                    usageHook);
             Msg userMsg = Msg.builder()
                     .name("user")
                     .role(MsgRole.USER)
@@ -82,7 +120,13 @@ public class WorkflowAgentNodeExecutor implements AgentNodeExecutor {
             // 执行抛异常不记账，与主链 CHAT 的 ErrorEvent 丢弃统计口径一致
             recordUsage(request, oldContext, agentContext, usageHook, response,
                     System.currentTimeMillis() - startMs);
-            return buildResult(model, response);
+            return buildResult(
+                    model,
+                    response,
+                    toolChoiceStrategy,
+                    effectiveMaxIterations,
+                    progressModel,
+                    usageHook);
         } finally {
             restoreAgentContext(oldContext);
         }
@@ -186,6 +230,40 @@ public class WorkflowAgentNodeExecutor implements AgentNodeExecutor {
         mcpTools.forEach(toolkit::registerAgentTool);
     }
 
+    /** 空技能清单不构造 SkillBox，避免 AgentScope 自动注入不可调用的技能加载工具。 */
+    SkillBox createSkillBox(AgentNodeRequest request, Toolkit toolkit) {
+        if (!shouldCreateSkillBox(request)) {
+            return null;
+        }
+        SkillBox skillBox = skillBoxFactory.getSkillBox(request.getSkillPackageIds(), toolkit);
+        return skillBox == null || skillBox.getAllSkillIds().isEmpty() ? null : skillBox;
+    }
+
+    static boolean shouldCreateSkillBox(AgentNodeRequest request) {
+        return request.getSkillPackageIds() != null && !request.getSkillPackageIds().isEmpty();
+    }
+
+    static ToolChoiceStrategy resolveToolChoiceStrategy(AgentNodeRequest request) {
+        return request.getToolChoiceStrategy() == null
+                ? ToolChoiceStrategy.AUTO
+                : request.getToolChoiceStrategy();
+    }
+
+    static int resolveEffectiveMaxIterations(
+            AgentNodeRequest request,
+            ToolChoiceStrategy toolChoiceStrategy,
+            boolean hasCallableCapabilities) {
+        if (toolChoiceStrategy == ToolChoiceStrategy.NONE || !hasCallableCapabilities) {
+            return 1;
+        }
+        return Math.max(1, request.getMaxIterations());
+    }
+
+    static boolean hasCallableCapabilities(Toolkit toolkit, SkillBox skillBox) {
+        return (toolkit != null && !toolkit.getToolNames().isEmpty())
+                || (skillBox != null && !skillBox.getAllSkillIds().isEmpty());
+    }
+
     /**
      * 构建智能体调用上下文。
      */
@@ -215,20 +293,24 @@ public class WorkflowAgentNodeExecutor implements AgentNodeExecutor {
                                   Model model,
                                   Toolkit toolkit,
                                   SkillBox skillBox,
+                                  int effectiveMaxIterations,
                                   AgentContext agentContext,
                                   WorkflowUsageHook usageHook) {
         ReActAgent.Builder builder = ReActAgent.builder()
                 .name(definition.getAgentCode())
                 .description(definition.getDescription())
-                .maxIters(request.getMaxIterations())
+                .maxIters(effectiveMaxIterations)
                 .model(model)
                 .sysPrompt(request.getSystemPrompt())
                 .toolkit(toolkit)
-                .skillBox(skillBox)
                 .hook(usageHook)
                 .toolExecutionContext(ToolExecutionContext.builder()
                         .register(agentContext)
                         .build());
+
+        if (skillBox != null) {
+            builder.skillBox(skillBox);
+        }
 
         if (request.isStructuredOutputEnabled()) {
             builder.structuredOutputReminder(StructuredOutputReminder.PROMPT);
@@ -240,9 +322,18 @@ public class WorkflowAgentNodeExecutor implements AgentNodeExecutor {
      * 构建节点执行结果。
      */
     @SuppressWarnings("unchecked")
-    private AgentNodeResult buildResult(Model model, Msg response) {
+    private AgentNodeResult buildResult(
+            Model model,
+            Msg response,
+            ToolChoiceStrategy toolChoiceStrategy,
+            int effectiveMaxIterations,
+            WorkflowProgressModel progressModel,
+            WorkflowUsageHook usageHook) {
         AgentNodeResult result = new AgentNodeResult();
         result.setModelName(model.getModelName());
+        result.setToolChoiceStrategy(toolChoiceStrategy);
+        result.setEffectiveMaxIterations(effectiveMaxIterations);
+        result.setModelRequests(buildModelRequestTraces(progressModel, usageHook));
         if (response == null) {
             return result;
         }
@@ -267,6 +358,51 @@ public class WorkflowAgentNodeExecutor implements AgentNodeExecutor {
         result.setUsage(response.getChatUsage());
         result.setGenerateReason(response.getGenerateReason());
         return result;
+    }
+
+    private List<AgentModelRequestTrace> buildModelRequestTraces(
+            WorkflowProgressModel progressModel, WorkflowUsageHook usageHook) {
+        Map<Integer, WorkflowProgressModel.RequestTiming> timings = new TreeMap<>();
+        progressModel.snapshotRequestTimings()
+                .forEach(item -> timings.put(item.requestIndex(), item));
+        Map<Integer, WorkflowUsageHook.RoundTelemetry> rounds = new TreeMap<>();
+        usageHook.snapshotRounds().forEach(item -> rounds.put(item.requestIndex(), item));
+
+        Set<Integer> requestIndexes = new LinkedHashSet<>();
+        requestIndexes.addAll(timings.keySet());
+        requestIndexes.addAll(rounds.keySet());
+        List<AgentModelRequestTrace> traces = new ArrayList<>();
+        for (Integer requestIndex : requestIndexes) {
+            WorkflowProgressModel.RequestTiming timing = timings.get(requestIndex);
+            WorkflowUsageHook.RoundTelemetry round = rounds.get(requestIndex);
+            List<AgentModelRequestTrace.Attempt> attempts = timing == null
+                    ? List.of()
+                    : timing.attempts().stream()
+                            .map(item -> new AgentModelRequestTrace.Attempt(
+                                    item.attempt(),
+                                    item.status(),
+                                    item.elapsed(),
+                                    item.ttft(),
+                                    item.detail()))
+                            .toList();
+            traces.add(new AgentModelRequestTrace(
+                    requestIndex,
+                    timing == null ? 1 : timing.maxAttempts(),
+                    timing == null ? null : timing.status(),
+                    timing == null ? null : timing.durationMs(),
+                    timing == null ? null : timing.ttftMs(),
+                    round == null ? null : round.inputTokens(),
+                    round == null ? null : round.outputTokens(),
+                    round == null ? null : round.totalTokens(),
+                    round == null ? null : round.modelTimeSeconds(),
+                    timing == null ? null : timing.finishReason(),
+                    round == null ? null : round.generateReason(),
+                    round == null ? null : round.thinkingChars(),
+                    timing == null ? Map.of() : timing.providerMetrics(),
+                    attempts,
+                    round == null ? List.of() : round.toolCalls()));
+        }
+        return List.copyOf(traces);
     }
 
     /**

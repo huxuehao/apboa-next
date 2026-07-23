@@ -23,9 +23,9 @@ import java.time.Duration;
 public class CustomToolkitConfig {
 
     /**
-     * 是否允许并行执行多个工具，默认 false
+     * 是否允许并行执行多个工具，默认 true；可通过 APBOA_TOOL_PARALLEL=false 回退串行
      */
-    private boolean parallel = false;
+    private boolean parallel = true;
 
     /**
      * 是否允许删除工具，默认 false

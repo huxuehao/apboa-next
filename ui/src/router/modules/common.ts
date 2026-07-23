@@ -43,6 +43,15 @@ const commonRoutes: AppRouteRecordRaw[] = [
       hidden: true,
     },
   },
+  {
+    path: RoutePaths.PREVIEW,
+    name: RouteNames.PREVIEW,
+    component: () => import('@/pages/AntdPreview.vue'),
+    meta: {
+      title: 'AntdPreview',
+      hidden: true,
+    },
+  },
   // 文档页面已迁移至 doc 子应用（doc.html）
   {
     path: RoutePaths.NOT_FOUND,

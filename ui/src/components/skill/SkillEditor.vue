@@ -4,7 +4,7 @@
  * 嵌入 SmartCodeEditor，提供保存状态管理和文件切换保护
  */
 import { ref, watch, computed } from 'vue'
-import { Modal, Button } from 'ant-design-vue'
+import { Button } from 'ant-design-vue'
 import {
   SaveOutlined,
   RollbackOutlined,
@@ -62,15 +62,7 @@ const viewMode = ref<'source' | 'split' | 'preview'>('split')
 // 监听文件切换
 watch(
   () => props.file,
-  async (newFile, oldFile) => {
-    // 切换前检查未保存
-    if (oldFile && isDirty.value && props.file?.fileId) {
-      const confirmed = await showUnsavedConfirm()
-      if (!confirmed) {
-        return
-      }
-    }
-
+  async (newFile) => {
     clearSavedTimer()
     // 文件切换重置视图模式（md 默认分屏）
     viewMode.value = 'split'
@@ -165,23 +157,6 @@ function handleRevert() {
   editorContent.value = originalContent.value
   saveStatus.value = 'saved'
   emit('dirty-change', false)
-}
-
-/**
- * 显示未保存确认弹窗
- */
-function showUnsavedConfirm(): Promise<boolean> {
-  return new Promise((resolve) => {
-    Modal.confirm({
-      title: '未保存的更改',
-      content: '当前文件有未保存的修改，是否放弃更改并切换文件？',
-      okText: '放弃更改',
-      cancelText: '继续编辑',
-      okButtonProps: { danger: true },
-      onOk: () => resolve(true),
-      onCancel: () => resolve(false),
-    })
-  })
 }
 
 function clearSavedTimer() {

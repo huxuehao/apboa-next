@@ -11,6 +11,8 @@ import com.hxh.apboa.scheduler.core.client.QuartzClient;
 import com.hxh.apboa.scheduler.core.config.QuartzConfig;
 import com.hxh.apboa.scheduler.core.config.QuartzConfigFactory;
 import com.hxh.apboa.scheduler.core.job.QuartzJob;
+import com.hxh.apboa.common.entity.JobInfo;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
@@ -23,7 +25,13 @@ import java.util.List;
  * @author huxuehao
  **/
 @Component
+@Slf4j
 public class JobInit implements SmartInitializingSingleton {
+
+    private static final String LEGACY_AGENT_JOB_CLASS =
+            "com.hxh.apboa.job.scheduler.AgentScheduler";
+    private static final String AGENT_JOB_CLASS =
+            "com.hxh.apboa.scheduler.scheduler.AgentScheduler";
 
     private final QuartzClient quartzClient;
     private final JdbcTemplate jdbcTemplate;
@@ -53,11 +61,33 @@ public class JobInit implements SmartInitializingSingleton {
         });
         for (JobInfo jobInfo : list) {
             try {
+                migrateLegacyJobClass(jobInfo);
                 quartzClient.create(buildConfig(jobInfo));
             } catch (ClassNotFoundException e) {
-                System.err.println(jobInfo.getJobClass() + "不存在");
+                log.error("定时任务初始化失败，执行类不存在: jobId={}, jobClass={}",
+                        jobInfo.getId(), jobInfo.getJobClass(), e);
+            } catch (RuntimeException e) {
+                log.error("定时任务初始化失败: jobId={}, jobClass={}",
+                        jobInfo.getId(), jobInfo.getJobClass(), e);
             }
         }
+    }
+
+    /**
+     * 兼容旧版本写入的 Agent 调度类名，并同步修正存量数据。
+     */
+    private void migrateLegacyJobClass(JobInfo jobInfo) {
+        if (!LEGACY_AGENT_JOB_CLASS.equals(jobInfo.getJobClass())) {
+            return;
+        }
+        int updated = jdbcTemplate.update(
+                "UPDATE quartz_job_info SET job_class = ? WHERE id = ? AND job_class = ?",
+                AGENT_JOB_CLASS,
+                jobInfo.getId(),
+                LEGACY_AGENT_JOB_CLASS
+        );
+        jobInfo.setJobClass(AGENT_JOB_CLASS);
+        log.info("已迁移旧版 Agent 定时任务类名: jobId={}, updated={}", jobInfo.getId(), updated);
     }
 
     public static QuartzConfig buildConfig(JobInfo jobInfo) throws ClassNotFoundException {

@@ -5,8 +5,11 @@
  * @author huxuehao
  */
 import { computed } from 'vue'
+import type { Component } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useLayout } from '@/composables/useLayout'
 import homeAvatar from '@/assets/avatar/home.png'
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- 上游"对话广场"菜单暂注释，入口恢复时取消
 import chatBotAvatar from '@/assets/avatar/chat-bot.png'
 import agentAvatar from '@/assets/avatar/agent.png'
 import workflowAvatar from '@/assets/avatar/workflow.png'
@@ -19,6 +22,7 @@ import toolAvatar from '@/assets/avatar/tool.png'
 import hookAvatar from '@/assets/avatar/hook.png'
 import promptAvatar from '@/assets/avatar/prompt.png'
 import sensitiveAvatar from '@/assets/avatar/sensitive.png'
+import costAvatar from '@/assets/avatar/cost.png'
 
 /**
  * Props定义
@@ -29,6 +33,7 @@ const props = defineProps<{
 
 const route = useRoute()
 const router = useRouter()
+const { closeDrawer } = useLayout()
 
 /**
  * 菜单项类型定义
@@ -37,6 +42,7 @@ interface MenuItem {
   key: string
   label: string
   avatar?: string
+  icon?: Component
   path: string
   type: 'menu' | 'category'
 }
@@ -156,6 +162,19 @@ const menuConfig: MenuItem[] = [
     avatar: sensitiveAvatar,
     path: '/sensitive',
     type: 'menu'
+  },
+  {
+    key: 'management-category',
+    label: '管理',
+    path: '',
+    type: 'category'
+  },
+  {
+    key: 'cost',
+    label: '成本中心',
+    avatar: costAvatar,
+    path: '/cost',
+    type: 'menu'
   }
 ]
 
@@ -179,6 +198,7 @@ const activeMenu = computed(() => {
 const handleMenuClick = (item: MenuItem) => {
   if (item.type === 'menu' && item.path) {
     router.push(item.path)
+    closeDrawer()
   }
 }
 </script>
@@ -202,7 +222,8 @@ const handleMenuClick = (item: MenuItem) => {
             :class="{ active: activeMenu === item.key }"
             @click="handleMenuClick(item)"
           >
-            <img :src="item.avatar" width="20px" alt="icon"/>
+            <img v-if="item.avatar" :src="item.avatar" width="20px" alt="icon" />
+            <component :is="item.icon" v-else-if="item.icon" class="menu-icon" />
             <span class="menu-label">{{ item.label }}</span>
           </div>
         </ATooltip>
@@ -258,6 +279,13 @@ const handleMenuClick = (item: MenuItem) => {
   overflow: hidden;
   text-overflow: ellipsis;
   transition: opacity 0.3s ease;
+}
+
+.menu-icon {
+  width: 20px;
+  height: 20px;
+  font-size: 18px;
+  flex-shrink: 0;
 }
 
 /* 收缩态 */

@@ -55,12 +55,29 @@ public final class AguiCustomEvents {
     public static final String SUBAGENT_CONFIRM_REQUIRED = "SUBAGENT_CONFIRM_REQUIRED";
 
     /**
+     * 工具真正获得执行调度时下发；区别于模型声明工具调用的 ToolCallStart。
+     * 载荷：{@code {toolUseId}}。并行模式下同批工具会分别即时进入执行态；
+     * 串行模式下后续工具在收到本事件前保持排队态。
+     */
+    public static final String TOOL_STARTED = "TOOL_STARTED";
+
+    /**
+     * 工具内部阶段进度（当前用于工作流工具的模型调用可观测性）。
+     * 载荷：{@code {toolUseId, phase, message, attempt?, maxAttempts?, detail?}}。
+     * phase 包括 WORKFLOW_STARTING / MODEL_WAITING / MODEL_GENERATING /
+     * MODEL_RETRYING / MODEL_SUCCEEDED / MODEL_FAILED / WORKFLOW_FINISHING。
+     */
+    public static final String TOOL_PROGRESS = "TOOL_PROGRESS";
+
+    /**
      * 单工具完成即时通知（工具真正执行完的瞬间下发，不等同批其余工具跑完——
      * 批量结果受 ToolExecutor 的 collectList 屏障约束，要到整批完成才随消息流走）。
-     * 载荷：{@code {toolUseId, elapsed}}，elapsed 为该工具真实执行耗时
+     * 载荷：{@code {toolUseId, elapsed, result, workflowProcess?}}，elapsed 为该工具真实执行耗时，
+     * result 为该工具真实响应（与稍后批量 ToolCallResult 同源）；workflowProcess 为工作流
+     * 工具的最终节点执行快照，与 tool 消息落库字段同构，普通工具不携带
      * （订阅→结果，串行时排队等待不计入；与落库/TOOL_ELAPSED 同一次测量）。
      * <ul>
-     *   <li>前端收到即把对应工具卡片翻转完成态并定格耗时；结果详情仍等 ToolCallResult</li>
+     *   <li>前端收到即把对应工具卡片翻转完成态，并立即展示请求参数、响应与定格耗时</li>
      *   <li>串行执行下第 N 个完成同时意味着第 N+1 个开始执行（排队态→执行态推导依据）</li>
      *   <li>HITL 挂起的工具不发本事件（挂起在等人，不是完成）</li>
      * </ul>

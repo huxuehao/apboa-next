@@ -1,4 +1,5 @@
 import { RESOURCE_CATEGORY_REGISTRY } from '@/composables/chat/useResourceCategories'
+import type { WorkflowProcess } from '@/types'
 
 /**
  * 尝试将字符串格式化为 JSON（美化），失败则返回原文
@@ -31,6 +32,7 @@ export function buildToolCallsContent(
     result?: string
     elapsed?: number
     confirmState?: 'approved' | 'rejected'
+    workflowProcess?: WorkflowProcess
     subSteps?: Array<Record<string, unknown>>
   }>
 ): string {
@@ -45,6 +47,9 @@ export function buildToolCallsContent(
   }
   if (t.confirmState) {
     toolContent.confirmState = t.confirmState
+  }
+  if (t.workflowProcess) {
+    toolContent.workflowProcess = t.workflowProcess
   }
   if (t.subSteps?.length) {
     // 清理实时态字段（running/streaming 标记、subToolUseId 配对键、startTime 计时起点），只留展示契约字段

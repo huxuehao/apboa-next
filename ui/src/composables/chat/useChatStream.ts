@@ -3,7 +3,7 @@ import { message } from 'ant-design-vue'
 import { useAgentClient } from '@/composables/useAgentClient'
 import { usePlanTracking } from '@/composables/chat/usePlanTracking'
 import { buildToolCallsContent, localNowDateTime } from '@/utils/chat/format'
-import type {ChatMessageVO, ConfirmFieldMeta, RawEvent} from '@/types'
+import type {ChatMessageVO, ConfirmFieldMeta, RawEvent, WorkflowProcess} from '@/types'
 import { stopRun, subagentResume, type SubPendingInfo } from '@/api/agui'
 
 let lastIdBig = BigInt(Date.now()) << 12n;
@@ -19,6 +19,14 @@ const SUB_REJECT_RESULT_TEXT =
   'Error: 用户拒绝授权调用该工具，本轮对话中该工具不可用。请勿重试该工具，' +
   '更不得自行编造、虚构或凭常识臆测该工具本应返回的结果数据；' +
   '必须如实告知用户：因未获授权调用该工具，无法获取相关信息。'
+
+export interface ToolProgressState {
+  phase: string
+  message: string
+  attempt?: number
+  maxAttempts?: number
+  detail?: string
+}
 
 export function useChatStream(
   agentId: import('vue').Ref<string>,
@@ -59,9 +67,9 @@ export function useChatStream(
   const streamingContent = ref('')
 
   // 工具调用进度（subSteps 为子智能体实时过程步骤，SUBAGENT_STEP 事件按 parentToolCallId 追加；
-  // finished 由 TOOL_FINISHED 事件即时置位——工具真正跑完的瞬间翻转完成态，结果详情仍等批量 Result）
+  // finished/result 由 TOOL_FINISHED 即时置位，批量 Result 到达后再转为正式历史消息）
   const toolCallsInProgress = ref<
-    Array<{ id: string; name: string; args: string; result?: string; startTime: number; elapsed?: number, finished?: boolean, needConfirm?: boolean, confirmFields?: ConfirmFieldMeta[], confirmSummary?: string, subSteps?: Array<Record<string, unknown>> }>
+    Array<{ id: string; name: string; args: string; result?: string; startTime: number; executionStarted?: boolean; elapsed?: number, finished?: boolean, needConfirm?: boolean, confirmFields?: ConfirmFieldMeta[], confirmSummary?: string, progress?: ToolProgressState, workflowProcess?: WorkflowProcess, subSteps?: Array<Record<string, unknown>> }>
   >([])
 
   // HITL §6.5：逐工具确认决策（toolUseId → 状态），所有项决策完即调 /agui/resume
@@ -257,7 +265,7 @@ export function useChatStream(
         agentHasResult.value = true
         toolCallsInProgress.value = [
           ...toolCallsInProgress.value,
-          { id: e.toolCallId, name: e.toolCallName, args: '', startTime: Date.now(), confirmSummary: confirmSummaries[e.toolCallId] }
+          { id: e.toolCallId, name: e.toolCallName, args: '', startTime: Date.now(), executionStarted: false, confirmSummary: confirmSummaries[e.toolCallId] }
         ]
 
         const sid = currentSessionId.value
@@ -386,12 +394,43 @@ export function useChatStream(
         else if (event.name === 'SUBAGENT_CONFIRM_REQUIRED') {
           restoreSubPending([event.value as unknown as SubPendingInfo])
         }
-        // 单工具完成即时通知（工具真正跑完的瞬间到达，先于批量 Result——后者受
-        // 批级 collectList 屏障要等整批完成）：翻转完成态+定格真实耗时；
-        // 串行执行下本工具完成=下一个未完成工具此刻开始执行，重置其掐表起点
-        // （其 startTime 原是 ToolCallStart 到达时刻，含排队等待，直接用会虚大）
+        // 后端实际订阅时刻：并行模式同批工具会分别迅速进入执行态；串行模式后续项保持排队。
+        else if (event.name === 'TOOL_STARTED') {
+          const v = event.value as { toolUseId?: string }
+          if (v?.toolUseId != null) {
+            const arr = [...toolCallsInProgress.value]
+            const idx = arr.findIndex(t => t.id === String(v.toolUseId))
+            if (idx >= 0) {
+              arr[idx] = { ...arr[idx]!, executionStarted: true, startTime: Date.now() }
+              toolCallsInProgress.value = arr
+            }
+          }
+        }
+        // 工作流内部阶段：排队/等待模型、生成、重试；按 toolUseId 更新对应并行卡片。
+        else if (event.name === 'TOOL_PROGRESS') {
+          const v = event.value as { toolUseId?: string; phase?: string; message?: string; attempt?: number; maxAttempts?: number; detail?: string }
+          if (v?.toolUseId != null && v.phase && v.message) {
+            const arr = [...toolCallsInProgress.value]
+            const idx = arr.findIndex(t => t.id === String(v.toolUseId))
+            if (idx >= 0) {
+              arr[idx] = {
+                ...arr[idx]!,
+                progress: {
+                  phase: v.phase,
+                  message: v.message,
+                  attempt: v.attempt,
+                  maxAttempts: v.maxAttempts,
+                  detail: v.detail
+                }
+              }
+              toolCallsInProgress.value = arr
+            }
+          }
+        }
+        // 单工具完成即时通知（先于受 collectList 屏障约束的批量 Result）：
+        // 翻转完成态，并写入同源响应和真实耗时。
         else if (event.name === 'TOOL_FINISHED') {
-          const v = event.value as { toolUseId?: string; elapsed?: number; confirmState?: 'approved' | 'rejected' }
+          const v = event.value as { toolUseId?: string; elapsed?: number; result?: string; workflowProcess?: WorkflowProcess; confirmState?: 'approved' | 'rejected' }
           if (v?.toolUseId != null) {
             // 确认态随完成事件下发（一键授权等自动模式无人工决策，本地无从判定），
             // 先于批量 Result 到达，落地时经 confirmStates 写入 tool 消息
@@ -402,10 +441,12 @@ export function useChatStream(
             const idx = arr.findIndex(t => t.id === String(v.toolUseId))
             if (idx >= 0) {
               const cur = arr[idx]!
-              arr[idx] = { ...cur, finished: true, elapsed: typeof v.elapsed === 'number' ? v.elapsed : cur.elapsed }
-              const next = arr.find(t => !t.finished && t.result == null)
-              if (next) {
-                next.startTime = Date.now()
+              arr[idx] = {
+                ...cur,
+                finished: true,
+                result: typeof v.result === 'string' ? v.result : cur.result,
+                workflowProcess: v.workflowProcess ?? cur.workflowProcess,
+                elapsed: typeof v.elapsed === 'number' ? v.elapsed : cur.elapsed
               }
               toolCallsInProgress.value = arr
             }

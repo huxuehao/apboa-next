@@ -10,6 +10,7 @@ import com.hxh.apboa.engine.log.telemetry.ChatChannelHolder;
 import com.hxh.apboa.engine.log.telemetry.RunStatAccumulator;
 import com.hxh.apboa.engine.log.telemetry.RunTelemetryExtractor;
 import com.hxh.apboa.engine.log.telemetry.UsageRecordWriter;
+import com.hxh.apboa.engine.tool.WorkflowProcessSnapshot;
 import io.agentscope.core.model.ChatUsage;
 import org.springframework.jdbc.core.JdbcTemplate;
 import io.agentscope.core.agent.AgentBase;
@@ -251,6 +252,7 @@ public class ChatLogHook implements Hook {
                                             toolCache.get("tool_args").toString(),
                                             toolRes,
                                             pollSubProcess(threadId, toolName),
+                                            toolResult.getMetadata().get(WorkflowProcessSnapshot.METADATA_KEY),
                                             // 走到这里=真实执行完成，被拒工具无 PostActing（补偿路径落 rejected）
                                             IConfirmationHook.isNeedConfirm(toolName) ? "approved" : null),
                                     tenantId));
@@ -349,7 +351,7 @@ public class ChatLogHook implements Hook {
     // 构建工具内容（subProcess 为子智能体中间过程步骤，非子智能体工具为 null 时不写该字段，保持旧格式）
     private static String buildToolContent(String toolName, Long totalTimes, String args, String result,
                                     List<Map<String, Object>> subProcess) {
-        return buildToolContent(toolName, totalTimes, args, result, subProcess, null);
+        return buildToolContent(toolName, totalTimes, args, result, subProcess, null, null);
     }
 
     /**
@@ -358,7 +360,9 @@ public class ChatLogHook implements Hook {
      *                     历史消息据此渲染确认状态徽标与定制确认卡只读回显。
      */
     private static String buildToolContent(String toolName, Long totalTimes, String args, String result,
-                                    List<Map<String, Object>> subProcess, String confirmState) {
+                                    List<Map<String, Object>> subProcess,
+                                    Object workflowProcess,
+                                    String confirmState) {
         Map<String, Object> toolContent = new HashMap<>() {{
             put("name", toolName);
             put("totalTimes", totalTimes);
@@ -367,6 +371,9 @@ public class ChatLogHook implements Hook {
         }};
         if (subProcess != null && !subProcess.isEmpty()) {
             toolContent.put("subProcess", subProcess);
+        }
+        if (workflowProcess != null) {
+            toolContent.put("workflowProcess", workflowProcess);
         }
         if (confirmState != null) {
             toolContent.put("confirmState", confirmState);
@@ -508,6 +515,7 @@ public class ChatLogHook implements Hook {
                             elapsed,
                             toolCache.get("tool_args").toString(),
                             resultText,
+                            null,
                             null,
                             "rejected"),
                     tenantId));

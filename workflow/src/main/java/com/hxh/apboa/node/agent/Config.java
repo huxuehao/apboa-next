@@ -1,6 +1,7 @@
 package com.hxh.apboa.node.agent;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.hxh.apboa.common.enums.ToolChoiceStrategy;
 import com.hxh.apboa.node.base.NodeConfig;
 import com.hxh.apboa.node.base.template.FormatterType;
 import lombok.Getter;
@@ -53,6 +54,10 @@ public class Config implements NodeConfig {
      * MCP配置列表。
      */
     private List<McpConfig> mcps = new ArrayList<>();
+    /**
+     * 模型工具选择策略。工作流节点当前开放 AUTO / NONE，默认保持历史行为。
+     */
+    private ToolChoiceStrategy toolChoiceStrategy = ToolChoiceStrategy.AUTO;
     /**
      * ReAct最大迭代次数。
      */

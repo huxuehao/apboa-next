@@ -1,6 +1,7 @@
 package com.hxh.apboa.node.agent;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.hxh.apboa.common.enums.ToolChoiceStrategy;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -31,6 +32,7 @@ public class AgentNodeRequest {
     private List<Long> skillPackageIds = new ArrayList<>();
     private List<Long> toolIds = new ArrayList<>();
     private List<McpConfig> mcps = new ArrayList<>();
+    private ToolChoiceStrategy toolChoiceStrategy = ToolChoiceStrategy.AUTO;
     private int maxIterations;
     private boolean structuredOutputEnabled;
     private JsonNode structuredOutput;

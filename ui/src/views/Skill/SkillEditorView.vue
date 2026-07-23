@@ -4,7 +4,7 @@
  * 左侧文件树 + 右侧编辑器布局
  */
 import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, h } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { Modal, Input, Select, message } from 'ant-design-vue'
 import {
   ArrowLeftOutlined,
@@ -330,31 +330,29 @@ async function handleSaved() {
  * 返回列表
  */
 async function handleGoBack() {
-  if (hasDirty.value) {
+  await router.push({ name: 'Skill' })
+}
+
+/**
+ * 统一保护所有路由离开路径（返回按钮、侧栏菜单、浏览器后退）。
+ */
+function confirmLeaveEditor(): Promise<boolean> {
+  if (!hasDirty.value && !notSyncing.value) return Promise.resolve(true)
+
+  const dirty = hasDirty.value
+  return new Promise((resolve) => {
     Modal.confirm({
-      title: '未保存的更改',
-      content: '您有未保存的文件修改，确定要离开吗？',
+      title: dirty ? '未保存的更改' : '未同步的技能',
+      content: dirty
+        ? '您有未保存的文件修改，确定要离开吗？'
+        : '当前技能有更改，尚未同步到运行节点，确定要离开吗？',
       okText: '确定离开',
-      cancelText: '继续编辑',
+      cancelText: dirty ? '继续编辑' : '同步后再离开',
       okButtonProps: { danger: true },
-      onOk: () => {
-        router.push({ name: 'Skill' })
-      },
+      onOk: () => resolve(true),
+      onCancel: () => resolve(false),
     })
-  } else if (notSyncing.value) {
-    Modal.confirm({
-      title: '未同步的技能',
-      content: '当前技能有更改，为手动同步到运行节点，确定要离开吗？',
-      okText: '确定离开',
-      cancelText: '同步后在离开',
-      okButtonProps: { danger: true },
-      onOk: () => {
-        router.push({ name: 'Skill' })
-      }
-    })
-  } else {
-    await router.push({ name: 'Skill' })
-  }
+  })
 }
 
 /**
@@ -478,6 +476,8 @@ function handleBeforeUnload(e: BeforeUnloadEvent) {
     e.returnValue = ''
   }
 }
+
+onBeforeRouteLeave(() => confirmLeaveEditor())
 
 onMounted(() => {
   window.addEventListener('beforeunload', handleBeforeUnload)

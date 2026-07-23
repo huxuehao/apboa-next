@@ -141,27 +141,41 @@ public class WorkflowTool implements AgentTool {
         }
         UserDetail userDetail = userDetailBuilder.build();
 
+        String toolUseId = param.getToolUseBlock().getId();
         return Mono.fromCallable(() -> {
             // 把主 agent 上下文桥接到工作流执行线程：工具在独立调度线程上执行，主链的
             // AgentContext（ThreadLocal）不随线程走，不桥接则 WorkflowAgentNodeExecutor 里
             // 读不到外层上下文——MCP 断言无法带用户主体、成本流水也无法归属主 agent/渠道
             AgentContext outerOnThread = AgentContext.getIfExists().orElse(null);
             AgentContext.set(agentContext);
+            ToolProgressBridge.bindCurrent(toolUseId);
             try {
+                ToolProgressBridge.emit(toolUseId,
+                        ToolProgressBridge.stage("WORKFLOW_STARTING", "工作流正在启动"));
                 // 执行工作流
                 WorkflowRunResult run = workflowRunService.run(workflow.getId(), getRunRequest(param), userDetail);
-                return ToolResultBlock.of(
-                        param.getToolUseBlock().getId(),
-                        param.getToolUseBlock().getName(),
-                        TextBlock.builder().text(JsonUtils.toJsonStr(run.getOutput())).build()
-                );
+                ToolProgressBridge.emit(toolUseId,
+                        ToolProgressBridge.stage("WORKFLOW_FINISHING", "工作流正在收尾"));
+                WorkflowProcessSnapshot process = WorkflowProcessSnapshot.from(
+                        run, ToolProgressBridge.snapshot(toolUseId));
+                return ToolResultBlock.builder()
+                        .id(param.getToolUseBlock().getId())
+                        .name(param.getToolUseBlock().getName())
+                        .output(TextBlock.builder().text(JsonUtils.toJsonStr(run.getOutput())).build())
+                        .metadata(Map.of(WorkflowProcessSnapshot.METADATA_KEY, process))
+                        .build();
             } catch (Exception e) {
-                return ToolResultBlock.of(
-                        param.getToolUseBlock().getId(),
-                        param.getToolUseBlock().getName(),
-                        TextBlock.builder().text(e.getMessage()).build()
-                );
+                String error = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+                return ToolResultBlock.builder()
+                        .id(param.getToolUseBlock().getId())
+                        .name(param.getToolUseBlock().getName())
+                        .output(TextBlock.builder().text("Error: 工作流执行失败：" + error).build())
+                        .metadata(Map.of(
+                                WorkflowProcessSnapshot.METADATA_KEY,
+                                WorkflowProcessSnapshot.failed(error)))
+                        .build();
             } finally {
+                ToolProgressBridge.clearCurrent();
                 if (outerOnThread != null) {
                     AgentContext.set(outerOnThread);
                 } else {

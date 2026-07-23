@@ -20,6 +20,8 @@ import com.hxh.apboa.common.util.TenantUtils;
 import com.hxh.apboa.engine.agui.AgentContext;
 import com.hxh.apboa.engine.hitl.EditedInputApplier;
 import com.hxh.apboa.engine.log.ChatLogHook;
+import com.hxh.apboa.engine.tool.ToolProgressBridge;
+import com.hxh.apboa.engine.tool.WorkflowProcessSnapshot;
 import io.agentscope.core.agent.Agent;
 import io.agentscope.core.message.ContentBlock;
 import io.agentscope.core.message.TextBlock;
@@ -394,7 +396,12 @@ class ToolExecutor {
 
         // Add tool metadata and error handling
         return execution
-                .doOnSubscribe(s -> startedAt.compareAndSet(0, System.currentTimeMillis()))
+                .doOnSubscribe(s -> {
+                    if (startedAt.compareAndSet(0, System.currentTimeMillis())) {
+                        registerToolProgress(toolCall);
+                        emitToolStarted(toolCall);
+                    }
+                })
                 .map(result -> result.withIdAndName(toolCall.getId(), toolCall.getName()))
                 .doOnNext(result -> emitToolFinished(toolCall, result, startedAt.get()))
                 .onErrorResume(
@@ -403,7 +410,52 @@ class ToolExecutor {
                             String errorMsg = ExceptionUtils.getErrorMessage(e);
                             return Mono.just(
                                     ToolResultBlock.error("Tool execution failed: " + errorMsg));
-                        });
+                        })
+                .doFinally(signalType -> ToolProgressBridge.unregister(toolCall.getId()));
+    }
+
+    /** 工作流内部进度复用工具 chunk 通道，保持并行调用时按 toolUseId 精确归属。 */
+    private void registerToolProgress(ToolUseBlock toolCall) {
+        BiConsumer<ToolUseBlock, ToolResultBlock> callback = getEffectiveChunkCallback();
+        ToolProgressBridge.register(toolCall.getId(), progress -> {
+            // 即使当前调用没有流式 callback，也继续由 ToolProgressBridge 归档阶段，
+            // 供工作流完成时生成持久化模型尝试记录。
+            if (callback == null) {
+                return;
+            }
+            Map<String, Object> metadata = new HashMap<>();
+            metadata.put("tool_progress", true);
+            metadata.put("phase", progress.getPhase());
+            metadata.put("message", progress.getMessage());
+            if (progress.getAttempt() != null) {
+                metadata.put("attempt", progress.getAttempt());
+            }
+            if (progress.getMaxAttempts() != null) {
+                metadata.put("max_attempts", progress.getMaxAttempts());
+            }
+            if (progress.getDetail() != null && !progress.getDetail().isBlank()) {
+                metadata.put("detail", progress.getDetail());
+            }
+            callback.accept(
+                    toolCall,
+                    new ToolResultBlock(
+                            toolCall.getId(), toolCall.getName(), List.of(), metadata));
+        });
+    }
+
+    /** 工具真正订阅执行时即时通知；模型声明调用不等于获得执行调度。 */
+    private void emitToolStarted(ToolUseBlock toolCall) {
+        BiConsumer<ToolUseBlock, ToolResultBlock> callback = getEffectiveChunkCallback();
+        if (callback == null) {
+            return;
+        }
+        callback.accept(
+                toolCall,
+                new ToolResultBlock(
+                        toolCall.getId(),
+                        toolCall.getName(),
+                        List.of(),
+                        Map.of("tool_started", true)));
     }
 
     /**
@@ -425,9 +477,16 @@ class ToolExecutor {
         Map<String, Object> metadata = new HashMap<>();
         metadata.put("tool_finished", true);
         metadata.put("tool_elapsed", elapsed);
+        Object workflowProcess = result.getMetadata().get(WorkflowProcessSnapshot.METADATA_KEY);
+        if (workflowProcess != null) {
+            metadata.put(WorkflowProcessSnapshot.METADATA_KEY, workflowProcess);
+        }
+        // 完成事件携带真实输出：前端可在同批其他工具尚未结束时立即展示响应，
+        // 最终 TOOL_RESULT 仍按原链路进入消息/落库，二者使用同一份 output，避免口径漂移。
         callback.accept(
                 toolCall,
-                new ToolResultBlock(toolCall.getId(), toolCall.getName(), List.of(), metadata));
+                new ToolResultBlock(
+                        toolCall.getId(), toolCall.getName(), result.getOutput(), metadata));
     }
 
     // ==================== Infrastructure Methods ====================

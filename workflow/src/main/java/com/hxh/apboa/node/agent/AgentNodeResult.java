@@ -1,8 +1,10 @@
 package com.hxh.apboa.node.agent;
 
+import com.hxh.apboa.common.enums.ToolChoiceStrategy;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -18,4 +20,7 @@ public class AgentNodeResult {
     private String modelName;
     private Object usage;
     private Object generateReason;
+    private ToolChoiceStrategy toolChoiceStrategy;
+    private int effectiveMaxIterations;
+    private List<AgentModelRequestTrace> modelRequests = List.of();
 }

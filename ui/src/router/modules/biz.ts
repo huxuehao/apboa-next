@@ -144,6 +144,15 @@ const bizRoutes: AppRouteRecordRaw[] = [
           hidden: false
         },
       },
+      {
+        path: RoutePaths.COST,
+        name: RouteNames.COST,
+        component: () => import('@/views/Cost/index.vue'),
+        meta: {
+          title: '成本中心',
+          hidden: false
+        },
+      },
       // 工作台
       {
         path: RoutePaths.DASHBOARD,
@@ -206,7 +215,7 @@ const bizRoutes: AppRouteRecordRaw[] = [
         component: () => import('@/views/Settings/Account.vue'),
         meta: {
           title: '我的账号',
-          hidden: false
+          hidden: true
         },
       },
       {
@@ -215,7 +224,7 @@ const bizRoutes: AppRouteRecordRaw[] = [
         component: () => import('@/views/Settings/Tenant.vue'),
         meta: {
           title: '组织管理',
-          hidden: false
+          hidden: true
         },
       },
       {
@@ -224,7 +233,7 @@ const bizRoutes: AppRouteRecordRaw[] = [
         component: () => import('@/views/Settings/TenantDiscovery.vue'),
         meta: {
           title: '发现组织',
-          hidden: false
+          hidden: true
         },
       },
       {
@@ -233,7 +242,7 @@ const bizRoutes: AppRouteRecordRaw[] = [
         component: () => import('@/views/Settings/SystemParams.vue'),
         meta: {
           title: '系统参数',
-          hidden: false
+          hidden: true
         },
       },
       {
@@ -242,7 +251,7 @@ const bizRoutes: AppRouteRecordRaw[] = [
         component: () => import('@/views/Settings/SystemIntro.vue'),
         meta: {
           title: '系统介绍',
-          hidden: false
+          hidden: true
         },
       },
       {
@@ -251,7 +260,7 @@ const bizRoutes: AppRouteRecordRaw[] = [
         component: () => import('@/views/Settings/ApiKeys.vue'),
         meta: {
           title: 'API Keys',
-          hidden: false
+          hidden: true
         },
       },
       // 运维管理
@@ -261,7 +270,7 @@ const bizRoutes: AppRouteRecordRaw[] = [
         component: () => import('@/views/Ops/Monitor.vue'),
         meta: {
           title: '服务监控',
-          hidden: false
+          hidden: true
         },
       },
       {
@@ -270,7 +279,7 @@ const bizRoutes: AppRouteRecordRaw[] = [
         component: () => import('@/views/Ops/Storage.vue'),
         meta: {
           title: '存储管理',
-          hidden: false
+          hidden: true
         },
       },
       // 审查管理
@@ -280,7 +289,7 @@ const bizRoutes: AppRouteRecordRaw[] = [
         component: () => import('@/views/Review/Agent.vue'),
         meta: {
           title: '审查智能体',
-          hidden: false
+          hidden: true
         },
       },
       {
@@ -289,13 +298,7 @@ const bizRoutes: AppRouteRecordRaw[] = [
         component: () => import('@/views/Review/Workflow.vue'),
         meta: {
           title: '审查工作流',
-      {
-        path: RoutePaths.COST,
-        name: RouteNames.COST,
-        component: () => import('@/views/Cost/index.vue'),
-        meta: {
-          title: '成本中心',
-          hidden: false
+          hidden: true
         },
       }
     ],

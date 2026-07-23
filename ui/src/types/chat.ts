@@ -53,6 +53,65 @@ export interface SubProcessStep {
   subToolUseId?: string
 }
 
+/** 工作流工具的最终执行快照：实时完成事件与 tool 消息 workflowProcess 字段同构。 */
+export interface WorkflowProcess {
+  runId?: string
+  workflowId?: string
+  version?: string
+  status?: 'RUNNING' | 'SUCCESS' | 'FAIL' | 'STOP' | string
+  elapsed?: number
+  error?: string
+  nodes: WorkflowProcessNode[]
+}
+
+export interface WorkflowProcessNode {
+  nodeId: string
+  title?: string
+  type?: string
+  status?: 'RUNNING' | 'SUCCESS' | 'FAIL' | 'STOP' | string
+  elapsed?: number
+  inputs?: string
+  outputs?: string
+  error?: string
+  modelName?: string
+  modelRequests?: WorkflowModelRequest[]
+}
+
+export interface WorkflowModelRequest {
+  requestIndex: number
+  maxAttempts: number
+  status?: 'SUCCESS' | 'FAIL' | 'STOP' | string
+  durationMs?: number
+  ttftMs?: number
+  inputTokens?: number
+  outputTokens?: number
+  totalTokens?: number
+  modelTimeSeconds?: number
+  finishReason?: string
+  generateReason?: string
+  thinkingChars?: number
+  providerMetrics?: Record<string, string | number | boolean>
+  attempts: WorkflowModelAttempt[]
+  toolCalls?: WorkflowModelToolCall[]
+}
+
+export interface WorkflowModelAttempt {
+  attempt: number
+  status: 'SUCCESS' | 'FAIL' | 'STOP' | string
+  elapsed?: number
+  ttft?: number
+  detail?: string
+}
+
+export interface WorkflowModelToolCall {
+  id?: string
+  name?: string
+  arguments?: string
+  status?: 'REQUESTED' | 'RUNNING' | 'SUCCESS' | 'FAIL' | 'SUSPENDED' | string
+  elapsed?: number
+  detail?: string
+}
+
 /** run 级元数据（RUN_META 事件载荷 / 落库 meta JSON 解析后），由后端 RunStatAccumulator 生成 */
 export interface RunMeta {
   durationMs?: number

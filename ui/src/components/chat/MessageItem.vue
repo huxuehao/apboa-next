@@ -11,8 +11,9 @@ import MarkdownRenderer from "@/components/markdown/MarkdownRenderer.vue";
 import TaggedContentRenderer from './TaggedContentRenderer.vue';
 import ErrorMessageCard from './ErrorMessageCard.vue';
 import SubProcessSteps from './SubProcessSteps.vue';
+import WorkflowProcessSteps from './WorkflowProcessSteps.vue';
 import ToolConfirmPanel from './confirm/ToolConfirmPanel.vue';
-import type { SubProcessStep } from '@/types';
+import type { SubProcessStep, WorkflowProcess } from '@/types';
 import type { MarkdownInteractionSubmitPayload } from '@/components/markdown/types'
 import { useToolCallDisplayName } from '@/composables/chat/useToolCallDisplayName'
 import { formatElapsed, fmtFullTime, fmtRelativeTime, fmtDuration, fmtTokens, fmtTokensPerSec } from '@/utils/chat/format'
@@ -144,6 +145,7 @@ interface ToolCallItem {
   args: string
   result: string
   subProcess?: SubProcessStep[]
+  workflowProcess?: WorkflowProcess
   /** HITL 确认态（落库 confirmState）：approved=经授权执行（含一键授权）/ rejected=被拒绝 */
   confirmState?: 'approved' | 'rejected'
 }
@@ -173,7 +175,9 @@ const parsedToolCall = computed<ToolCallItem>(() => {
 })
 
 /** 工具是否失败（内容启发式：TOOL 消息无显式状态位，与子过程工具步共用判定） */
-const toolFailed = computed(() => isToolResultFailed(parsedToolCall.value?.result))
+const toolFailed = computed(() =>
+  parsedToolCall.value?.workflowProcess?.status === 'FAIL'
+  || isToolResultFailed(parsedToolCall.value?.result))
 
 // 请求参数/响应结果小节折叠态（默认都展开，可各自收起）
 const argsExpanded = ref(true)
@@ -488,6 +492,8 @@ const openPreview = (index: number) => {
               </div>
               <!-- 子智能体过程（公共组件，与实时卡片/日志页共用；在响应结果之前） -->
               <SubProcessSteps v-if="parsedToolCall.subProcess?.length" :steps="parsedToolCall.subProcess" />
+              <!-- 工作流最终过程（nodeExecutions 权威快照；实时完成与刷新历史同构） -->
+              <WorkflowProcessSteps v-if="parsedToolCall.workflowProcess" :process="parsedToolCall.workflowProcess" />
               <div v-if="parsedToolCall.result" class="chat-tool-section">
                 <div class="chat-tool-section-header">
                   <span class="chat-tool-section-label chat-tool-section-label--clickable" @click="resultExpanded = !resultExpanded">

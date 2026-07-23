@@ -30,7 +30,6 @@ const formRef = ref<FormInstance>()
 const loading = ref(false)
 
 /** 当前登录方式 tab: account | sso */
-const activeTab = ref<'account' | 'sso'>('account')
 
 /** 是否显示租户选择弹窗 */
 const showTenantModal = ref(false)

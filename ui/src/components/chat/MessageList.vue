@@ -3,26 +3,18 @@ import { computed } from 'vue'
 import MessageItem from './MessageItem.vue'
 import ToolCallItem from './ToolCallItem.vue'
 import DayDivider from './DayDivider.vue'
-import type { ConfirmFieldMeta, DisplayMessage } from '@/types'
+import type { ConfirmFieldMeta, DisplayMessage, WorkflowProcess } from '@/types'
 import type {FlatFileItem} from "@/composables/chat/useWorkspaceFiles.ts";
 import type { MarkdownInteractionSubmitPayload } from '@/components/markdown/types'
+import type { ToolProgressState } from '@/composables/chat/useChatStream'
 
 const props = defineProps<{
   messages: DisplayMessage[]
   agentHasResult?: boolean
-  toolCalls: Array<{ id: string; name: string; args: string; result?: string; elapsed?: number, finished?: boolean, needConfirm?: boolean, confirmFields?: ConfirmFieldMeta[], confirmSummary?: string, startTime?: number, subSteps?: Array<Record<string, unknown>> }>
+  toolCalls: Array<{ id: string; name: string; args: string; result?: string; elapsed?: number, finished?: boolean, executionStarted?: boolean, needConfirm?: boolean, confirmFields?: ConfirmFieldMeta[], confirmSummary?: string, startTime?: number, progress?: ToolProgressState, workflowProcess?: WorkflowProcess, subSteps?: Array<Record<string, unknown>> }>
   /** 会话 agent 是否绑定语音合成模型（透传给消息项的朗读按钮） */
   ttsEnabled?: boolean
 }>()
-
-/**
- * 排队态推导（串行执行语义）：第一个未完成项正在执行，其后的未完成项在排队。
- * 依据：数组顺序 = ToolCallStart 到达顺序 = 后端 concat 串行执行顺序；
- * 第 N 个 TOOL_FINISHED 到达即第 N+1 个开始执行，无需额外事件
- */
-const firstRunningIdx = computed(() =>
-  props.toolCalls.findIndex(t => !t.finished && t.result == null)
-)
 
 /**
  * 日期分隔：createdAt 的日期（前 10 位）与上一条不同处标记 dividerDay。
@@ -74,20 +66,22 @@ defineEmits<{
     </template>
     <TransitionGroup name="jelly">
       <ToolCallItem
-        v-for="(t, tIdx) in toolCalls"
+        v-for="t in toolCalls"
         :key="t.id"
         :id="t.id"
         :name="t.name"
         :args="t.args"
         :result="t.result"
         :elapsed="t.elapsed"
-        :loading="t.result == null && !t.finished"
+        :loading="t.result == null && !t.finished && t.executionStarted"
         :finished="t.finished"
-        :queued="!t.finished && t.result == null && firstRunningIdx >= 0 && tIdx > firstRunningIdx"
+        :queued="!t.finished && t.result == null && !t.executionStarted"
         :need-confirm="t.needConfirm"
         :confirm-fields="t.confirmFields"
         :confirm-summary="t.confirmSummary"
         :start-time="t.startTime"
+        :progress="t.progress"
+        :workflow-process="t.workflowProcess"
         :sub-steps="(t.subSteps as any)"
         @toolContent="(content: any) => $emit('toolContent', content)"
         @sub-confirm="$emit('subConfirm', $event)"

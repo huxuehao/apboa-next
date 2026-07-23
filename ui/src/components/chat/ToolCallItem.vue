@@ -3,10 +3,12 @@ import { computed, onUnmounted, ref, watch } from 'vue'
 import { CheckCircleOutlined } from '@ant-design/icons-vue'
 import { useToolCallDisplayName } from '@/composables/chat/useToolCallDisplayName'
 import SubProcessSteps from './SubProcessSteps.vue'
+import WorkflowProcessSteps from './WorkflowProcessSteps.vue'
 import ToolConfirmPanel from './confirm/ToolConfirmPanel.vue'
-import type { ConfirmFieldMeta, SubProcessStep } from '@/types'
+import type { ConfirmFieldMeta, SubProcessStep, WorkflowProcess } from '@/types'
 import { vStickBottom } from '@/utils/chat/stickBottom'
 import { formatElapsed } from '@/utils/chat/format'
+import type { ToolProgressState } from '@/composables/chat/useChatStream'
 
 const props = defineProps<{
   id: string,
@@ -15,9 +17,9 @@ const props = defineProps<{
   result?: string
   elapsed?: number
   loading?: boolean
-  /** 工具已真正执行完（TOOL_FINISHED 即时事件）——结果详情未到但状态与耗时已定格 */
+  /** 工具已真正执行完（TOOL_FINISHED 即时事件）——响应与耗时均已即时到达 */
   finished?: boolean
-  /** 串行排队中（前面还有未完成的工具，本工具尚未开始执行） */
+  /** 尚未获得后端实际执行调度 */
   queued?: boolean
   needConfirm?: boolean
   /** 待确认工具的参数字段元数据（随 TOOL_CONFIRM_REQUIRED / pending 下发，驱动确认表单） */
@@ -25,6 +27,10 @@ const props = defineProps<{
   /** 决策后业务摘要（定制确认卡提供，useChatStream 持有——组件会被 resume 续跑重建，不能本地存） */
   confirmSummary?: string
   startTime?: number
+  /** 工作流内部阶段（等待模型 / 生成 / 重试等） */
+  progress?: ToolProgressState
+  /** 工作流完成后的权威节点执行快照（TOOL_FINISHED 即时到达，并随 tool 消息持久化） */
+  workflowProcess?: WorkflowProcess
   /** 子智能体实时过程步骤（SUBAGENT_STEP 事件装配，与落库 subProcess 同构） */
   subSteps?: SubProcessStep[]
 }>()
@@ -69,6 +75,10 @@ const finishedElapsed = computed(() =>
   props.elapsed != null ? formatElapsed(props.elapsed) : ''
 )
 
+const isRetrying = computed(() => props.progress?.phase === 'MODEL_RETRYING')
+const isFailed = computed(() =>
+  props.progress?.phase === 'MODEL_FAILED' || props.workflowProcess?.status === 'FAIL')
+
 const emit = defineEmits<{
   (e: 'toolContent', value: any): void
   (e: 'subConfirm', value: { subToolUseId: string; approved: boolean }): void
@@ -84,6 +94,17 @@ const prettyRunningArgs = computed(() => {
   }
 })
 
+// 单工具完成即时响应（TOOL_FINISHED 携带，与整批结束后的 ToolCallResult 同源）
+const prettyRunningResult = computed(() => {
+  if (props.result == null) return ''
+  if (props.result === '') return '（空响应）'
+  try {
+    return JSON.stringify(JSON.parse(props.result), null, 2)
+  } catch {
+    return props.result
+  }
+})
+
 /**
  * 确认决策（§6.5）：仅记录决策，工具实际由后端 resume 续跑执行（天然带租户/MCP 上下文）。
  * input 为用户在确认 UI 中修改后的参数（未修改则缺省，后端沿用模型原始参数）；
@@ -96,11 +117,11 @@ const handleDecide = (v: { approved: boolean; input?: Record<string, unknown>; s
 
 <template>
   <div>
-    <div class="chat-tool-call" :class="{ 'chat-tool-call--loading': loading && !queued, 'chat-tool-call--queued': queued, 'chat-tool-call--finished': finished }">
+    <div class="chat-tool-call" :class="{ 'chat-tool-call--loading': loading && !queued, 'chat-tool-call--queued': queued, 'chat-tool-call--finished': finished, 'chat-tool-call--retrying': isRetrying, 'chat-tool-call--failed': isFailed }">
       <span class="chat-tool-call-dot"></span>
       <span class="chat-tool-call-label">
       <template v-if="finished">
-        已完成 {{ displayName }}<span v-if="finishedElapsed" class="chat-tool-call-elapsed"> · {{ finishedElapsed }}</span>
+        {{ isFailed ? '执行失败' : '已完成' }} {{ displayName }}<span v-if="finishedElapsed" class="chat-tool-call-elapsed"> · {{ finishedElapsed }}</span>
       </template>
       <template v-else-if="queued">
         等待执行 {{ displayName }}
@@ -109,9 +130,12 @@ const handleDecide = (v: { approved: boolean; input?: Record<string, unknown>; s
         等待授权 {{ displayName }}
       </template>
       <template v-else-if="loading">
-        正在执行 {{ displayName }}<span v-if="runningElapsed" class="chat-tool-call-elapsed"> · {{ runningElapsed }}</span>
+        {{ progress?.message || '正在执行' }} · {{ displayName }}<span v-if="runningElapsed" class="chat-tool-call-elapsed"> · {{ runningElapsed }}</span>
       </template>
     </span>
+    </div>
+    <div v-if="loading && progress?.detail && (isRetrying || isFailed)" class="chat-tool-call-progress-detail">
+      {{ progress.detail }}
     </div>
     <!-- HITL 确认面板：定制渲染器 → schema 通用表单 → JSON 兜底（决策/改参经 toolContent 冒泡） -->
     <div v-if="needConfirm" class="chat-tool-call-confirm">
@@ -121,8 +145,8 @@ const handleDecide = (v: { approved: boolean; input?: Record<string, unknown>; s
     <div v-else-if="confirmSummary" class="chat-tool-call-summary">
       <CheckCircleOutlined class="chat-tool-call-summary-icon" /> 已确认 {{ confirmSummary }}
     </div>
-    <!-- 执行中实时详情：请求参数（流式增量）+ 子智能体过程步骤（逐步出现） -->
-    <div v-if="loading && !needConfirm && (prettyRunningArgs || subSteps?.length)" class="chat-tool-call-live">
+    <!-- 实时详情：执行中/刚完成均保留请求参数；单工具完成即展示响应，不等同批其他工具 -->
+    <div v-if="(loading || finished) && !needConfirm && (prettyRunningArgs || prettyRunningResult || subSteps?.length || workflowProcess)" class="chat-tool-call-live">
       <div v-if="prettyRunningArgs" class="chat-tool-section">
         <div class="chat-tool-section-header">
           <span class="chat-tool-section-label">请求参数</span>
@@ -130,6 +154,13 @@ const handleDecide = (v: { approved: boolean; input?: Record<string, unknown>; s
         <pre v-stick-bottom class="chat-tool-item-code">{{ prettyRunningArgs }}</pre>
       </div>
       <SubProcessSteps v-if="subSteps?.length" :steps="subSteps" @sub-confirm="emit('subConfirm', $event)" />
+      <WorkflowProcessSteps v-if="workflowProcess" :process="workflowProcess" />
+      <div v-if="prettyRunningResult" class="chat-tool-section">
+        <div class="chat-tool-section-header">
+          <span class="chat-tool-section-label">响应结果</span>
+        </div>
+        <pre class="chat-tool-item-code">{{ prettyRunningResult }}</pre>
+      </div>
     </div>
   </div>
 </template>
@@ -142,19 +173,41 @@ const handleDecide = (v: { approved: boolean; input?: Record<string, unknown>; s
   font-variant-numeric: tabular-nums;
 }
 
-/* 完成态：绿点定格（结果详情未到，但工具已真正跑完） */
+/* 完成态：绿点定格（响应已由 TOOL_FINISHED 同步带回） */
 .chat-tool-call--finished .chat-tool-call-dot {
   background: #52c41a;
   animation: none;
 }
 
-/* 排队态：灰点不动（串行执行，前面的工具还没跑完） */
+/* 排队态：灰点不动（尚未获得后端实际执行调度） */
 .chat-tool-call--queued .chat-tool-call-dot {
   background: #d9d9d9;
   animation: none;
 }
 .chat-tool-call--queued .chat-tool-call-label {
   color: rgba(0, 0, 0, 0.45);
+}
+
+.chat-tool-call--retrying .chat-tool-call-dot {
+  background: #faad14;
+}
+.chat-tool-call--retrying .chat-tool-call-label {
+  color: #ad6800;
+}
+.chat-tool-call--failed .chat-tool-call-dot {
+  background: #ff4d4f;
+}
+.chat-tool-call--failed .chat-tool-call-label {
+  color: #cf1322;
+}
+.chat-tool-call-progress-detail {
+  max-width: 680px;
+  padding: 0 10px 3px 22px;
+  color: rgba(0, 0, 0, 0.45);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* 执行中实时详情区：与完成后工具卡片体的内边距对齐 */

@@ -2,6 +2,7 @@ package com.hxh.apboa.node.agent;
 
 import com.hxh.apboa.common.consts.NodeConst;
 import com.hxh.apboa.common.enums.McpToolExposureMode;
+import com.hxh.apboa.common.enums.ToolChoiceStrategy;
 import com.hxh.apboa.common.util.FuncUtils;
 import com.hxh.apboa.node.base.EnhancedNode;
 import com.hxh.apboa.node.base.NodeOutput;
@@ -72,6 +73,9 @@ public class AgentNode extends EnhancedNode {
         output.addExecutionContext("skillPackageIds", config.getSkillPackageIds());
         output.addExecutionContext("toolIds", config.getToolIds());
         output.addExecutionContext("mcps", config.getMcps());
+        output.addExecutionContext("toolChoiceStrategy", result.getToolChoiceStrategy());
+        output.addExecutionContext("effectiveMaxIterations", result.getEffectiveMaxIterations());
+        output.addExecutionContext("modelRequests", result.getModelRequests());
         output.addExecutionContext("usage", result.getUsage());
         output.addExecutionContext("generateReason", result.getGenerateReason());
         output.markComplete();
@@ -115,6 +119,7 @@ public class AgentNode extends EnhancedNode {
         request.setSkillPackageIds(config.getSkillPackageIds());
         request.setToolIds(config.getToolIds());
         request.setMcps(config.getMcps());
+        request.setToolChoiceStrategy(config.getToolChoiceStrategy());
         request.setMaxIterations(config.getMaxIterations());
         request.setStructuredOutputEnabled(config.isStructuredOutputEnabled());
         request.setStructuredOutput(config.getStructuredOutput());
@@ -149,6 +154,14 @@ public class AgentNode extends EnhancedNode {
         }
         if (config.getMaxIterations() <= 0) {
             return VerifyResult.invalid(new VerifyFail("maxIterations", "最大迭代次数必须大于0"));
+        }
+        if (config.getToolChoiceStrategy() == null) {
+            return VerifyResult.invalid(new VerifyFail("toolChoiceStrategy", "工具选择策略不能为空"));
+        }
+        if (!List.of(ToolChoiceStrategy.AUTO, ToolChoiceStrategy.NONE)
+                .contains(config.getToolChoiceStrategy())) {
+            return VerifyResult.invalid(new VerifyFail(
+                    "toolChoiceStrategy", "工作流智能体仅支持 AUTO 或 NONE"));
         }
         if (config.isModelParamsOverrideEnabled()
                 && (config.getModelParamsOverride() == null
