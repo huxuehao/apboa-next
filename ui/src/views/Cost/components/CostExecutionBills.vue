@@ -1,7 +1,8 @@
 <script setup lang="ts">
 /**
  * 成本中心统一执行账单：同一成本流水按根执行类型唯一归属。
- * 当前支持对话与工作流，SCHEDULED_JOB 类型契约保留供后续接入。
+ * 支持对话、工作流与定时任务三类：定时任务单点击按执行体跳转——
+ * 智能体型（有 sessionId）进会话明细，工作流型进运行明细。
  *
  * @author huxuehao
  */
@@ -39,6 +40,7 @@ const pageTokens = computed(() => rows.value.reduce(
 const pageLlmCalls = computed(() => rows.value.reduce((sum, row) => sum + Number(row.llmCallCount || 0), 0))
 const pageChatBills = computed(() => rows.value.filter(row => row.billType === 'CHAT').length)
 const pageWorkflowBills = computed(() => rows.value.filter(row => row.billType === 'WORKFLOW').length)
+const pageScheduledBills = computed(() => rows.value.filter(row => row.billType === 'SCHEDULED_JOB').length)
 const pageUnpricedRuns = computed(() => rows.value.reduce((sum, row) => sum + Number(row.unpricedRuns || 0), 0))
 
 async function loadData() {
@@ -91,11 +93,20 @@ function channelLabel(channel: string | null) {
   if (channel === 'WEB') return '网页对话'
   if (channel === 'CHAT_KEY') return '分享对话'
   if (channel === 'SK_API') return 'API 调用'
+  if (channel === 'SCHEDULED') return '定时调度'
   return '未标记入口'
 }
 
 function openBill(record: CostExecutionBillRow) {
-  if (record.billType === 'SCHEDULED_JOB') return
+  if (record.billType === 'SCHEDULED_JOB') {
+    // 定时任务单按执行体跳转：智能体型执行落在会话（有 sessionId），工作流型落在运行
+    if (record.sessionId) {
+      emit('openDetail', 'CHAT', String(record.sessionId))
+    } else {
+      emit('openDetail', 'WORKFLOW', record.referenceId)
+    }
+    return
+  }
   emit('openDetail', record.billType, record.referenceId)
 }
 
@@ -132,7 +143,7 @@ const columns = [
       </div>
       <div class="summary-item" :class="{ warning: pageUnpricedRuns > 0 }">
         <div class="summary-label">本页类型构成</div>
-        <div class="summary-value compact">{{ pageChatBills }}<span class="summary-unit">对话</span> · {{ pageWorkflowBills }}<span class="summary-unit">工作流</span></div>
+        <div class="summary-value compact">{{ pageChatBills }}<span class="summary-unit">对话</span> · {{ pageWorkflowBills }}<span class="summary-unit">工作流</span> · {{ pageScheduledBills }}<span class="summary-unit">定时</span></div>
         <div class="summary-note">
           <span v-if="pageUnpricedRuns > 0">另有 {{ pageUnpricedRuns }} 条模型用量未配价</span>
           <span v-else>本页模型用量均已计价</span>
@@ -144,7 +155,7 @@ const columns = [
       <div class="bills-toolbar">
         <div>
           <div class="toolbar-title">执行消耗明细</div>
-          <div class="toolbar-hint">对话按会话聚合，工作流按单次运行聚合；点击进入对应类型的详情。</div>
+          <div class="toolbar-hint">对话按会话聚合，工作流按单次运行聚合，定时任务按单次执行聚合；点击进入对应类型的详情。</div>
         </div>
         <ASegmented v-model:value="orderBy" :options="orderOptions" />
       </div>
@@ -171,7 +182,7 @@ const columns = [
         }"
         :custom-row="(record: CostExecutionBillRow) => ({
           onClick: () => openBill(record),
-          class: record.billType === 'SCHEDULED_JOB' ? '' : 'clickable-row'
+          class: 'clickable-row'
         })"
         @change="(p: { current?: number; pageSize?: number }) => { current = p.current || 1; size = p.pageSize || 10 }"
       >

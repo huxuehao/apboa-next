@@ -175,6 +175,7 @@ const channelMeta: Record<string, { label: string; description: string }> = {
   CHAT_KEY: { label: '外嵌页面', description: '通过 Chat Key 外嵌页面进入' },
   SK_API: { label: 'API 调用', description: '通过 API Key 接口进入' },
   STANDALONE: { label: '直接运行', description: '从工作流编辑器运行或调试，不经过对话入口' },
+  SCHEDULED: { label: '定时调度', description: '自动化定时任务触发的执行（智能体会话与工作流）' },
   UNKNOWN: { label: '历史未标记', description: '渠道字段上线前产生的存量流水' }
 }
 

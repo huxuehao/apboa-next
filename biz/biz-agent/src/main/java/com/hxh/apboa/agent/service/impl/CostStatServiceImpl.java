@@ -166,11 +166,15 @@ public class CostStatServiceImpl implements CostStatService {
         if (rows.isEmpty()) {
             return;
         }
+        // 定时任务单按执行体复用两类组装：智能体型（有 sessionId）走会话补全，
+        // 工作流型（referenceId=run id）走运行快照补全
         List<Map<String, Object>> chatRows = rows.stream()
-                .filter(r -> "CHAT".equals(String.valueOf(r.get("billType"))))
+                .filter(r -> "CHAT".equals(String.valueOf(r.get("billType")))
+                        || ("SCHEDULED_JOB".equals(String.valueOf(r.get("billType"))) && asLong(r.get("sessionId")) > 0))
                 .collect(Collectors.toList());
         List<Map<String, Object>> workflowRows = rows.stream()
-                .filter(r -> "WORKFLOW".equals(String.valueOf(r.get("billType"))))
+                .filter(r -> "WORKFLOW".equals(String.valueOf(r.get("billType")))
+                        || ("SCHEDULED_JOB".equals(String.valueOf(r.get("billType"))) && asLong(r.get("sessionId")) == 0))
                 .collect(Collectors.toList());
 
         Map<Long, String> userNames = batchUserNames(

@@ -84,7 +84,7 @@ const internalBizTypeMeta: Record<string, { label: string; color: string; descri
   SCHEDULED_JOB: {
     label: '定时任务',
     color: 'gold',
-    description: '由定时任务触发的内部模型运行，没有独立聊天回复，但真实产生 Token 和成本。',
+    description: '由自动化定时任务发起的对话执行，回复由任务自动触发生成；消耗计入定时任务场景，可在执行账单按任务追溯。',
     rowClass: 'internal-scheduled-row'
   }
 }

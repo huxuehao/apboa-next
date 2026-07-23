@@ -57,6 +57,14 @@ public class UsageRecordWriter {
             int iterationCount = meta.path("iterationCount").asInt(1);
             Long durationMs = meta.hasNonNull("durationMs") ? meta.get("durationMs").asLong() : null;
             String channel = meta.hasNonNull("channel") ? meta.get("channel").asText() : null;
+            // 定时任务触发的会话执行：场景改记 SCHEDULED_JOB（与 CHAT 区分，"花在哪"口径），
+            // biz 契约与 WORKFLOW 对齐——biz_id=任务ID、biz_run_id=会话ID（一次执行一会话）、
+            // biz_label=任务名快照。用户在同一会话追聊时 meta 无任务标识，仍记 CHAT
+            String scheduledJobId = meta.hasNonNull("scheduledJobId") ? meta.get("scheduledJobId").asText() : null;
+            String bizType = scheduledJobId != null ? ChatUsageRecord.BIZ_SCHEDULED_JOB : ChatUsageRecord.BIZ_CHAT;
+            String bizRunId = scheduledJobId != null ? String.valueOf(message.getSessionId()) : null;
+            String bizLabel = scheduledJobId != null && meta.hasNonNull("scheduledJobName")
+                    ? meta.get("scheduledJobName").asText() : null;
 
             SessionOwner owner = jdbcTemplate.query(
                     "SELECT s.agent_id, s.user_id, a.name AS agent_name FROM chat_session s "
@@ -75,12 +83,14 @@ public class UsageRecordWriter {
 
             jdbcTemplate.update(
                     "INSERT INTO chat_usage_record (tenant_id, session_id, message_id, agent_id, agent_label, user_id, "
-                            + "model_config_id, model_label, provider_type, biz_type, channel, "
+                            + "model_config_id, model_label, provider_type, biz_type, "
+                            + "biz_id, biz_run_id, biz_label, channel, "
                             + "input_tokens, output_tokens, iteration_count, duration_ms, "
                             + "input_price, output_price, cost, created_at) "
-                            + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                            + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     message.getTenantId(), message.getSessionId(), messageId, owner.agentId(), owner.agentName(), owner.userId(),
-                    modelConfigId, modelLabel, price.providerType(), "CHAT", channel,
+                    modelConfigId, modelLabel, price.providerType(), bizType,
+                    scheduledJobId, bizRunId, bizLabel, channel,
                     inputTokens, outputTokens, iterationCount, durationMs,
                     // 时间取应用侧（与 chat_message.created_at 同源同时区）：容器 mysql 常为 UTC，
                     // 用 SQL NOW() 会与消息时间差 8 小时，按天统计错位

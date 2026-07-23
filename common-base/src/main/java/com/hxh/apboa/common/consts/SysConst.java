@@ -27,6 +27,8 @@ public class SysConst {
     public static final String CHANNEL_SK_API = "SK_API";
     /** 非对话渠道：工作流独立/调试运行等无认证入口的消耗（区别于渠道标记上线前的 NULL=历史未标记） */
     public static final String CHANNEL_STANDALONE = "STANDALONE";
+    /** 非对话渠道：自动化定时任务触发（智能体会话与工作流通用），区分任务消耗与人工触发消耗 */
+    public static final String CHANNEL_SCHEDULED = "SCHEDULED";
 
     /**
      * token过期时间（6小时）

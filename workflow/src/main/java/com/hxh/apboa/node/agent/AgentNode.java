@@ -111,6 +111,18 @@ public class AgentNode extends EnhancedNode {
         request.setWorkflowInstanceId(context.getWorkflowInstanceId());
         Object workflowName = context.getVariables().getVariable("workflowName");
         request.setWorkflowName(workflowName != null ? workflowName.toString() : null);
+        Object triggerChannel = context.getVariables().getVariable("triggerChannel");
+        request.setTriggerChannel(triggerChannel != null ? triggerChannel.toString() : null);
+        Object userId = context.getVariables().getVariable("userId");
+        if (userId instanceof Long id) {
+            request.setTriggerUserId(id);
+        } else if (userId != null) {
+            try {
+                request.setTriggerUserId(Long.parseLong(userId.toString()));
+            } catch (NumberFormatException ignored) {
+                // 变量被业务覆盖为非数值时放弃归属，不影响执行
+            }
+        }
         request.setNodeId(getId());
         request.setNodeName(getName());
         request.setModelConfigId(config.getModelConfigId());

@@ -128,8 +128,13 @@ public abstract class QuartzJob implements Job {
             Date endTime = new Date();
             // 计算执行时长
             long duration = (endTimeMillis - startTimeMillis) / 1000;
-            // 记录日志
-            jobLog = new JobLog(identity, startTime, endTime, duration, "任务执行成功!\r\n" + (runMsg != null? runMsg.toString():""), QuartzResult.STATUS_SUCCESS.value());
+            // 记录日志：doJob 以返回 Boolean.FALSE 表达"失败但不中断调度"（内部已 catch 异常），
+            // 此处必须按失败落日志，否则执行失败的任务在日志表里恒为成功（假成功）
+            if (Boolean.FALSE.equals(result)) {
+                jobLog = new JobLog(identity, startTime, endTime, duration, "任务执行失败!\r\n" + (runMsg != null ? runMsg.toString() : "执行器返回失败，原因见服务日志"), QuartzResult.STATUS_FAIL.value());
+            } else {
+                jobLog = new JobLog(identity, startTime, endTime, duration, "任务执行成功!\r\n" + (runMsg != null ? runMsg.toString() : ""), QuartzResult.STATUS_SUCCESS.value());
+            }
         } catch (Exception ex) {
             // 结束时间毫秒
             long endTimeMillis = System.currentTimeMillis();

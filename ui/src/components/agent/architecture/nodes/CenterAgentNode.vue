@@ -7,7 +7,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { Handle, Position } from '@vue-flow/core'
-import {ClockCircleOutlined, RobotOutlined} from '@ant-design/icons-vue'
+import {RobotOutlined} from '@ant-design/icons-vue'
 import type { CenterAgentNodeData } from '../types'
 
 /**
@@ -46,13 +46,6 @@ const descriptionText = computed(() => {
         <div class="node-avatar">
           <RobotOutlined />
         </div>
-        <span
-          v-if="data.agent?.jobInfo"
-          class="avatar-corner-badge"
-          :class="{ 'badge-active': data.agent?.jobInfo?.enabled && data.agent.enabled }"
-        >
-          <ClockCircleOutlined />
-        </span>
       </div>
       <div class="node-title">
         <div class="node-name">{{ data.agent.name }}</div>

@@ -192,6 +192,15 @@ public class WorkflowAgentNodeExecutor implements AgentNodeExecutor {
                 // 渠道标记上线前的历史流水混在「未标记（历史）」一桶
                 channel = SysConst.CHANNEL_STANDALONE;
             }
+            // 触发渠道显式下传时优先（定时任务=SCHEDULED；经 run 入口→变量上下文→节点请求，
+            // 不能反查 quartz_job_records——关联在 run 结束后才写，节点记账期读不到）
+            if (request.getTriggerChannel() != null) {
+                channel = request.getTriggerChannel();
+            }
+            // 定时执行线程无登录上下文（UserUtils 取不到），归属人从下传的任务创建人补齐
+            if (userId == null && request.getTriggerUserId() != null) {
+                userId = request.getTriggerUserId();
+            }
             usageRecordWriter.writeWorkflowRun(tenantId, request.getWorkflowId(), request.getWorkflowInstanceId(),
                     request.getWorkflowName(), request.getNodeId(), request.getNodeName(), sessionId,
                     mainAgentId, agentLabel, userId,

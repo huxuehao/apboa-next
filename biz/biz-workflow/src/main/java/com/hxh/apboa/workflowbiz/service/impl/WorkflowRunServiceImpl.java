@@ -116,6 +116,11 @@ public class WorkflowRunServiceImpl extends ServiceImpl<WorkflowRunMapper, Workf
         // 节点执行期按 instanceId 反查 workflow_run 读不到，只能经变量上下文带入
         context.getVariables().storeVariable("workflowId", String.valueOf(workflow.getId()));
         context.getVariables().storeVariable("workflowName", workflow.getName());
+        // 触发渠道下传（同为记账快照；定时任务=SCHEDULED）。反查 quartz_job_records
+        // 同样存在时序问题（关联在 run 结束后才写），必须正向带入
+        if (request != null && request.getChannel() != null) {
+            context.getVariables().storeVariable("triggerChannel", request.getChannel());
+        }
 
         if (userDetail != null) {
             context.getVariables().storeVariable("tenantId", userDetail.getTenantId());

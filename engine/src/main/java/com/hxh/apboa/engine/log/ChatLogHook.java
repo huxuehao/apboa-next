@@ -643,6 +643,16 @@ public class ChatLogHook implements Hook {
         if (modelLabel != null) {
             meta.put("modelLabel", modelLabel);
         }
+        // 定时任务归因（AgentScheduler 构建期登记）：writeChatRun 检出后主链流水
+        // 记 SCHEDULED_JOB 场景并落 biz_id/biz_label，成本可按任务聚合
+        Object scheduledJobId = extractAgentMeta(event, "scheduledJobId");
+        if (scheduledJobId != null) {
+            meta.put("scheduledJobId", String.valueOf(scheduledJobId));
+            Object scheduledJobName = extractAgentMeta(event, "scheduledJobName");
+            if (scheduledJobName != null) {
+                meta.put("scheduledJobName", scheduledJobName);
+            }
+        }
         // 本次 run 的认证渠道（WEB/CHAT_KEY/SK_API，AguiRequestProcessor 登记）：
         // 随 meta 透传给成本流水；前端不消费该字段
         String channel = ChatChannelHolder.get(extractThreadId(event));

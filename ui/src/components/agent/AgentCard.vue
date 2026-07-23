@@ -5,7 +5,7 @@
  */
 <script setup lang="ts">
 import { computed } from 'vue'
-import { EllipsisOutlined, ClockCircleOutlined } from '@ant-design/icons-vue'
+import { EllipsisOutlined } from '@ant-design/icons-vue'
 import agentAvatar from '@/assets/avatar/agent.png'
 import type { AgentDefinitionVO } from '@/types'
 import { useAccountStore } from '@/stores'
@@ -120,13 +120,6 @@ function handleMenuClick({ key }: { key: string }) {
         <div class="card-avatar flex-center" :class="{ disabled: !data.enabled }">
           <img :src="agentAvatar" alt="agent" />
         </div>
-        <span
-          v-if="data?.jobInfo"
-          class="avatar-corner-badge"
-          :class="{ 'badge-active': data?.jobInfo?.enabled && data.enabled }"
-        >
-          <ClockCircleOutlined />
-        </span>
       </div>
       <div class="card-name flex-1 truncate" :title="data.name" @click="handleTitleClick">
         {{ data.name }}

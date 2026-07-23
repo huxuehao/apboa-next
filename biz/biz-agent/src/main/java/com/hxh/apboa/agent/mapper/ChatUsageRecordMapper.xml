@@ -90,9 +90,10 @@
 
     <!-- 会话账单分页：按 session 聚合；models 为该会话用过的模型 label 去重串 -->
     <select id="pageSessionBills" resultType="java.util.Map">
+        <!-- 身份行扩含 SCHEDULED_JOB：定时任务触发的会话主链行记该场景，与 CHAT 同为"会话身份"来源 -->
         SELECT session_id                                                                               AS sessionId,
-               MAX(CASE WHEN biz_type = 'CHAT' THEN agent_id END)                                        AS agentId,
-               SUBSTRING_INDEX(GROUP_CONCAT(CASE WHEN biz_type = 'CHAT' THEN agent_label END
+               MAX(CASE WHEN biz_type IN ('CHAT', 'SCHEDULED_JOB') THEN agent_id END)                    AS agentId,
+               SUBSTRING_INDEX(GROUP_CONCAT(CASE WHEN biz_type IN ('CHAT', 'SCHEDULED_JOB') THEN agent_label END
                    ORDER BY id DESC SEPARATOR '\n'), '\n', 1)                                           AS agentLabel,
                MAX(user_id)                                                                             AS userId,
                COUNT(*)                                                                                 AS runCount,
@@ -100,7 +101,8 @@
                SUM(CASE WHEN message_id IS NULL THEN 1 ELSE 0 END)                                      AS internalRunCount,
                SUM(CASE WHEN message_id IS NULL AND biz_type = 'SUB_AGENT' THEN 1 ELSE 0 END)           AS subAgentRunCount,
                SUM(CASE WHEN message_id IS NULL AND biz_type = 'WORKFLOW' THEN 1 ELSE 0 END)            AS workflowRunCount,
-               SUM(CASE WHEN message_id IS NULL AND biz_type = 'SCHEDULED_JOB' THEN 1 ELSE 0 END)       AS scheduledJobRunCount,
+               <!-- 定时执行主链行有真实回复（message_id 非空），按行计执行次数而非内部运行 -->
+               SUM(CASE WHEN biz_type = 'SCHEDULED_JOB' THEN 1 ELSE 0 END)                              AS scheduledJobRunCount,
                SUM(CASE WHEN message_id IS NULL AND (biz_type IS NULL OR biz_type NOT IN ('SUB_AGENT',
                    'WORKFLOW', 'SCHEDULED_JOB')) THEN 1 ELSE 0 END)                                      AS otherInternalRunCount,
                IFNULL(SUM(iteration_count), 0)                                                          AS llmCallCount,
@@ -125,43 +127,57 @@
       统一执行账单：每条成本流水只归属一个账单类型，避免会话与工作流重复计费。
       CHAT/SUB_AGENT 归入会话；WORKFLOW 按 biz_run_id 归入工作流执行。
       旧工作流流水没有 biz_run_id，只能退化为一条流水一行并显式标记 legacy。
-      SCHEDULED_JOB 的通用关联字段已预留，本期暂不纳入列表。
+      SCHEDULED_JOB 账单（第三类）：
+      - 智能体型定时执行：主链行 biz_type=SCHEDULED_JOB（referenceId=会话ID，一次执行一会话），
+        执行期间的子智能体行按 channel=SCHEDULED 一并归入；用户事后在同一会话追聊的
+        CHAT/WEB 行仍归会话账单——同一会话可各出一张定时单与对话单，流水不重复计费。
+      - 工作流型定时执行：节点行保持 WORKFLOW 场景（工作流账单口径不破坏），
+        经 quartz_job_records（record_id=run id）行级判定改挂 SCHEDULED_JOB 账单类型。
+        该关联表无 tenant_id（拦截器忽略清单内），租户隔离由主表条件保证。
     -->
     <select id="pageExecutionBills" resultType="java.util.Map">
         SELECT CONCAT(grouped.billType, ':', grouped.referenceId)                                      AS billId,
                grouped.*
         FROM (
-            SELECT CASE WHEN biz_type = 'WORKFLOW' THEN 'WORKFLOW' ELSE 'CHAT' END                     AS billType,
-                   CASE WHEN biz_type = 'WORKFLOW'
-                        THEN COALESCE(biz_run_id, CONCAT('legacy-', id))
-                        ELSE CAST(session_id AS CHAR) END                                               AS referenceId,
-                   MAX(session_id)                                                                     AS sessionId,
-                   MAX(biz_id)                                                                         AS workflowId,
-                   SUBSTRING_INDEX(GROUP_CONCAT(COALESCE(biz_label, agent_label)
-                       ORDER BY id DESC SEPARATOR '\n'), '\n', 1)                                      AS titleSnapshot,
-                   MAX(CASE WHEN biz_type = 'CHAT' THEN agent_id END)                                  AS agentId,
-                   SUBSTRING_INDEX(GROUP_CONCAT(CASE WHEN biz_type = 'CHAT' THEN agent_label END
-                       ORDER BY id DESC SEPARATOR '\n'), '\n', 1)                                      AS agentLabel,
-                   MAX(user_id)                                                                        AS userId,
+            SELECT CASE WHEN r.biz_type = 'SCHEDULED_JOB'
+                            OR (r.biz_type = 'SUB_AGENT' AND r.channel = 'SCHEDULED')
+                            OR (r.biz_type = 'WORKFLOW' AND qjr.job_id IS NOT NULL) THEN 'SCHEDULED_JOB'
+                        WHEN r.biz_type = 'WORKFLOW' THEN 'WORKFLOW'
+                        ELSE 'CHAT' END                                                                 AS billType,
+                   CASE WHEN r.biz_type = 'WORKFLOW'
+                        THEN COALESCE(r.biz_run_id, CONCAT('legacy-', r.id))
+                        ELSE CAST(r.session_id AS CHAR) END                                             AS referenceId,
+                   MAX(r.session_id)                                                                   AS sessionId,
+                   MAX(CASE WHEN r.biz_type = 'WORKFLOW' THEN r.biz_id END)                             AS workflowId,
+                   COALESCE(MAX(CASE WHEN r.biz_type = 'SCHEDULED_JOB' THEN r.biz_id END),
+                            CAST(MAX(qjr.job_id) AS CHAR))                                              AS scheduledJobId,
+                   SUBSTRING_INDEX(GROUP_CONCAT(COALESCE(r.biz_label, r.agent_label)
+                       ORDER BY r.id DESC SEPARATOR '\n'), '\n', 1)                                    AS titleSnapshot,
+                   MAX(CASE WHEN r.biz_type IN ('CHAT', 'SCHEDULED_JOB') THEN r.agent_id END)           AS agentId,
+                   SUBSTRING_INDEX(GROUP_CONCAT(CASE WHEN r.biz_type IN ('CHAT', 'SCHEDULED_JOB')
+                       THEN r.agent_label END ORDER BY r.id DESC SEPARATOR '\n'), '\n', 1)             AS agentLabel,
+                   MAX(r.user_id)                                                                      AS userId,
                    COUNT(*)                                                                            AS runCount,
-                   SUM(CASE WHEN message_id IS NOT NULL THEN 1 ELSE 0 END)                             AS visibleReplyCount,
-                   SUM(CASE WHEN message_id IS NULL AND biz_type = 'SUB_AGENT' THEN 1 ELSE 0 END)      AS internalRunCount,
-                   SUM(CASE WHEN biz_type = 'SUB_AGENT' THEN 1 ELSE 0 END)                             AS subAgentRunCount,
-                   IFNULL(SUM(iteration_count), 0)                                                     AS llmCallCount,
-                   IFNULL(SUM(input_tokens), 0)                                                        AS inputTokens,
-                   IFNULL(SUM(output_tokens), 0)                                                       AS outputTokens,
-                   IFNULL(SUM(cost), 0)                                                                AS cost,
-                   SUM(CASE WHEN cost IS NULL THEN 1 ELSE 0 END)                                       AS unpricedRuns,
-                   GROUP_CONCAT(DISTINCT model_label ORDER BY model_label SEPARATOR ',')               AS models,
-                   SUBSTRING_INDEX(GROUP_CONCAT(channel ORDER BY id DESC SEPARATOR '\n'), '\n', 1)    AS channel,
-                   IFNULL(SUM(duration_ms), 0)                                                         AS durationMs,
-                   MAX(created_at)                                                                     AS lastActiveAt,
-                   MAX(CASE WHEN biz_type = 'WORKFLOW' AND biz_run_id IS NULL THEN 1 ELSE 0 END)       AS legacy
-            FROM chat_usage_record
-            WHERE created_at >= #{start} AND created_at &lt; #{endExclusive}
-              AND ((biz_type IN ('CHAT', 'SUB_AGENT') AND session_id IS NOT NULL)
-                   OR biz_type = 'WORKFLOW')
-            <if test="agentId != null">AND agent_id = #{agentId}</if>
+                   SUM(CASE WHEN r.message_id IS NOT NULL THEN 1 ELSE 0 END)                           AS visibleReplyCount,
+                   SUM(CASE WHEN r.message_id IS NULL AND r.biz_type = 'SUB_AGENT' THEN 1 ELSE 0 END)  AS internalRunCount,
+                   SUM(CASE WHEN r.biz_type = 'SUB_AGENT' THEN 1 ELSE 0 END)                           AS subAgentRunCount,
+                   IFNULL(SUM(r.iteration_count), 0)                                                   AS llmCallCount,
+                   IFNULL(SUM(r.input_tokens), 0)                                                      AS inputTokens,
+                   IFNULL(SUM(r.output_tokens), 0)                                                     AS outputTokens,
+                   IFNULL(SUM(r.cost), 0)                                                              AS cost,
+                   SUM(CASE WHEN r.cost IS NULL THEN 1 ELSE 0 END)                                     AS unpricedRuns,
+                   GROUP_CONCAT(DISTINCT r.model_label ORDER BY r.model_label SEPARATOR ',')           AS models,
+                   SUBSTRING_INDEX(GROUP_CONCAT(r.channel ORDER BY r.id DESC SEPARATOR '\n'), '\n', 1) AS channel,
+                   IFNULL(SUM(r.duration_ms), 0)                                                       AS durationMs,
+                   MAX(r.created_at)                                                                   AS lastActiveAt,
+                   MAX(CASE WHEN r.biz_type = 'WORKFLOW' AND r.biz_run_id IS NULL THEN 1 ELSE 0 END)   AS legacy
+            FROM chat_usage_record r
+            LEFT JOIN quartz_job_records qjr
+                   ON r.biz_type = 'WORKFLOW' AND qjr.record_id = r.biz_run_id
+            WHERE r.created_at >= #{start} AND r.created_at &lt; #{endExclusive}
+              AND ((r.biz_type IN ('CHAT', 'SUB_AGENT', 'SCHEDULED_JOB') AND r.session_id IS NOT NULL)
+                   OR r.biz_type = 'WORKFLOW')
+            <if test="agentId != null">AND r.agent_id = #{agentId}</if>
             GROUP BY billType, referenceId
         ) grouped
         <choose>

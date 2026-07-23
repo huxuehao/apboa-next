@@ -24,6 +24,15 @@ public class AgentNodeRequest {
      * 工作流名（成本流水归属快照用；经变量上下文下传，可能为 null）
      */
     private String workflowName;
+    /**
+     * 触发渠道（成本流水归因用；经变量上下文下传，定时任务=SCHEDULED，其余场景 null）
+     */
+    private String triggerChannel;
+    /**
+     * 发起人（成本流水归属用；经变量上下文下传。定时执行线程无登录上下文，
+     * 执行器的 UserUtils 兜底取不到值，靠此字段带入任务创建人）
+     */
+    private Long triggerUserId;
     private String nodeId;
     private String nodeName;
     private Long modelConfigId;

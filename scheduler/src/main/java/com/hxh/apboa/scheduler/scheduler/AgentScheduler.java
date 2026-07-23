@@ -1,6 +1,7 @@
 package com.hxh.apboa.scheduler.scheduler;
 
 import com.hxh.apboa.agent.service.ChatSessionService;
+import com.hxh.apboa.common.consts.SysConst;
 import com.hxh.apboa.common.dto.ChatSessionCreateDTO;
 import com.hxh.apboa.common.enums.AgentType;
 import com.hxh.apboa.common.util.AgentMetadataStore;
@@ -12,7 +13,9 @@ import com.hxh.apboa.common.wrapper.AgentJobWrapper;
 import com.hxh.apboa.engine.agent.AgentBuilderWrapper;
 import com.hxh.apboa.engine.agent.IAgentFactory;
 import com.hxh.apboa.engine.agui.AgentContext;
+import com.hxh.apboa.engine.log.telemetry.ChatChannelHolder;
 import com.hxh.apboa.scheduler.consts.JobConst;
+import com.hxh.apboa.scheduler.core.enums.QuartzEnum;
 import com.hxh.apboa.scheduler.core.job.QuartzJob;
 import io.agentscope.core.ReActAgent;
 import io.agentscope.core.agent.Agent;
@@ -41,8 +44,11 @@ public class AgentScheduler extends QuartzJob {
         AgentJobWrapper wrapper = getDataMap(JobConst.DATA_MAP_KEY, AgentJobWrapper.class);
         AccountVO userInfo = getDataMap(JobConst.USER_INFO_KEY, AccountVO.class);
 
-        // 参数校验
-        if (!validateJobParameters(wrapper, tenantId, userInfo)) {
+        // 参数校验（失败原因写入 RUN_MSG，随 job_log 落库）
+        String invalidReason = validateJobParameters(wrapper, tenantId, userInfo);
+        if (invalidReason != null) {
+            log.warn("Agent job parameter invalid: {}", invalidReason);
+            putRunMsg("参数校验失败：" + invalidReason);
             return false;
         }
 
@@ -53,9 +59,13 @@ public class AgentScheduler extends QuartzJob {
             ChatSessionVO session = createChatSession(agentId, wrapper.getUserPrompt(), userInfo);
             if (session == null) {
                 log.error("Failed to create chat session for agent: {}", agentId);
+                putRunMsg("创建会话失败，agentId=" + agentId + "，详见服务日志");
                 return false;
             }
 
+            // 成本流水归因：登记会话触发渠道为定时调度（ChatLogHook 落 meta 时按 threadId 读取；
+            // 用户后续在同一会话追聊会以其自身渠道覆盖，任务消耗与追聊消耗可区分）
+            ChatChannelHolder.put(String.valueOf(session.getId()), SysConst.CHANNEL_SCHEDULED);
 
             // 初始化智能体上下文
             AgentContext agentContext = new AgentContext();
@@ -68,18 +78,22 @@ public class AgentScheduler extends QuartzJob {
             // 1. 获取智能体构建器
             AgentBuilderWrapper agentBuilder = getAgentBuilder(agentId, tenantId);
             if (agentBuilder == null) {
+                putRunMsg("获取智能体构建器失败，agentId=" + agentId + "，详见服务日志");
                 return false;
             }
 
             // 3. 构建并执行智能体
             Agent agent = buildAgent(agentBuilder);
-            executeAgent(agent, wrapper.getUserPrompt(), session.getId(), tenantId, tenantCode);
+            Long jobId = getDataMap(QuartzEnum.IDENTITY_KEY.value(), Long.class);
+            executeAgent(agent, wrapper, session.getId(), tenantId, tenantCode, jobId);
 
             log.info("Agent job executed successfully, agentId: {}, sessionId: {}", agentId, session.getId());
+            putRunMsg("执行成功，sessionId=" + session.getId());
             return true;
 
         } catch (Exception e) {
             log.error("Failed to execute agent job, agentId: {}, error: {}", agentId, e.getMessage(), e);
+            putRunMsg("执行异常：" + e.getMessage());
             return false;
         } finally {
             TenantUtils.setCurrentTenant(tenantId, null);
@@ -88,29 +102,25 @@ public class AgentScheduler extends QuartzJob {
 
     /**
      * 校验任务参数
+     * @return null 表示通过；否则为失败原因
      */
-    private boolean validateJobParameters(AgentJobWrapper wrapper, Long tenantId, AccountVO userInfo) {
+    private String validateJobParameters(AgentJobWrapper wrapper, Long tenantId, AccountVO userInfo) {
         if (wrapper == null) {
-            log.warn("AgentJobWrapper is null");
-            return false;
+            return "任务执行参数（dataMap）为空或格式不兼容";
         }
         if (tenantId == null) {
-            log.warn("TenantId is null");
-            return false;
+            return "租户信息缺失";
         }
         if (userInfo == null) {
-            log.warn("UserInfo is null");
-            return false;
+            return "创建人信息缺失";
         }
         if (StringUtils.isBlank(wrapper.getBizId())) {
-            log.warn("AgentId is blank");
-            return false;
+            return "关联智能体ID为空";
         }
-        if (wrapper.getUserPrompt() == null || StringUtils.isBlank(wrapper.getUserPrompt())) {
-            log.warn("UserPrompt is missing in inputs");
-            return false;
+        if (wrapper.getInputs() == null || !wrapper.getInputs().containsKey("userPrompt")) {
+            return "inputs 缺少 userPrompt（发送给智能体的消息内容）";
         }
-        return true;
+        return null;
     }
 
     /**
@@ -196,8 +206,9 @@ public class AgentScheduler extends QuartzJob {
     /**
      * 执行智能体
      */
-    private void executeAgent(Agent agent, String userPrompt, Long sessionId, Long tenantId, String tenantCode) {
+    private void executeAgent(Agent agent, AgentJobWrapper wrapper, Long sessionId, Long tenantId, String tenantCode, Long jobId) {
         String agentId = agent.getAgentId();
+        String userPrompt = wrapper.getInputs().get("userPrompt").toString();
 
         // 设置元数据
         try {
@@ -206,6 +217,10 @@ public class AgentScheduler extends QuartzJob {
             AgentMetadataStore.put(agentId, "threadId", String.valueOf(sessionId));
             AgentMetadataStore.put(agentId, "toolProcessActive", false);
             AgentMetadataStore.put(agentId, "cleanUpOnOwn", true);
+            // 成本流水场景标：ChatLogHook 落 meta 后 writeChatRun 检出，主链行
+            // 记为 SCHEDULED_JOB 场景并携带任务归因（biz_id=任务ID、biz_label=任务名）
+            AgentMetadataStore.put(agentId, "scheduledJobId", jobId);
+            AgentMetadataStore.put(agentId, "scheduledJobName", wrapper.getJobName());
 
             // 执行调用
             agent.call(Msg.builder().textContent(userPrompt).build())

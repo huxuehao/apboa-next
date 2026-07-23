@@ -138,13 +138,15 @@ async function loadJobData() {
       }
 
       if (job.type === 'AGENT') {
-        // 优先读新格式 userPrompt，兼容旧格式 inputs.userPrompt
-        agentUserPrompt.value = dataMap.userPrompt || dataMap.inputs?.userPrompt || ''
+        // 正确格式为 inputs.userPrompt（后端 AgentScheduler 消费）；
+        // 兼容读取曾被错误保存在顶层的存量数据
+        agentUserPrompt.value = dataMap.inputs?.userPrompt || dataMap.userPrompt || ''
       } else if (job.type === 'WORKFLOW') {
         // 加载工作流配置
         await loadWorkflowConfig(job.bizId)
-        // 恢复之前保存的参数值（优先读新格式 params，兼容旧格式 inputs）
-        const savedParams = dataMap.params || dataMap.inputs
+        // 恢复参数值：正确格式为 inputs 展平 Map（后端转开始节点参数）；
+        // 兼容读取曾被错误保存在顶层 params 的存量数据
+        const savedParams = dataMap.inputs || dataMap.params
         if (savedParams) {
           workflowParams.value = workflowParams.value.map(p => ({
             ...p,
@@ -204,25 +206,27 @@ async function handleSave() {
 
   saving.value = true
   try {
-    // 构建 dataMap
+    // 构建 dataMap：结构须与后端 AgentJobWrapper 对齐（jobName/bizName/type/bizId/inputs/variables），
+    // 执行输入一律放 inputs 嵌套——AgentScheduler 校验 inputs.userPrompt、
+    // WorkflowScheduler 把 inputs 整个 Map 转为开始节点参数
     const dataMap: Record<string, unknown> = {
       jobName: jobName.value,
       bizName: selectedTarget.value.name
     }
 
     if (targetType.value === 'AGENT') {
-      dataMap.userPrompt = agentUserPrompt.value
+      dataMap.inputs = { userPrompt: agentUserPrompt.value }
     } else {
-      // Workflow: 保存参数值和变量值
+      // Workflow: 参数展平进 inputs，自定义变量走顶层 variables
       const params: Record<string, unknown> = {}
       workflowParams.value.forEach(p => {
         params[p.name] = p.value
       })
-      dataMap.params = params
+      dataMap.inputs = params
       dataMap.variables = workflowVariables.value
     }
     dataMap.bizId = selectedTarget.value.id
-    dataMap.type =  targetType.value
+    dataMap.type = targetType.value
 
     const jobClass = targetType.value === 'AGENT'
       ? 'com.hxh.apboa.scheduler.scheduler.AgentScheduler'

@@ -23,7 +23,7 @@ import type {
   TenantRole,
   TenantJoinRequestStatus
 } from './enums'
-import type { AgentA2A, HookConfig, JobInfo, ToolConfig, SkillPackage } from '@/types/entity.ts'
+import type { AgentA2A, HookConfig, ToolConfig, SkillPackage } from '@/types/entity.ts'
 
 /**
  * 租户VO
@@ -196,7 +196,6 @@ export interface AgentDefinitionVO {
   updatedBy: string
   used: string[]
   agentA2A: AgentA2A
-  jobInfo: JobInfo
   studioConfigId: string | null
   codeExecutionConfigId: string | null
   longTermMemoryConfigId: string | null
@@ -864,6 +863,8 @@ export interface CostExecutionBillRow {
   sessionId: string | null
   runId: string | null
   workflowId: string | null
+  /** 定时任务单的任务 ID（智能体型取流水 biz_id，工作流型经执行关联表反查；其余类型 null） */
+  scheduledJobId: string | null
   title: string
   agentId: string | null
   agentName: string | null
