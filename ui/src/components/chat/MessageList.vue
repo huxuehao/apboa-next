@@ -5,7 +5,7 @@ import ToolCallItem from './ToolCallItem.vue'
 import DayDivider from './DayDivider.vue'
 import type { DisplayMessage } from '@/types'
 import type {FlatFileItem} from "@/composables/chat/useWorkspaceFiles.ts";
-import type { InteractionSubmitPayload } from '@/components/markdown/uip/types'
+import type { MarkdownInteractionSubmitPayload } from '@/components/markdown/types'
 
 const props = defineProps<{
   messages: DisplayMessage[]
@@ -45,7 +45,7 @@ defineEmits<{
   (e: 'toolContent', value: any): void
   (e: 'subConfirm', value: { subToolUseId: string; approved: boolean }): void
   (e: 'inputTagPreview', value: FlatFileItem): void
-  (e: 'interactionSubmit', payload: InteractionSubmitPayload): void
+  (e: 'interactionSubmit', payload: MarkdownInteractionSubmitPayload): void
   (e: 'uipRetry', uipCode: string): void
   (e: 'vepRetry', vepCode: string): void
 }>()

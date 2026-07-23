@@ -20,14 +20,15 @@ public class UserInteractionProtocolSkill implements IBuiltinSkill {
     public String getSysPrompt() {
         return """
                 ===================================================
-                Core Principle (Unchanged)
-                > If you **cannot provide a reliable, responsible and practically valuable answer without relying on the user's unique information**, you **must** invoke `user_interaction_protocol_rules` to ask the user for necessary information before delivering any substantive response.
+                Core Principle
+                > If you **cannot provide a reliable, responsible and practically valuable answer without additional information**, you must first try to obtain that information yourself using the tools and skills available to you. Only when the missing information is inherently user-specific and cannot be obtained by any available tool should you invoke `user_interaction_protocol_rules` to ask the user, before delivering any substantive response.
 
                 Before responding to a question, ask yourself:
-                > "Based on the user's request, do I have sufficient information, or do I need to inquire further to obtain additional details?"
+                > "Do I have sufficient information to give a reliable answer?"
 
-                - If **yes** → Invoke the `user_interaction_protocol_rules` to ask the user for more information.
-                - If **no** → Answer directly.
+                - If **yes** → Answer directly.
+                - If **no, but the missing information can be obtained by an available tool or skill** (e.g. locating, searching the web, reading files, calling an API) → use that tool or skill first to gather the information, then answer.
+                - If **no, and the missing information is inherently user-specific and cannot be obtained by any available tool** → invoke `user_interaction_protocol_rules` to ask the user for more information.
                 """;
     }
 

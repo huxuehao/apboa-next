@@ -47,3 +47,7 @@ build/
 .codex_tmp
 logs
 .m2
+
+### 本地开发配置（含中间件明文密码，切勿提交）
+**/src/main/resources/application-dev.yml
+**/.env.local

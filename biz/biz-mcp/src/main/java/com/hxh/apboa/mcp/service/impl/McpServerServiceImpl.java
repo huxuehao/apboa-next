@@ -27,6 +27,7 @@ import com.hxh.apboa.common.util.CryptoUtils;
 import com.hxh.apboa.common.util.TenantUtils;
 import com.hxh.apboa.common.vo.McpToolVO;
 import com.hxh.apboa.mcp.mapper.McpServerMapper;
+import com.hxh.apboa.mcp.schema.SchemaNumericSanitizer;
 import com.hxh.apboa.mcp.service.AgentMcpServerService;
 import com.hxh.apboa.mcp.service.AgentMcpToolService;
 import com.hxh.apboa.mcp.service.McpRuntimeDegradeService;
@@ -65,6 +66,7 @@ public class McpServerServiceImpl extends ServiceImpl<McpServerMapper, McpServer
     private final ToolSchemaRefresher toolSchemaRefresher;
     private final McpRuntimeDegradeService mcpRuntimeDegradeService;
     private final ObjectMapper objectMapper;
+    private final SchemaNumericSanitizer schemaNumericSanitizer;
 
     @Override
     public List<Object> usedWithAgent(List<Long> ids) {
@@ -231,7 +233,7 @@ public class McpServerServiceImpl extends ServiceImpl<McpServerMapper, McpServer
 
         if (refreshResult.isSuccess()) {
             update.setActivationStatus(McpActivationStatus.ACTIVE);
-            update.setToolSchemas(refreshResult.getToolSchemas());
+            update.setToolSchemas(sanitizeToolSchemasJson(refreshResult.getToolSchemas()));
             update.setToolCount(refreshResult.getToolCount());
             update.setHealthStatus(HealthStatus.HEALTHY);
             update.setActivationRevision(nextRevision(current.getActivationRevision()));
@@ -292,6 +294,22 @@ public class McpServerServiceImpl extends ServiceImpl<McpServerMapper, McpServer
             throw new RuntimeException("MCP 服务不存在");
         }
         return server;
+    }
+
+    /**
+     * 缓存整包工具目录（mcp_server.tool_schemas）落库前也做数值清洗，与逐工具入库
+     * （syncServerTools）保持一致干净；清洗失败不阻断连接，逐工具那侧仍会兜底清洗。
+     */
+    private String sanitizeToolSchemasJson(String rawJson) {
+        if (rawJson == null || rawJson.isBlank()) {
+            return rawJson;
+        }
+        try {
+            return objectMapper.writeValueAsString(
+                    schemaNumericSanitizer.sanitize(objectMapper.readTree(rawJson)));
+        } catch (Exception e) {
+            return rawJson;
+        }
     }
 
     private List<McpSchema.Tool> parseToolSchemas(String toolSchemas) {

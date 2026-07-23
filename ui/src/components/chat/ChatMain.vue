@@ -18,7 +18,7 @@ import Welcome from './Welcome.vue'
 import PlanPanel from './PlanPanel.vue'
 import type { DisplayMessage, UploadedFileItem, PlanInfo, CommonQuestion } from '@/types'
 import type {FlatFileItem} from "@/composables/chat/useWorkspaceFiles.ts";
-import type { InteractionSubmitPayload } from '@/components/markdown/uip/types'
+import type { MarkdownInteractionSubmitPayload } from '@/components/markdown/types'
 import WorkspaceFilePreview from "@/components/workspace/WorkspaceFilePreview.vue";
 
 const props = defineProps<{
@@ -94,7 +94,7 @@ const emit = defineEmits<{
   (e: 'newSession'): void
   /** 计划面板销毁 */
   (e: 'planDestroyed'): void
-  (e: 'interactionSubmit', payload: InteractionSubmitPayload): void
+  (e: 'interactionSubmit', payload: MarkdownInteractionSubmitPayload): void
   (e: 'uipRetry', uipCode: string): void
   (e: 'vepRetry', vepCode: string): void
   /** 点击欢迎页常用问题卡片 */

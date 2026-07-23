@@ -24,7 +24,7 @@ import {
   buildUserTextFromPayload,
   injectSubmissionToRawContent
 } from '@/utils/chat/uip.ts'
-import type { InteractionSubmitPayload } from '@/components/markdown/uip/types'
+import type { MarkdownInteractionSubmitPayload } from '@/components/markdown/types'
 
 const props = withDefaults(defineProps<{
   showAccount: boolean
@@ -775,7 +775,7 @@ const handleSubConfirm = (value: { subToolUseId: string; approved: boolean }) =>
 }
 
 // 处理交互提交
-const handleInteractionSubmit = async (payload: InteractionSubmitPayload) => {
+const handleInteractionSubmit = async (payload: MarkdownInteractionSubmitPayload) => {
   if (!currentSessionId.value || isRunning.value) return
 
   const sid = currentSessionId.value
@@ -810,7 +810,7 @@ const handleInteractionSubmit = async (payload: InteractionSubmitPayload) => {
 
   // 3. 发送给 Agent 继续对话
   const userText = buildUserTextFromPayload(payload)
-  await sendMessage(userText, [{ id: 'uip', role: 'user', content: userText }] as ChatMessageVO[])
+  await sendMessage(userText, [{ id: payload.type, role: 'user', content: userText }] as ChatMessageVO[])
 }
 
 // 处理 UIP 卡片渲染失败重试

@@ -12,7 +12,7 @@ import TaggedContentRenderer from './TaggedContentRenderer.vue';
 import ErrorMessageCard from './ErrorMessageCard.vue';
 import SubProcessSteps from './SubProcessSteps.vue';
 import type { SubProcessStep } from '@/types';
-import type { InteractionSubmitPayload } from '@/components/markdown/uip/types'
+import type { MarkdownInteractionSubmitPayload } from '@/components/markdown/types'
 import { useToolCallDisplayName } from '@/composables/chat/useToolCallDisplayName'
 import { formatElapsed, fmtFullTime, fmtRelativeTime, fmtDuration, fmtTokens, fmtTokensPerSec } from '@/utils/chat/format'
 import { vStickBottom } from '@/utils/chat/stickBottom'
@@ -58,7 +58,7 @@ const props = defineProps<{
 
 defineEmits<{
   inputTagPreview: [value: unknown]
-  interactionSubmit: [payload: InteractionSubmitPayload]
+  interactionSubmit: [payload: MarkdownInteractionSubmitPayload]
   uipRetry: [uipCode: string]
   vepRetry: [vepCode: string]
 }>()

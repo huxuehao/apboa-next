@@ -411,7 +411,7 @@ CREATE TABLE `mcp_tool` (
   `id` bigint NOT NULL,
   `mcp_server_id` bigint NOT NULL COMMENT '所属 MCP 服务 ID',
   `tool_name` varchar(200) NOT NULL COMMENT '工具名',
-  `description` varchar(1000) DEFAULT NULL COMMENT '工具描述',
+  `description` text COMMENT '工具描述',
   `input_schema` json DEFAULT NULL COMMENT '输入 Schema',
   `output_schema` json DEFAULT NULL COMMENT '输出 Schema',
   `raw_schema` json DEFAULT NULL COMMENT '原始工具 Schema',

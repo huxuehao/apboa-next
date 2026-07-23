@@ -92,18 +92,25 @@ import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import { useDebounceFn } from '@vueuse/core'
 import mermaid from 'mermaid'
 
-// ---------- Mermaid 初始化 ----------
-mermaid.initialize({
+// ---------- Mermaid 初始化（主题跟随系统深色偏好） ----------
+// 让 mermaid 自身根据 prefers-color-scheme 生成 dark/default 主题的 SVG，
+// 一次覆盖所有图表类型（flowchart/gantt/sequence/pie/mindmap...），避免逐类型手补 :deep() fill
+const getMermaidTheme = (): 'default' | 'dark' =>
+  window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default'
+
+const buildMermaidConfig = () => ({
   startOnLoad: false,
-  theme: 'default',
-  securityLevel: 'loose',
+  theme: getMermaidTheme(),
+  securityLevel: 'loose' as const,
   fontFamily: 'monospace',
   flowchart: {
     useMaxWidth: true,
     htmlLabels: true,
-    curve: 'basis',
+    curve: 'basis' as const,
   },
 })
+
+mermaid.initialize(buildMermaidConfig())
 
 // ---------- Props ----------
 const props = defineProps<{
@@ -212,6 +219,14 @@ const doRender = async () => {
 
 const debouncedRender = useDebounceFn(doRender, 300)
 
+// ---------- 系统深色偏好切换：重新 initialize + 重渲当前实例 ----------
+// 多个 MermaidGraph 实例各自监听自己的 mql change，切换时全部自动重渲，无需全局事件总线
+const colorSchemeMql = window.matchMedia('(prefers-color-scheme: dark)')
+const onColorSchemeChange = () => {
+  mermaid.initialize(buildMermaidConfig())
+  doRender()
+}
+
 // ---------- 缩放控制 ----------
 const zoomIn = () => {
   scale.value = Math.min(2.0, scale.value + 0.2)
@@ -309,10 +324,12 @@ watch(viewMode, () => {
 onMounted(() => {
   doRender()
   document.addEventListener('keydown', handleKeydown)
+  colorSchemeMql.addEventListener('change', onColorSchemeChange)
 })
 
 onUnmounted(() => {
   document.removeEventListener('keydown', handleKeydown)
+  colorSchemeMql.removeEventListener('change', onColorSchemeChange)
 })
 </script>
 
@@ -605,25 +622,5 @@ onUnmounted(() => {
     color: #fca5a5;
   }
 
-  /* 深色模式下的 SVG 标签颜色 (继承原有样式) */
-  .mermaid-enhanced :deep(.label) {
-    fill: #e0e0e0;
-  }
-  .mermaid-enhanced :deep(.cluster-label text) {
-    fill: #e0e0e0;
-  }
-  .mermaid-enhanced :deep(.node rect),
-  .mermaid-enhanced :deep(.node circle),
-  .mermaid-enhanced :deep(.node polygon) {
-    stroke: #6b7280;
-  }
-}
-
-/* 亮色模式 SVG 辅助 */
-.mermaid-enhanced :deep(.label) {
-  fill: #1f2937;
-}
-.mermaid-enhanced :deep(.cluster-label text) {
-  fill: #1f2937;
 }
 </style>

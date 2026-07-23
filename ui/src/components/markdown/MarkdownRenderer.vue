@@ -34,7 +34,7 @@ import UIPRenderer from '@/components/markdown/uip/UIPRenderer.vue'
 import VEPRenderer from '@/components/markdown/vep/VEPRenderer.vue'
 import { extractUIPBlocks } from '@/utils/chat/uip.ts'
 import { extractVEPBlocks } from '@/utils/chat/vep'
-import type { InteractionSubmitPayload } from '@/components/markdown/uip/types'
+import type { MarkdownInteractionSubmitPayload } from '@/components/markdown/types'
 
 const props = defineProps<{
   content: string
@@ -43,7 +43,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  interactionSubmit: [payload: InteractionSubmitPayload]
+  interactionSubmit: [payload: MarkdownInteractionSubmitPayload]
   uipRetry: [uipCode: string]
   vepRetry: [vepCode: string]
 }>()
