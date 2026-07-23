@@ -33,6 +33,10 @@ public class IConfirmationHook implements IAgentHook {
     // 需要确认的工具列表
     private static final List<String> NEED_CONFIRM_TOOLS = new ArrayList<>();
 
+    /** 需确认工具的参数字段元数据（toolName → fields，与上方清单同生命周期维护） */
+    private static final Map<String, List<Map<String, Object>>> CONFIRM_FIELDS =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
     @Override
     public <T extends HookEvent> Mono<T> onEvent(T event) {
         // 监听 PostReasoningEvent
@@ -108,8 +112,29 @@ public class IConfirmationHook implements IAgentHook {
         }
     }
 
+    /**
+     * 登记需确认工具并附带参数字段元数据（随 TOOL_CONFIRM_REQUIRED / pending 下发，
+     * 供确认 UI 渲染表单；元数据由 ConfirmFieldMetaBuilder 归一）。
+     * 与需确认清单同生命周期：工具注册时登记、removeNeedConfirmTool 时一并清理。
+     */
+    public static void setNeedConfirmTool(String toolName, List<Map<String, Object>> fields) {
+        setNeedConfirmTool(toolName);
+        if (fields != null && !fields.isEmpty()) {
+            CONFIRM_FIELDS.put(toolName, fields);
+        } else {
+            CONFIRM_FIELDS.remove(toolName);
+        }
+    }
+
     public static void removeNeedConfirmTool(String toolName) {
         NEED_CONFIRM_TOOLS.remove(toolName);
+        CONFIRM_FIELDS.remove(toolName);
+    }
+
+    /** 某需确认工具的参数字段元数据；未登记返回空列表（前端降级 JSON 展示）。 */
+    public static List<Map<String, Object>> getConfirmFields(String toolName) {
+        List<Map<String, Object>> fields = toolName == null ? null : CONFIRM_FIELDS.get(toolName);
+        return fields == null ? List.of() : fields;
     }
 
     /**

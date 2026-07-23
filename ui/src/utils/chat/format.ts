@@ -28,6 +28,7 @@ export function buildToolCallsContent(
     args: string
     result?: string
     elapsed?: number
+    confirmState?: 'approved' | 'rejected'
     subSteps?: Array<Record<string, unknown>>
   }>
 ): string {
@@ -39,6 +40,9 @@ export function buildToolCallsContent(
     totalTimes: t.elapsed ?? 0,
     args: t.args ?? '',
     result: t.result ?? ''
+  }
+  if (t.confirmState) {
+    toolContent.confirmState = t.confirmState
   }
   if (t.subSteps?.length) {
     // 清理实时态字段（running/streaming 标记、subToolUseId 配对键、startTime 计时起点），只留展示契约字段

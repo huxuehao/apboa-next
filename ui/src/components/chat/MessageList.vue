@@ -3,14 +3,14 @@ import { computed } from 'vue'
 import MessageItem from './MessageItem.vue'
 import ToolCallItem from './ToolCallItem.vue'
 import DayDivider from './DayDivider.vue'
-import type { DisplayMessage } from '@/types'
+import type { ConfirmFieldMeta, DisplayMessage } from '@/types'
 import type {FlatFileItem} from "@/composables/chat/useWorkspaceFiles.ts";
 import type { MarkdownInteractionSubmitPayload } from '@/components/markdown/types'
 
 const props = defineProps<{
   messages: DisplayMessage[]
   agentHasResult?: boolean
-  toolCalls: Array<{ id: string; name: string; args: string; result?: string; elapsed?: number, finished?: boolean, needConfirm?: boolean, startTime?: number, subSteps?: Array<Record<string, unknown>> }>
+  toolCalls: Array<{ id: string; name: string; args: string; result?: string; elapsed?: number, finished?: boolean, needConfirm?: boolean, confirmFields?: ConfirmFieldMeta[], confirmSummary?: string, startTime?: number, subSteps?: Array<Record<string, unknown>> }>
   /** 会话 agent 是否绑定语音合成模型（透传给消息项的朗读按钮） */
   ttsEnabled?: boolean
 }>()
@@ -85,6 +85,8 @@ defineEmits<{
         :finished="t.finished"
         :queued="!t.finished && t.result == null && firstRunningIdx >= 0 && tIdx > firstRunningIdx"
         :need-confirm="t.needConfirm"
+        :confirm-fields="t.confirmFields"
+        :confirm-summary="t.confirmSummary"
         :start-time="t.startTime"
         :sub-steps="(t.subSteps as any)"
         @toolContent="(content: any) => $emit('toolContent', content)"

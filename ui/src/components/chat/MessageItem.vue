@@ -11,6 +11,7 @@ import MarkdownRenderer from "@/components/markdown/MarkdownRenderer.vue";
 import TaggedContentRenderer from './TaggedContentRenderer.vue';
 import ErrorMessageCard from './ErrorMessageCard.vue';
 import SubProcessSteps from './SubProcessSteps.vue';
+import ToolConfirmPanel from './confirm/ToolConfirmPanel.vue';
 import type { SubProcessStep } from '@/types';
 import type { MarkdownInteractionSubmitPayload } from '@/components/markdown/types'
 import { useToolCallDisplayName } from '@/composables/chat/useToolCallDisplayName'
@@ -140,6 +141,8 @@ interface ToolCallItem {
   args: string
   result: string
   subProcess?: SubProcessStep[]
+  /** HITL 确认态（落库 confirmState）：approved=经授权执行（含一键授权）/ rejected=被拒绝 */
+  confirmState?: 'approved' | 'rejected'
 }
 
 /**
@@ -412,6 +415,17 @@ const openPreview = (index: number) => {
     </template>
     <template v-else-if="isTool">
       <div class="chat-message-bubble">
+        <!-- HITL 定制确认卡只读回显：置于工具面板上方直接可见（无需展开），
+             重现确认时的业务快照（args 为最终参数，含用户改参）；
+             无定制渲染器的工具面板内部不渲染任何内容 -->
+        <ToolConfirmPanel
+          v-if="parsedToolCall?.confirmState"
+          :name="parsedToolCall.name"
+          :args="parsedToolCall.args"
+          readonly
+          :decided="parsedToolCall.confirmState"
+          class="chat-tool-confirm-replay"
+        />
         <div class="chat-tool-panel">
           <!-- 可点击的头部：行首状态圆标（形状+颜色双编码，扫视即辨） + 标题（含工具名） + 状态耗时 + 展开/收起箭头 -->
           <div class="chat-tool-header" @click="toolExpanded = !toolExpanded">
@@ -426,6 +440,13 @@ const openPreview = (index: number) => {
             <span class="chat-tool-header-title">
               <template v-if="parsedToolCall">{{ resolveToolCallName(parsedToolCall.name) }}</template>
               <template v-else>工具调用</template>
+            </span>
+            <span
+              v-if="parsedToolCall?.confirmState"
+              class="chat-tool-confirm-badge"
+              :class="parsedToolCall.confirmState === 'approved' ? 'chat-tool-confirm-badge--ok' : 'chat-tool-confirm-badge--no'"
+            >
+              {{ parsedToolCall.confirmState === 'approved' ? '已授权' : '已拒绝' }}
             </span>
             <span
               v-if="parsedToolCall"
@@ -501,6 +522,30 @@ const openPreview = (index: number) => {
 
 <style scoped lang="scss">
 @use '@/styles/chat/index.scss' as *;
+
+/* HITL 确认态徽标（工具卡头部常显，收起也可见决策结果） */
+.chat-tool-confirm-badge {
+  flex: none;
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  margin-right: 8px;
+
+  &--ok {
+    background: #f6ffed;
+    color: #389e0d;
+  }
+
+  &--no {
+    background: #fff1f0;
+    color: #cf1322;
+  }
+}
+
+/* 定制确认卡只读回显区（工具面板上方直接可见） */
+.chat-tool-confirm-replay {
+  margin: 0 0 8px;
+}
 
 .chat-message-files {
   display: flex;

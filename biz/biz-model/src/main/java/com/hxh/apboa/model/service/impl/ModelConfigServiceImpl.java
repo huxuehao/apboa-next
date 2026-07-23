@@ -15,6 +15,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -69,10 +70,21 @@ public class ModelConfigServiceImpl extends ServiceImpl<ModelConfigMapper, Model
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public boolean deleteByIds(List<Long> ids) {
         // 删除前先获取关联的智能体ID，以便后续触发重新注册
         List<Long> agentIds = getAgentDefinitions(ids).stream().map(AgentDefinition::getId).toList();
         boolean result = removeByIds(ids);
+        // 置空 agent_definition 直连引用列(聊天/ASR/TTS 三处都可能引用同一模型配置),
+        // 否则列值悬空,detail/架构页拿已删 id 查详情报"不存在"。
+        // ids 为 Long 列表,拼接无注入风险;jdbcTemplate 绕过租户拦截器,但 id 全局唯一、仅命中引用行
+        String idList = ids.stream().map(String::valueOf).collect(Collectors.joining(","));
+        jdbcTemplate.update("UPDATE " + TableConst.AGENT
+                + " SET model_config_id = NULL WHERE model_config_id IN (" + idList + ")");
+        jdbcTemplate.update("UPDATE " + TableConst.AGENT
+                + " SET asr_model_config_id = NULL WHERE asr_model_config_id IN (" + idList + ")");
+        jdbcTemplate.update("UPDATE " + TableConst.AGENT
+                + " SET tts_model_config_id = NULL WHERE tts_model_config_id IN (" + idList + ")");
         publishAgentReregister(agentIds);
         return result;
     }

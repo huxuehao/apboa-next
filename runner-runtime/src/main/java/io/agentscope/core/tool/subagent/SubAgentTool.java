@@ -20,9 +20,11 @@ import com.hxh.apboa.common.util.AgentMetadataStore;
 import com.hxh.apboa.common.util.TenantUtils;
 import com.hxh.apboa.engine.agui.AgentContext;
 import com.hxh.apboa.engine.hitl.ConfirmModeResolver;
+import com.hxh.apboa.engine.hitl.EditedInputApplier;
 import com.hxh.apboa.engine.hitl.PendingSubConfirmRegistry;
 import com.hxh.apboa.engine.hook.builtins.IConfirmationHook;
 import com.hxh.apboa.engine.log.ChatLogHook;
+import io.agentscope.core.ReActAgent;
 import io.agentscope.core.agent.Agent;
 import io.agentscope.core.agent.Event;
 import io.agentscope.core.agent.StreamOptions;
@@ -349,6 +351,8 @@ public class SubAgentTool implements AgentTool {
                 item.put("toolUseId", toolUse.getId());
                 item.put("name", toolUse.getName());
                 item.put("input", toolUse.getInput());
+                // 与主链路 pending 同构：子确认 UI 同样拿到字段元数据渲染表单
+                item.put("fields", IConfirmationHook.getConfirmFields(toolUse.getName()));
                 pending.add(item);
             }
         }
@@ -424,6 +428,7 @@ public class SubAgentTool implements AgentTool {
                 emitRejectedStep(emitter, agent, sessionId, parentToolCallId, d, elapsed);
             }
         }
+        applyEditedInputs(agent, decisions, sessionId);
         return streamRound(
                 agent,
                 buildSubResumeInput(decisions),
@@ -431,6 +436,36 @@ public class SubAgentTool implements AgentTool {
                 sessionId,
                 emitter,
                 parentToolCallId);
+    }
+
+    /**
+     * HITL 改参（子链路）：把主会话确认 UI 修改后的参数写回子 agent 记忆（与主 resume 的
+     * AguiRequestProcessor#applyEditedInputs 同款语义）。子 agent 实例全程在内存，
+     * 无需 loadFrom，续跑 acting 即以新参数执行。
+     */
+    private void applyEditedInputs(
+            Agent agent, List<PendingSubConfirmRegistry.Decision> decisions, String sessionId) {
+        if (decisions == null || decisions.isEmpty()) {
+            return;
+        }
+        Map<String, Map<String, Object>> edited = new LinkedHashMap<>();
+        for (PendingSubConfirmRegistry.Decision d : decisions) {
+            if (d != null && d.approved() && d.input() != null && !d.input().isEmpty()) {
+                edited.put(d.toolUseId(), d.input());
+            }
+        }
+        if (edited.isEmpty()) {
+            return;
+        }
+        if (!(agent instanceof ReActAgent reActAgent)) {
+            logger.warn("SubAgent session {} 改参跳过：agent 非 ReActAgent", sessionId);
+            return;
+        }
+        int applied = EditedInputApplier.apply(reActAgent.getMemory(), edited);
+        if (applied != edited.size()) {
+            logger.warn("SubAgent session {} 改参部分未命中: 请求 {} 项, 实际改写 {} 项",
+                    sessionId, edited.size(), applied);
+        }
     }
 
     /**

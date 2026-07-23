@@ -8,6 +8,7 @@ import com.hxh.apboa.common.util.AgentMetadataStore;
 import com.hxh.apboa.common.util.TenantUtils;
 import com.hxh.apboa.engine.agui.AgentContext;
 import com.hxh.apboa.engine.agui.AguiCustomEvents;
+import com.hxh.apboa.engine.hitl.EditedInputApplier;
 import com.hxh.apboa.engine.hook.builtins.IConfirmationHook;
 import com.hxh.apboa.engine.log.ChatLogHook;
 import com.hxh.apboa.engine.model.ThinkingModeResolver;
@@ -235,6 +236,9 @@ public class AguiRequestProcessor {
         Agent agent = agentResolver.resolveAgent(rc.agentCode, threadId);
         if (agent instanceof ReActAgent reActAgent) {
             reActAgent.loadFrom(session, threadId);
+            // HITL 改参：把用户在确认 UI 修改后的参数写回暂停态记忆（仅 approved + need_confirm），
+            // 续跑 acting 即以新参数执行，无需其他透传；落库入参缓存由 Applier 内部同步修正
+            applyEditedInputs(reActAgent, decisions);
         }
 
         String runId = UUID.randomUUID().toString();
@@ -346,6 +350,9 @@ public class AguiRequestProcessor {
                     item.put("toolUseId", toolUse.getId());
                     item.put("name", toolUse.getName());
                     item.put("input", toolUse.getInput());
+                    // 与实时 TOOL_CONFIRM_REQUIRED 同构：刷新恢复的表单同样拿到字段元数据
+                    // （上方 resolveAgent 重建 toolkit 时已重新登记，此处静态读取必有依据）
+                    item.put("fields", IConfirmationHook.getConfirmFields(toolUse.getName()));
                     pending.add(item);
                 }
             }
@@ -370,6 +377,26 @@ public class AguiRequestProcessor {
             "Error: 用户拒绝授权调用该工具，本轮对话中该工具不可用。请勿重试该工具，"
                     + "更不得自行编造、虚构或凭常识臆测该工具本应返回的结果数据；"
                     + "必须如实告知用户：因未获授权调用该工具，无法获取相关信息。";
+
+    /** 汇总用户修改过参数的 approved 决策，写回暂停态记忆（无命中零开销）。 */
+    private void applyEditedInputs(ReActAgent reActAgent, List<ResumeDecision> decisions) {
+        if (decisions == null || decisions.isEmpty()) {
+            return;
+        }
+        Map<String, Map<String, Object>> edited = new LinkedHashMap<>();
+        for (ResumeDecision d : decisions) {
+            if (d != null && d.approved() && d.input() != null && !d.input().isEmpty()) {
+                edited.put(d.toolUseId(), d.input());
+            }
+        }
+        if (edited.isEmpty()) {
+            return;
+        }
+        int applied = EditedInputApplier.apply(reActAgent.getMemory(), edited);
+        if (applied != edited.size()) {
+            logger.warn("HITL 改参部分未命中: 请求 {} 项, 实际改写 {} 项", edited.size(), applied);
+        }
+    }
 
     /** 将拒绝的工具喂回「授权被拒/工具不可用」错误结果；允许的不喂（留给 agent 自己执行）。全允许则返回空列表。 */
     private List<Msg> buildResumeInput(List<ResumeDecision> decisions) {
@@ -411,8 +438,20 @@ public class AguiRequestProcessor {
         return list.isEmpty() ? null : list.get(0);
     }
 
-    /** resume 逐工具决策。 */
-    public record ResumeDecision(String toolUseId, String name, boolean approved) {}
+    /**
+     * resume 逐工具决策。
+     *
+     * @param input 用户在确认 UI 中修改后的完整参数；null/空 = 未修改（沿用模型原始参数，
+     *              旧客户端不传该字段天然兼容）。仅 approved 且 need_confirm 工具生效。
+     */
+    public record ResumeDecision(
+            String toolUseId, String name, boolean approved, Map<String, Object> input) {
+
+        /** 兼容构造器：未携带修改参数的决策（自动全拒等内部构造路径沿用） */
+        public ResumeDecision(String toolUseId, String name, boolean approved) {
+            this(toolUseId, name, approved, null);
+        }
+    }
 
     private static class ResumeContext {
         private String agentCode;

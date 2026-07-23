@@ -9,6 +9,7 @@ import { computed, onUnmounted, ref, watch } from 'vue'
 import { CopyOutlined, CheckOutlined, RightOutlined, DownOutlined, LoadingOutlined } from '@ant-design/icons-vue'
 import type { SubProcessStep } from '@/types'
 import { useToolCallDisplayName } from '@/composables/chat/useToolCallDisplayName'
+import ToolConfirmPanel from './confirm/ToolConfirmPanel.vue'
 import { formatElapsed } from '@/utils/chat/format'
 import { vStickBottom } from '@/utils/chat/stickBottom'
 
@@ -16,14 +17,14 @@ const props = defineProps<{
   steps: SubProcessStep[]
 }>()
 
-/** 子智能体 HITL：工具步「允许/禁止」决策，逐层冒泡到 Chat/index.vue 调 decideSubConfirm */
+/** 子智能体 HITL：工具步确认决策（可携带改参），逐层冒泡到 Chat/index.vue 调 decideSubConfirm */
 const emit = defineEmits<{
-  (e: 'subConfirm', value: { subToolUseId: string; approved: boolean }): void
+  (e: 'subConfirm', value: { subToolUseId: string; approved: boolean; input?: Record<string, unknown> }): void
 }>()
 
-const emitConfirm = (step: SubProcessStep, approved: boolean) => {
+const emitDecide = (step: SubProcessStep, v: { approved: boolean; input?: Record<string, unknown> }) => {
   if (!step.subToolUseId) return
-  emit('subConfirm', { subToolUseId: step.subToolUseId, approved })
+  emit('subConfirm', { subToolUseId: step.subToolUseId, approved: v.approved, input: v.input })
 }
 
 // 执行中工具步的耗时递增（100ms 刷新，与主工具卡片计时一致）；无 running 步时不跑计时器
@@ -156,14 +157,18 @@ async function copyContent(key: string, raw?: string) {
               {{ isToolResultFailed(step.result) ? '失败' : '完成' }}<template v-if="step.elapsed != null"> · {{ formatElapsed(step.elapsed) }}</template>
             </span>
           </span>
-          <!-- 子智能体 HITL：允许/禁止（交互与主卡片 ToolCallItem 确认按钮同款，决策冒泡调 subagent/resume） -->
-          <span v-if="step.needConfirm" class="chat-tool-sub-confirm-actions" @click.stop>
-            <AButton type="primary" size="small" @click="emitConfirm(step, true)">允许</AButton>
-            <AButton size="small" @click="emitConfirm(step, false)">禁止</AButton>
-          </span>
         </div>
         <template v-if="expanded[i]">
-          <div v-if="step.args && step.args !== '{}'" class="chat-tool-sub-inner">
+          <!-- 子智能体 HITL：确认面板（与主卡片 ToolConfirmPanel 同款分发：定制→表单→JSON），决策冒泡调 subagent/resume -->
+          <div v-if="step.needConfirm" class="chat-tool-sub-inner" @click.stop>
+            <ToolConfirmPanel
+              :name="step.name || ''"
+              :args="step.args"
+              :fields="step.fields"
+              @decide="emitDecide(step, $event)"
+            />
+          </div>
+          <div v-if="step.args && step.args !== '{}' && !step.needConfirm" class="chat-tool-sub-inner">
             <div class="chat-tool-section-header">
               <span class="chat-tool-section-label">请求参数</span>
               <span class="chat-tool-section-copy" :title="copiedKey === i + '-args' ? '已复制' : '复制'" @click.stop="copyContent(i + '-args', step.args)">

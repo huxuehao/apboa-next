@@ -66,6 +66,7 @@ public class SkillPackageServiceImpl extends ServiceImpl<SkillPackageMapper, Ski
         if (currentClassPaths.isEmpty()) {
             jdbcTemplate.update("DELETE FROM " + TableConst.SKILL
                     + " WHERE skill_type = 'BUILTIN' AND class_path IS NOT NULL");
+            cleanDanglingSkillRefs();
             return;
         }
         List<String> existingClassPaths = jdbcTemplate.queryForList(
@@ -85,6 +86,24 @@ public class SkillPackageServiceImpl extends ServiceImpl<SkillPackageMapper, Ski
         for (SkillConfigWrapper configWrapper : configWrappers) {
             syncSingleSkill(configWrapper, allTenantIds, tenantCodeToId);
         }
+
+        // 4. 孤儿关联清理(启动自愈)
+        cleanDanglingSkillRefs();
+    }
+
+    /**
+     * 清理指向已不存在技能包的悬空关联(agent_skill_packages / skill_tools / skill_file)。
+     * 同步的 DELETE 只删 skill_package 自身,不级联;启动同步末尾统一自愈。
+     * 手动删除路径(deleteByIds)已级联 agent 关联与 skill_tools,skill_file 表记录同样在此兜底。
+     * 同步期无租户上下文,沿用 jdbcTemplate。
+     */
+    private void cleanDanglingSkillRefs() {
+        jdbcTemplate.update("DELETE FROM " + TableConst.AGENT_SKILL
+                + " WHERE skill_package_id NOT IN (SELECT id FROM " + TableConst.SKILL + ")");
+        jdbcTemplate.update("DELETE FROM " + TableConst.SKILL_TOOL
+                + " WHERE skill_id NOT IN (SELECT id FROM " + TableConst.SKILL + ")");
+        jdbcTemplate.update("DELETE FROM " + TableConst.SKILL_FILE
+                + " WHERE skill_id NOT IN (SELECT id FROM " + TableConst.SKILL + ")");
     }
 
     /**
@@ -259,6 +278,10 @@ public class SkillPackageServiceImpl extends ServiceImpl<SkillPackageMapper, Ski
         agentSkillPackageService.remove(new LambdaQueryWrapper<AgentSkillPackage>().in(AgentSkillPackage::getSkillPackageId, ids));
         // 删除技能包与工具的关联
         skillToolService.deleteSkillTool(ids);
+        // 删除技能包文件表记录(此前只发文件系统清理事件、漏了表记录,skill_file 会悬空;
+        // ids 是 Long 列表,拼接无注入风险,风格同 ModelConfigServiceImpl.getAgentDefinitions)
+        jdbcTemplate.update("DELETE FROM " + TableConst.SKILL_FILE + " WHERE skill_id IN ("
+                + ids.stream().map(String::valueOf).collect(Collectors.joining(",")) + ")");
         publishAgentReregister(agentIds);
         // 发布文件删除同步事件
         skills.forEach(skill -> publishSkillFileDelete(skill.getName(), skill.getTenantId()));

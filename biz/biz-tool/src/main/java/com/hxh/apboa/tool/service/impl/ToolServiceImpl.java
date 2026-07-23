@@ -76,6 +76,7 @@ public class ToolServiceImpl extends ServiceImpl<ToolMapper, ToolConfig> impleme
                 .map(ToolInfoWrapper::getClassPath).toList();
         if (currentClassPaths.isEmpty()) {
             jdbcTemplate.update("DELETE FROM " + TableConst.TOOL + " WHERE tool_type = 'BUILTIN'");
+            cleanDanglingToolRefs();
             return;
         }
         List<String> existingClassPaths = jdbcTemplate.queryForList(
@@ -93,6 +94,23 @@ public class ToolServiceImpl extends ServiceImpl<ToolMapper, ToolConfig> impleme
         for (ToolInfoWrapper toolInfo : toolInfos) {
             syncSingleTool(toolInfo, allTenantIds, tenantCodeToId);
         }
+
+        // 4. 孤儿关联清理(启动自愈)
+        cleanDanglingToolRefs();
+    }
+
+    /**
+     * 清理指向已不存在工具的悬空关联(agent_tools / skill_tools)。
+     * 上面的同步只删 tool_config 自身(类路径移除、作用域回收两类 DELETE),历史上因此遗留过
+     * agent_tools 悬空引用——前端架构页按悬空 id 逐个查详情报"工具不存在"。
+     * 每次启动同步末尾统一自愈,顺带清掉历史存量;手动删除路径(deleteTools)本就有级联,不受影响。
+     * 同步期无租户上下文,沿用 jdbcTemplate 直删;子查询列是主键,NOT IN 无 NULL 陷阱。
+     */
+    private void cleanDanglingToolRefs() {
+        jdbcTemplate.update("DELETE FROM " + TableConst.AGENT_TOOL
+                + " WHERE tool_id NOT IN (SELECT id FROM " + TableConst.TOOL + ")");
+        jdbcTemplate.update("DELETE FROM " + TableConst.SKILL_TOOL
+                + " WHERE tool_id NOT IN (SELECT id FROM " + TableConst.TOOL + ")");
     }
 
     /**

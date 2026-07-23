@@ -240,6 +240,7 @@ onMounted(() => {
         v-else
         ref="editorRef"
         :agent-id="agentId"
+        :account-id="accountStore.userInfo?.id"
         :model-value="modelValue"
         :placeholder="placeholder || (voiceState?.enabled ? (isMobile ? '发消息...' : '发消息或按住空格说话...') : '输入消息...')"
         :session-id="sessionId"

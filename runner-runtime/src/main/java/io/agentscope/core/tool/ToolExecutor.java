@@ -18,8 +18,11 @@ package io.agentscope.core.tool;
 import com.hxh.apboa.common.consts.SysConst;
 import com.hxh.apboa.common.util.TenantUtils;
 import com.hxh.apboa.engine.agui.AgentContext;
+import com.hxh.apboa.engine.hitl.EditedInputApplier;
 import com.hxh.apboa.engine.log.ChatLogHook;
 import io.agentscope.core.agent.Agent;
+import io.agentscope.core.message.ContentBlock;
+import io.agentscope.core.message.TextBlock;
 import io.agentscope.core.message.ToolResultBlock;
 import io.agentscope.core.message.ToolUseBlock;
 import io.agentscope.core.model.ExecutionConfig;
@@ -259,6 +262,8 @@ class ToolExecutor {
                     }
                     return tool.callAsync(executionParam);
                 })
+                // HITL 改参：结果尾部追加「用户改参」提示（挂起/异常路径在下方 onErrorResume 产生，不经过此 map）
+                .map(result -> appendUserEditedNote(toolCall, result))
                 .onErrorResume(
                         ToolSuspendException.class,
                         e -> {
@@ -276,6 +281,45 @@ class ToolExecutor {
                             return Mono.just(ToolResultBlock.error("Tool execution failed: " + errorMsg));
                         })
                 .doFinally(signalType -> TenantUtils.clear());   // 无论成功、挂起、异常都清理
+    }
+
+    /**
+     * HITL 改参提示：拼在改参调用的执行结果尾部。改写记忆抹掉了"用户修改"事件，
+     * 模型面对「用户原话 ↔ 执行参数/结果」的冲突会归因"自己传错了"并重调纠正
+     * （实测行为）；证据注入在困惑产生的准确位置（读结果处），消解为"用户改了主意"。
+     * 语义强化措辞与 REJECT_RESULT_TEXT 同理：明确禁止按早前表述重试。
+     */
+    /** 改参提示模板：%s 为字段级修改摘要（仅用户实际改动的字段，其余参数仍是模型原始生成值） */
+    private static final String USER_EDITED_NOTE_TEMPLATE =
+            "\n\n[系统提示] 本次调用在执行前经过用户人工确认，用户在确认界面仅修改了以下参数：%s。"
+                    + "其余参数保持你原始生成的值不变。该修改代表用户的最新意图，"
+                    + "优先级高于对话中更早的表述；请基于本结果直接继续，"
+                    + "不要按用户更早的说法重试本工具或\"纠正\"参数。";
+
+    /** diff 缺失时的兜底文案（旧暂停态数据等异常场景） */
+    private static final String USER_EDITED_NOTE_FALLBACK =
+            "\n\n[系统提示] 本次调用的参数在执行前经过用户人工确认与修改，本次实际执行的入参即用户的最新意图，"
+                    + "优先级高于对话中更早的表述；请基于本结果直接继续，不要按用户更早的说法重试本工具或\"纠正\"参数。";
+
+    /** 改参调用（记忆改写时打的 metadata 标记）的结果尾部追加用户改参提示；未改参调用原样返回。 */
+    private ToolResultBlock appendUserEditedNote(ToolUseBlock toolCall, ToolResultBlock result) {
+        if (toolCall == null || result == null
+                || !Boolean.TRUE.equals(toolCall.getMetadata().get(EditedInputApplier.META_USER_EDITED_INPUT))) {
+            return result;
+        }
+        Object diff = toolCall.getMetadata().get(EditedInputApplier.META_USER_EDITED_DIFF);
+        String note = diff instanceof String s && !s.isBlank()
+                ? String.format(USER_EDITED_NOTE_TEMPLATE, s)
+                : USER_EDITED_NOTE_FALLBACK;
+        List<ContentBlock> output = new java.util.ArrayList<>(
+                result.getOutput() == null ? List.of() : result.getOutput());
+        output.add(TextBlock.builder().text(note).build());
+        return ToolResultBlock.builder()
+                .id(result.getId())
+                .name(result.getName())
+                .output(output)
+                .metadata(result.getMetadata())
+                .build();
     }
 
     // ==================== Batch Tool Execution ====================

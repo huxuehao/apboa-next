@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue'
+import { CheckCircleOutlined } from '@ant-design/icons-vue'
 import { useToolCallDisplayName } from '@/composables/chat/useToolCallDisplayName'
 import SubProcessSteps from './SubProcessSteps.vue'
-import type { SubProcessStep } from '@/types'
+import ToolConfirmPanel from './confirm/ToolConfirmPanel.vue'
+import type { ConfirmFieldMeta, SubProcessStep } from '@/types'
 import { vStickBottom } from '@/utils/chat/stickBottom'
 import { formatElapsed } from '@/utils/chat/format'
 
@@ -18,6 +20,10 @@ const props = defineProps<{
   /** 串行排队中（前面还有未完成的工具，本工具尚未开始执行） */
   queued?: boolean
   needConfirm?: boolean
+  /** 待确认工具的参数字段元数据（随 TOOL_CONFIRM_REQUIRED / pending 下发，驱动确认表单） */
+  confirmFields?: ConfirmFieldMeta[]
+  /** 决策后业务摘要（定制确认卡提供，useChatStream 持有——组件会被 resume 续跑重建，不能本地存） */
+  confirmSummary?: string
   startTime?: number
   /** 子智能体实时过程步骤（SUBAGENT_STEP 事件装配，与落库 subProcess 同构） */
   subSteps?: SubProcessStep[]
@@ -68,8 +74,6 @@ const emit = defineEmits<{
   (e: 'subConfirm', value: { subToolUseId: string; approved: boolean }): void
 }>()
 
-const foldArgs = ref<boolean>(true)
-
 // 执行中的请求参数（流式增量拼接中可能是不完整 JSON，原样展示；完整后自然美化）
 const prettyRunningArgs = computed(() => {
   if (!props.args || props.args === '{}') return ''
@@ -80,19 +84,13 @@ const prettyRunningArgs = computed(() => {
   }
 })
 
-/** 允许：仅记录决策（§6.5），工具实际由后端 resume 续跑执行（天然带租户/MCP 上下文） */
-const handleConfirm = (id: string, name: string) => {
-  emit('toolContent', { toolUseId: id, name, approved: true })
-}
-
-/** 禁止：仅记录决策（§6.5），后端 resume 时喂入「拒绝授权」错误结果，不再前端塞文本 */
-const handleCancel = (id: string, name: string) => {
-  emit('toolContent', { toolUseId: id, name, approved: false })
-}
-
-/*查看参数*/
-const handleShowArgs = () => {
-  foldArgs.value = !foldArgs.value
+/**
+ * 确认决策（§6.5）：仅记录决策，工具实际由后端 resume 续跑执行（天然带租户/MCP 上下文）。
+ * input 为用户在确认 UI 中修改后的参数（未修改则缺省，后端沿用模型原始参数）；
+ * summary 为定制渲染器提供的业务摘要，经 decideConfirm 存回工具项后以 props 回流渲染。
+ */
+const handleDecide = (v: { approved: boolean; input?: Record<string, unknown>; summary?: string }) => {
+  emit('toolContent', { toolUseId: props.id, name: props.name, approved: v.approved, input: v.input, summary: v.summary })
 }
 </script>
 
@@ -107,25 +105,21 @@ const handleShowArgs = () => {
       <template v-else-if="queued">
         等待执行 {{ displayName }}
       </template>
-      <template v-else-if="loading">
-        正在执行 {{ displayName }}<span v-if="!needConfirm && runningElapsed" class="chat-tool-call-elapsed"> · {{ runningElapsed }}</span>
+      <template v-else-if="needConfirm">
+        等待授权 {{ displayName }}
       </template>
-      <template v-if="needConfirm" >
-        <div class="chat-tool-call-actions">
-          <AButton v-if="args && args !== '{}'"
-                   type="link"
-                   size="small"
-                   @click="handleShowArgs">
-            {{ `${foldArgs ? '展开参数' : '折叠参数'}` }}
-          </AButton>
-          <AButton type="primary" size="small" @click="handleConfirm(id, name)">允许</AButton>
-          <AButton size="small" @click="handleCancel(id, name)">禁止</AButton>
-        </div>
+      <template v-else-if="loading">
+        正在执行 {{ displayName }}<span v-if="runningElapsed" class="chat-tool-call-elapsed"> · {{ runningElapsed }}</span>
       </template>
     </span>
     </div>
-    <div class="chat-tool-call" v-if="args && args !== '{}' && !foldArgs">
-      {{ args && args !== '{}' ? args : '无参数' }}
+    <!-- HITL 确认面板：定制渲染器 → schema 通用表单 → JSON 兜底（决策/改参经 toolContent 冒泡） -->
+    <div v-if="needConfirm" class="chat-tool-call-confirm">
+      <ToolConfirmPanel :name="name" :args="args" :fields="confirmFields" @decide="handleDecide" />
+    </div>
+    <!-- 决策后业务摘要回显（定制渲染器提供）：确认卡收起后保留一行"确认了什么" -->
+    <div v-else-if="confirmSummary" class="chat-tool-call-summary">
+      <CheckCircleOutlined class="chat-tool-call-summary-icon" /> 已确认 {{ confirmSummary }}
     </div>
     <!-- 执行中实时详情：请求参数（流式增量）+ 子智能体过程步骤（逐步出现） -->
     <div v-if="loading && !needConfirm && (prettyRunningArgs || subSteps?.length)" class="chat-tool-call-live">
@@ -169,5 +163,23 @@ const handleShowArgs = () => {
   flex-direction: column;
   gap: 6px;
   padding: 4px 10px 6px 22px;
+}
+
+/* HITL 确认面板区：与实时详情区同款缩进，面板宽度不撑满整行 */
+.chat-tool-call-confirm {
+  padding: 2px 10px 6px 22px;
+  max-width: 560px;
+}
+
+/* 决策后业务摘要行：确认卡收起后的一行只读回显 */
+.chat-tool-call-summary {
+  padding: 2px 10px 6px 22px;
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.5);
+}
+
+.chat-tool-call-summary-icon {
+  color: #52c41a;
+  margin-right: 4px;
 }
 </style>

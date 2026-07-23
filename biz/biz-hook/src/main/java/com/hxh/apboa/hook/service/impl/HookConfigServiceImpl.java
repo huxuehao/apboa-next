@@ -57,6 +57,7 @@ public class HookConfigServiceImpl extends ServiceImpl<HookConfigMapper, HookCon
         if (currentClassPaths.isEmpty()) {
             jdbcTemplate.update("DELETE FROM " + TableConst.HOOK
                     + " WHERE hook_type = 'BUILTIN' AND class_path IS NOT NULL");
+            cleanDanglingHookRefs();
             return;
         }
         List<String> existingClassPaths = jdbcTemplate.queryForList(
@@ -76,6 +77,19 @@ public class HookConfigServiceImpl extends ServiceImpl<HookConfigMapper, HookCon
         for (HookConfigWrapper configWrapper : configWrappers) {
             syncSingleHook(configWrapper, allTenantIds, tenantCodeToId);
         }
+
+        // 4. 孤儿关联清理(启动自愈)
+        cleanDanglingHookRefs();
+    }
+
+    /**
+     * 清理指向已不存在 Hook 的悬空关联(agent_hooks)。
+     * 同步的 DELETE 只删 hook_config 自身,不级联关联表;启动同步末尾统一自愈,
+     * 手动删除路径(deleteByIds)本就有级联。同步期无租户上下文,沿用 jdbcTemplate。
+     */
+    private void cleanDanglingHookRefs() {
+        jdbcTemplate.update("DELETE FROM " + TableConst.AGENT_HOOKS
+                + " WHERE hook_config_id NOT IN (SELECT id FROM " + TableConst.HOOK + ")");
     }
 
     /**

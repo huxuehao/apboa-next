@@ -1,15 +1,21 @@
 <script setup lang="ts">
 /**
  * 资源 @mention 下拉组件
- * 支持双页面交互：
- *  - 主页：工作空间文件列表 + 工具/技能"文件夹"入口
- *  - 详情页：进入文件夹后展示对应类目下的资源列表
+ * 支持搜索优先的双页面交互：
+ *  - 主页零关键词：最近使用 + 工作空间文件 + 资源分类入口
+ *  - 主页有关键词：跨工具/技能/MCP/文件的相关性搜索
+ *  - 详情页：分类内搜索；MCP 零关键词按服务折叠浏览
  * 双页面间通过方向感知的滑动动画切换
  *
  * @component
  */
-import { computed, nextTick, ref, watch } from 'vue'
-import { ArrowLeftOutlined } from '@ant-design/icons-vue'
+import { computed, nextTick, onBeforeUpdate, ref, watch } from 'vue'
+import {
+  ArrowLeftOutlined,
+  ClockCircleOutlined,
+  DownOutlined,
+  RightOutlined
+} from '@ant-design/icons-vue'
 import type { FlatFileItem } from '@/composables/chat/useWorkspaceFiles'
 import type {
   AgentMcpToolItem,
@@ -24,6 +30,12 @@ import {
   type MainCategorySection,
   useResourceCategories
 } from '@/composables/chat/useResourceCategories'
+import {
+  mentionItemKey,
+  pushMentionRecent,
+  resolveMentionRecents,
+  searchMentionItems
+} from '@/utils/chat/mentionPicker'
 
 const props = withDefaults(
   defineProps<{
@@ -39,13 +51,16 @@ const props = withDefaults(
     agentMcpTools?: AgentMcpToolItem[]
     /** 过滤关键词（来自 @ 后输入） */
     keyword?: string
+    /** 最近使用隔离键（账号 + agent），为空时不持久化 */
+    recentScope?: string
   }>(),
   {
     workspaceFiles: () => [],
     agentTools: () => [],
     agentSkills: () => [],
     agentMcpTools: () => [],
-    keyword: ''
+    keyword: '',
+    recentScope: ''
   }
 )
 
@@ -53,6 +68,9 @@ const emit = defineEmits<{
   (e: 'select', item: MentionResourceItem): void
   (e: 'close'): void
 }>()
+
+const RECENT_LIMIT = 6
+const RECENT_STORAGE_PREFIX = 'chat-mention-recents:'
 
 /**
  * 类目数据：平铺项（工作空间文件）+ 底部文件夹区段
@@ -63,6 +81,62 @@ const { flatItems, folderSections } = useResourceCategories({
   agentSkills: computed(() => props.agentSkills),
   agentMcpTools: computed(() => props.agentMcpTools)
 })
+
+/** 所有资源的统一扁平目录：全局搜索与最近使用共用。 */
+const allItems = computed<MentionResourceItem[]>(() => [
+  ...flatItems.value,
+  ...folderSections.value.flatMap((section) => section.items)
+])
+
+const queryActive = computed(() => !!(props.keyword || '').trim())
+const recentKeys = ref<string[]>([])
+
+const recentStorageKey = computed(() =>
+  props.recentScope ? `${RECENT_STORAGE_PREFIX}${props.recentScope}` : '')
+
+function loadRecentKeys() {
+  const key = recentStorageKey.value
+  if (!key) {
+    recentKeys.value = []
+    return
+  }
+  try {
+    const parsed = JSON.parse(localStorage.getItem(key) || '[]')
+    recentKeys.value = Array.isArray(parsed)
+      ? parsed.filter((item): item is string => typeof item === 'string').slice(0, RECENT_LIMIT)
+      : []
+  } catch {
+    recentKeys.value = []
+  }
+}
+
+function persistRecentKeys() {
+  if (!recentStorageKey.value) return
+  try {
+    localStorage.setItem(recentStorageKey.value, JSON.stringify(recentKeys.value))
+  } catch {
+    // 隐私模式或存储配额异常不影响资源选择主流程。
+  }
+}
+
+function selectItem(item: MentionResourceItem) {
+  if (item.kind !== 'workspace-file') {
+    recentKeys.value = pushMentionRecent(recentKeys.value, item, RECENT_LIMIT)
+    persistRecentKeys()
+  }
+  emit('select', item)
+}
+
+watch(recentStorageKey, loadRecentKeys, { immediate: true })
+
+const recentItems = computed(() =>
+  resolveMentionRecents(recentKeys.value, allItems.value).slice(0, RECENT_LIMIT))
+const recentMainItems = computed(() =>
+  recentItems.value.filter((item) => item.kind !== 'workspace-file'))
+const recentMcpItems = computed(() =>
+  recentItems.value.filter((item) => item.kind === 'agent-mcp'))
+const globalSearchItems = computed(() =>
+  searchMentionItems(allItems.value, props.keyword || '', recentKeys.value))
 
 /** 当前视图：主页 / 详情页 */
 const view = ref<'main' | 'detail'>('main')
@@ -80,6 +154,11 @@ const mainListRef = ref<HTMLDivElement | null>(null)
 const detailListRef = ref<HTMLDivElement | null>(null)
 const mainItemRefs = ref<HTMLDivElement[]>([])
 const detailItemRefs = ref<HTMLDivElement[]>([])
+
+onBeforeUpdate(() => {
+  mainItemRefs.value = []
+  detailItemRefs.value = []
+})
 
 /**
  * 主页：关键词过滤后的工作空间文件项
@@ -109,7 +188,13 @@ type MainEntry =
   | { kind: 'folder'; section: MainCategorySection }
 
 const mainEntries = computed<MainEntry[]>(() => {
+  if (queryActive.value) {
+    return globalSearchItems.value.map((item) => ({ kind: 'flat' as const, item }))
+  }
   const list: MainEntry[] = []
+  for (const item of recentMainItems.value) {
+    list.push({ kind: 'flat', item })
+  }
   for (const item of filteredFlatItems.value) {
     list.push({ kind: 'flat', item })
   }
@@ -127,6 +212,11 @@ const detailMeta = computed(() => {
   return RESOURCE_CATEGORY_REGISTRY[detailKind.value]
 })
 
+const detailCountLabel = computed(() => {
+  const count = filteredDetailItems.value.length
+  return queryActive.value && count >= 30 ? `前 ${count}` : String(count)
+})
+
 /**
  * 详情页：关键词过滤后的资源项
  */
@@ -134,14 +224,8 @@ const filteredDetailItems = computed<MentionResourceItem[]>(() => {
   if (!detailKind.value) return []
   const list = pickRawListByKind(detailKind.value)
   const items = list.map((raw) => toResourceItem(detailKind.value!, raw))
-  const kw = (props.keyword || '').trim().toLowerCase()
-  if (!kw) return items
-  return items.filter((item) => {
-    const inName = item.name.toLowerCase().includes(kw)
-    const inAlias = (item.alias || '').toLowerCase().includes(kw)
-    const inDesc = (item.description || '').toLowerCase().includes(kw)
-    return inName || inAlias || inDesc
-  })
+  if (!queryActive.value) return items
+  return searchMentionItems(items, props.keyword || '', recentKeys.value)
 })
 
 /**
@@ -166,6 +250,55 @@ const detailGroups = computed(() => {
   return Array.from(groups.values())
 })
 
+const expandedMcpServerId = ref<string | null>(null)
+
+type McpBrowseEntry =
+  | { type: 'item'; item: MentionResourceItem }
+  | { type: 'server'; serverId: string }
+
+/**
+ * MCP 零关键词浏览模型：最近使用在前，服务默认折叠且同一时刻只展开一个。
+ * 每个可操作行携带连续 index，保证鼠标渲染和键盘导航使用同一顺序。
+ */
+const mcpBrowseModel = computed(() => {
+  const entries: McpBrowseEntry[] = []
+  const recent = recentMcpItems.value.map((item) => {
+    const index = entries.length
+    entries.push({ type: 'item', item })
+    return { item, index }
+  })
+  const groups = detailGroups.value.map((group) => {
+    const serverIndex = entries.length
+    entries.push({ type: 'server', serverId: group.serverId })
+    const tools = expandedMcpServerId.value === group.serverId
+      ? group.items.map(({ item }) => {
+          const index = entries.length
+          entries.push({ type: 'item', item })
+          return { item, index }
+        })
+      : []
+    return { ...group, serverIndex, tools }
+  })
+  return { entries, recent, groups }
+})
+
+function itemServerName(item: MentionResourceItem): string {
+  if (item.kind !== 'agent-mcp') return ''
+  return (item.raw as AgentMcpToolItem | undefined)?.serverName || ''
+}
+
+function itemSecondary(item: MentionResourceItem): string {
+  return [itemServerName(item), item.description].filter(Boolean).join(' · ')
+}
+
+function itemTypeLabel(item: MentionResourceItem): string {
+  return RESOURCE_CATEGORY_REGISTRY[item.kind].label
+}
+
+function itemDomKey(item: MentionResourceItem): string {
+  return mentionItemKey(item)
+}
+
 /**
  * 按 kind 取出原始数据列表
  */
@@ -188,6 +321,7 @@ const enterFolder = (section: MainCategorySection) => {
   direction.value = 'forward'
   detailKind.value = section.kind
   detailActiveIndex.value = 0
+  expandedMcpServerId.value = null
   // 在下一帧再切换 view，确保 direction 已经被订阅到 transition name
   nextTick(() => {
     view.value = 'detail'
@@ -219,7 +353,7 @@ const confirmMainSelection = () => {
   const entry = entries[idx]
   if (!entry) return
   if (entry.kind === 'flat') {
-    emit('select', entry.item)
+    selectItem(entry.item)
   } else {
     enterFolder(entry.section)
   }
@@ -229,11 +363,19 @@ const confirmMainSelection = () => {
  * 详情页确认选中
  */
 const confirmDetailSelection = () => {
+  if (detailKind.value === 'agent-mcp' && !queryActive.value) {
+    const entries = mcpBrowseModel.value.entries
+    if (entries.length === 0) return
+    const idx = clampIndex(detailActiveIndex.value, entries.length)
+    const entry = entries[idx]
+    if (entry) handleMcpBrowseEntry(entry, idx)
+    return
+  }
   const items = filteredDetailItems.value
   if (items.length === 0) return
   const idx = clampIndex(detailActiveIndex.value, items.length)
   const target = items[idx]
-  if (target) emit('select', target)
+  if (target) selectItem(target)
 }
 
 /**
@@ -242,7 +384,7 @@ const confirmDetailSelection = () => {
 const handleMainEntryClick = (entry: MainEntry, index: number) => {
   mainActiveIndex.value = index
   if (entry.kind === 'flat') {
-    emit('select', entry.item)
+    selectItem(entry.item)
   } else {
     enterFolder(entry.section)
   }
@@ -253,7 +395,27 @@ const handleMainEntryClick = (entry: MainEntry, index: number) => {
  */
 const handleDetailItemClick = (item: MentionResourceItem, index: number) => {
   detailActiveIndex.value = index
-  emit('select', item)
+  selectItem(item)
+}
+
+function toggleMcpServer(serverId: string) {
+  expandedMcpServerId.value = expandedMcpServerId.value === serverId ? null : serverId
+  nextTick(() => {
+    const group = mcpBrowseModel.value.groups.find((candidate) => candidate.serverId === serverId)
+    if (group) {
+      detailActiveIndex.value = group.serverIndex
+      scrollToActive('detail')
+    }
+  })
+}
+
+function handleMcpBrowseEntry(entry: McpBrowseEntry, index: number) {
+  detailActiveIndex.value = index
+  if (entry.type === 'server') {
+    toggleMcpServer(entry.serverId)
+  } else {
+    selectItem(entry.item)
+  }
 }
 
 /**
@@ -304,6 +466,10 @@ const handleMainKeydown = (e: KeyboardEvent) => {
     emit('close')
     return
   }
+  if (entries.length === 0 && e.key === 'Enter') {
+    e.preventDefault()
+    return
+  }
   if (entries.length === 0) return
 
   if (e.key === 'ArrowDown') {
@@ -333,26 +499,52 @@ const handleMainKeydown = (e: KeyboardEvent) => {
  * 详情页键盘
  */
 const handleDetailKeydown = (e: KeyboardEvent) => {
-  const items = filteredDetailItems.value
-  if (e.key === 'Escape' || e.key === 'ArrowLeft') {
+  const mcpBrowse = detailKind.value === 'agent-mcp' && !queryActive.value
+  const length = mcpBrowse
+    ? mcpBrowseModel.value.entries.length
+    : filteredDetailItems.value.length
+  if (e.key === 'Escape') {
     e.preventDefault()
     backToMain()
     return
   }
-  if (items.length === 0) return
+  if (e.key === 'ArrowLeft') {
+    e.preventDefault()
+    if (mcpBrowse && expandedMcpServerId.value) {
+      const expandedGroup = mcpBrowseModel.value.groups
+        .find((group) => group.serverId === expandedMcpServerId.value)
+      if (expandedGroup) detailActiveIndex.value = expandedGroup.serverIndex
+      expandedMcpServerId.value = null
+      nextTick(() => scrollToActive('detail'))
+    } else {
+      backToMain()
+    }
+    return
+  }
+  if (length === 0 && e.key === 'Enter') {
+    e.preventDefault()
+    return
+  }
+  if (length === 0) return
 
   if (e.key === 'ArrowDown') {
     e.preventDefault()
-    detailActiveIndex.value = (detailActiveIndex.value + 1) % items.length
+    detailActiveIndex.value = (detailActiveIndex.value + 1) % length
     scrollToActive('detail')
   } else if (e.key === 'ArrowUp') {
     e.preventDefault()
     detailActiveIndex.value =
-      (detailActiveIndex.value - 1 + items.length) % items.length
+      (detailActiveIndex.value - 1 + length) % length
     scrollToActive('detail')
   } else if (e.key === 'Enter') {
     e.preventDefault()
     confirmDetailSelection()
+  } else if (e.key === 'ArrowRight' && mcpBrowse) {
+    const entry = mcpBrowseModel.value.entries[clampIndex(detailActiveIndex.value, length)]
+    if (entry?.type === 'server' && expandedMcpServerId.value !== entry.serverId) {
+      e.preventDefault()
+      toggleMcpServer(entry.serverId)
+    }
   }
 }
 
@@ -378,6 +570,8 @@ watch(
       detailActiveIndex.value = 0
       view.value = 'main'
       detailKind.value = null
+      expandedMcpServerId.value = null
+      loadRecentKeys()
     }
   }
 )
@@ -408,64 +602,121 @@ const transitionName = computed(() =>
         <Transition :name="transitionName">
           <!-- 主页 -->
           <div v-if="view === 'main'" key="main" class="dropdown-page main-page">
-            <div v-if="filteredFlatItems.length > 0" ref="mainListRef" class="main-files-area">
+            <!-- 有查询词：跨工作空间文件、工具、技能、MCP 工具统一搜索并按相关性扁平展示。 -->
+            <div v-if="queryActive" ref="mainListRef" class="main-files-area search-results-area">
+              <div v-if="globalSearchItems.length === 0" class="dropdown-empty">
+                <span>未找到匹配资源</span>
+              </div>
               <div
-                v-for="(entry, index) in mainEntries.slice(0, filteredFlatItems.length)"
-                :key="`flat-${entry.kind === 'flat' ? entry.item.id : index}`"
+                v-for="(item, index) in globalSearchItems"
+                :key="`search-${itemDomKey(item)}`"
                 :ref="(el) => { if (el) mainItemRefs[index] = el as HTMLDivElement }"
-                class="dropdown-item"
+                class="dropdown-item detail-item"
                 :class="{ active: index === mainActiveIndex }"
-                @click="handleMainEntryClick(entry, index)"
+                @click="handleMainEntryClick({ kind: 'flat', item }, index)"
                 @mouseenter="mainActiveIndex = index"
               >
                 <span class="dropdown-item-icon">
-                  <component
-                    :is="
-                      entry.kind === 'flat'
-                        ? RESOURCE_CATEGORY_REGISTRY[entry.item.kind].renderItemIcon(entry.item)
-                        : null
-                    "
-                  />
+                  <component :is="RESOURCE_CATEGORY_REGISTRY[item.kind].renderItemIcon(item)" />
                 </span>
-                <div class="dropdown-item-content">
-                  <span
-                    v-if="entry.kind === 'flat'"
-                    class="dropdown-item-name"
-                    :title="entry.item.name"
-                  >
-                    {{ entry.item.name }}
+                <div class="dropdown-item-content detail-item-content">
+                  <span class="detail-item-name" :title="item.alias || item.name">
+                    {{ item.alias || item.name }}
                   </span>
-                  <span
-                    v-if="entry.kind === 'flat' && entry.item.description"
-                    class="dropdown-item-folder"
-                    :title="entry.item.description"
-                  >
-                    {{ entry.item.description }}
+                  <span v-if="itemSecondary(item)" class="detail-item-desc" :title="itemSecondary(item)">
+                    {{ itemSecondary(item) }}
                   </span>
                 </div>
+                <span class="resource-kind-badge">{{ itemTypeLabel(item) }}</span>
               </div>
             </div>
 
-            <div v-if="visibleFolderSections.length > 0" class="main-folders-area">
+            <!-- 零关键词：最近使用优先，现有工作空间文件保持原入口，分类固定在底部。 -->
+            <template v-else>
               <div
-                v-for="(section, sIdx) in visibleFolderSections"
-                :key="`folder-${section.kind}`"
-                :ref="(el) => {
-                  const idx = filteredFlatItems.length + sIdx
-                  if (el) mainItemRefs[idx] = el as HTMLDivElement
-                }"
-                class="dropdown-folder-item"
-                :class="{ active: filteredFlatItems.length + sIdx === mainActiveIndex }"
-                @click="enterFolder(section)"
-                @mouseenter="mainActiveIndex = filteredFlatItems.length + sIdx"
+                v-if="recentMainItems.length > 0 || filteredFlatItems.length > 0"
+                ref="mainListRef"
+                class="main-files-area"
               >
-                <span class="folder-icon">
-                  <component :is="section.meta.folderIcon" />
-                </span>
-                <span class="folder-label">{{ section.meta.label }}</span>
-                <span class="folder-count">{{ section.items.length }} 个</span>
+                <div v-if="recentMainItems.length > 0" class="dropdown-section-title">
+                  <ClockCircleOutlined />
+                  <span>最近使用</span>
+                </div>
+                <div
+                  v-for="(item, index) in recentMainItems"
+                  :key="`recent-${itemDomKey(item)}`"
+                  :ref="(el) => { if (el) mainItemRefs[index] = el as HTMLDivElement }"
+                  class="dropdown-item compact-resource-item"
+                  :class="{ active: index === mainActiveIndex }"
+                  @click="handleMainEntryClick({ kind: 'flat', item }, index)"
+                  @mouseenter="mainActiveIndex = index"
+                >
+                  <span class="dropdown-item-icon">
+                    <component :is="RESOURCE_CATEGORY_REGISTRY[item.kind].renderItemIcon(item)" />
+                  </span>
+                  <div class="dropdown-item-content">
+                    <span class="dropdown-item-name" :title="item.alias || item.name">
+                      {{ item.alias || item.name }}
+                    </span>
+                    <span class="dropdown-item-folder" :title="itemServerName(item) || itemTypeLabel(item)">
+                      {{ itemServerName(item) || itemTypeLabel(item) }}
+                    </span>
+                  </div>
+                </div>
+
+                <div v-if="filteredFlatItems.length > 0" class="dropdown-section-title">
+                  <span>工作空间文件</span>
+                </div>
+                <div
+                  v-for="(item, index) in filteredFlatItems"
+                  :key="`flat-${itemDomKey(item)}`"
+                  :ref="(el) => {
+                    const idx = recentMainItems.length + index
+                    if (el) mainItemRefs[idx] = el as HTMLDivElement
+                  }"
+                  class="dropdown-item"
+                  :class="{ active: recentMainItems.length + index === mainActiveIndex }"
+                  @click="handleMainEntryClick({ kind: 'flat', item }, recentMainItems.length + index)"
+                  @mouseenter="mainActiveIndex = recentMainItems.length + index"
+                >
+                  <span class="dropdown-item-icon">
+                    <component :is="RESOURCE_CATEGORY_REGISTRY[item.kind].renderItemIcon(item)" />
+                  </span>
+                  <div class="dropdown-item-content">
+                    <span class="dropdown-item-name" :title="item.name">{{ item.name }}</span>
+                    <span v-if="item.description" class="dropdown-item-folder" :title="item.description">
+                      {{ item.description }}
+                    </span>
+                  </div>
+                </div>
               </div>
-            </div>
+
+              <div v-if="visibleFolderSections.length > 0" class="main-folders-area">
+                <div class="dropdown-section-title"><span>浏览分类</span></div>
+                <div
+                  v-for="(section, sIdx) in visibleFolderSections"
+                  :key="`folder-${section.kind}`"
+                  :ref="(el) => {
+                    const idx = recentMainItems.length + filteredFlatItems.length + sIdx
+                    if (el) mainItemRefs[idx] = el as HTMLDivElement
+                  }"
+                  class="dropdown-folder-item"
+                  :class="{
+                    active: recentMainItems.length + filteredFlatItems.length + sIdx === mainActiveIndex
+                  }"
+                  @click="handleMainEntryClick(
+                    { kind: 'folder', section },
+                    recentMainItems.length + filteredFlatItems.length + sIdx
+                  )"
+                  @mouseenter="mainActiveIndex = recentMainItems.length + filteredFlatItems.length + sIdx"
+                >
+                  <span class="folder-icon"><component :is="section.meta.folderIcon" /></span>
+                  <span class="folder-label">{{ section.meta.label }}</span>
+                  <span class="folder-count">{{ section.items.length }} 个</span>
+                  <RightOutlined class="folder-chevron" />
+                </div>
+              </div>
+            </template>
           </div>
 
           <!-- 详情页 -->
@@ -477,46 +728,89 @@ const transitionName = computed(() =>
               <span class="detail-title">
                 {{ detailMeta?.label }}
               </span>
-              <span class="detail-count">{{ filteredDetailItems.length }}</span>
+              <span class="detail-count">{{ detailCountLabel }}</span>
             </div>
             <div ref="detailListRef" class="detail-list">
               <div
-                v-if="filteredDetailItems.length === 0"
+                v-if="detailKind === 'agent-mcp' && !queryActive
+                  ? mcpBrowseModel.entries.length === 0
+                  : filteredDetailItems.length === 0"
                 class="dropdown-empty"
               >
-                <span>暂无可用项</span>
+                <span>{{ queryActive ? '未找到匹配资源' : '暂无可用项' }}</span>
               </div>
-              <!-- MCP：按 server 分组标题 + 组内工具（index 用全局索引，键盘导航/滚动零改） -->
-              <template v-else-if="detailKind === 'agent-mcp'">
-                <div v-for="group in detailGroups" :key="`mcp-grp-${group.serverId}`" class="detail-group">
-                  <div class="detail-group-title">{{ group.serverName }}</div>
+
+              <!-- MCP 零关键词：最近使用 + 默认折叠的服务目录，同一时间只展开一个服务。 -->
+              <template v-else-if="detailKind === 'agent-mcp' && !queryActive">
+                <template v-if="mcpBrowseModel.recent.length > 0">
+                  <div class="dropdown-section-title detail-section-title">
+                    <ClockCircleOutlined />
+                    <span>最近使用</span>
+                  </div>
                   <div
-                    v-for="{ item, index } in group.items"
-                    :key="`detail-${item.id}`"
+                    v-for="{ item, index } in mcpBrowseModel.recent"
+                    :key="`mcp-recent-${itemDomKey(item)}`"
                     :ref="(el) => { if (el) detailItemRefs[index] = el as HTMLDivElement }"
                     class="dropdown-item detail-item"
                     :class="{ active: index === detailActiveIndex }"
-                    @click="handleDetailItemClick(item, index)"
+                    @click="handleMcpBrowseEntry({ type: 'item', item }, index)"
                     @mouseenter="detailActiveIndex = index"
                   >
                     <div class="dropdown-item-content detail-item-content">
                       <span class="detail-item-name" :title="item.name">{{ item.name }}</span>
-                      <span
-                        v-if="item.description"
-                        class="detail-item-desc"
-                        :title="item.description"
-                      >
+                      <span v-if="itemSecondary(item)" class="detail-item-desc" :title="itemSecondary(item)">
+                        {{ itemSecondary(item) }}
+                      </span>
+                    </div>
+                  </div>
+                </template>
+
+                <div v-if="mcpBrowseModel.groups.length > 0" class="dropdown-section-title detail-section-title">
+                  <span>按服务浏览</span>
+                </div>
+                <div
+                  v-for="group in mcpBrowseModel.groups"
+                  :key="`mcp-grp-${group.serverId}`"
+                  class="detail-group"
+                >
+                  <div
+                    :ref="(el) => { if (el) detailItemRefs[group.serverIndex] = el as HTMLDivElement }"
+                    class="dropdown-folder-item mcp-server-row"
+                    :class="{ active: group.serverIndex === detailActiveIndex }"
+                    @click="handleMcpBrowseEntry({ type: 'server', serverId: group.serverId }, group.serverIndex)"
+                    @mouseenter="detailActiveIndex = group.serverIndex"
+                  >
+                    <span class="folder-icon">
+                      <DownOutlined v-if="expandedMcpServerId === group.serverId" />
+                      <RightOutlined v-else />
+                    </span>
+                    <span class="folder-label">{{ group.serverName }}</span>
+                    <span class="folder-count">{{ group.items.length }} 个</span>
+                  </div>
+                  <div
+                    v-for="{ item, index } in group.tools"
+                    :key="`mcp-tool-${itemDomKey(item)}`"
+                    :ref="(el) => { if (el) detailItemRefs[index] = el as HTMLDivElement }"
+                    class="dropdown-item detail-item mcp-tool-row"
+                    :class="{ active: index === detailActiveIndex }"
+                    @click="handleMcpBrowseEntry({ type: 'item', item }, index)"
+                    @mouseenter="detailActiveIndex = index"
+                  >
+                    <div class="dropdown-item-content detail-item-content">
+                      <span class="detail-item-name" :title="item.name">{{ item.name }}</span>
+                      <span v-if="item.description" class="detail-item-desc" :title="item.description">
                         {{ item.description }}
                       </span>
                     </div>
                   </div>
                 </div>
               </template>
-              <!-- 非 MCP：扁平渲染 -->
+
+              <!-- 搜索态（含 MCP）与非 MCP 详情：相关性排序后的扁平结果。 -->
               <template v-else>
                 <div
                   v-for="(item, index) in filteredDetailItems"
-                  :key="`detail-${item.id}`"
+                  :key="`detail-${itemDomKey(item)}`"
                   :ref="(el) => { if (el) detailItemRefs[index] = el as HTMLDivElement }"
                   class="dropdown-item detail-item"
                   :class="{ active: index === detailActiveIndex }"
@@ -528,11 +822,11 @@ const transitionName = computed(() =>
                       {{ item.alias || item.name }}
                     </span>
                     <span
-                      v-if="item.description"
+                      v-if="itemSecondary(item)"
                       class="detail-item-desc"
-                      :title="item.description"
+                      :title="itemSecondary(item)"
                     >
-                      {{ item.description }}
+                      {{ itemSecondary(item) }}
                     </span>
                   </div>
                 </div>
@@ -556,9 +850,12 @@ const transitionName = computed(() =>
   box-shadow: 0 -5px 24px rgba(0, 0, 0, 0.12);
   border: 1px solid var(--color-border-light);
   width: 100%;
-  max-height: 320px;
+  max-height: min(420px, 62vh);
+  max-height: min(420px, 62dvh);
   overflow: hidden;
   text-align: left;
+  display: flex;
+  flex-direction: column;
 }
 
 // 使用 grid 单元格叠加，使“当前可见 page”自然擑起容器高度
@@ -567,7 +864,8 @@ const transitionName = computed(() =>
   display: grid;
   grid-template-columns: 1fr;
   grid-template-rows: minmax(0, max-content);
-  max-height: 320px;
+  max-height: min(370px, calc(62vh - 50px));
+  max-height: min(370px, calc(62dvh - 50px));
   overflow: hidden;
 }
 
@@ -579,7 +877,8 @@ const transitionName = computed(() =>
   background: #fff;
   min-height: 0;
   // 限制 page 高度不超过 stack，保证内部 flex:1 区域可滑动
-  max-height: 320px;
+  max-height: min(370px, calc(62vh - 50px));
+  max-height: min(370px, calc(62dvh - 50px));
 }
 
 // 动画期间：离场页面脱离文档流，不参与 grid cell 高度计算
@@ -620,12 +919,37 @@ const transitionName = computed(() =>
   }
 }
 
+.search-results-area {
+  border-bottom: 0;
+}
+
+.dropdown-section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-placeholder);
+  user-select: none;
+}
+
+.detail-section-title {
+  padding-top: 8px;
+}
+
 .main-folders-area {
   flex-shrink: 0;
   padding: 6px;
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.folder-chevron {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--color-text-placeholder);
 }
 
 /* 详情页布局：头部固定不滚，内容区滚动 */
@@ -775,6 +1099,21 @@ const transitionName = computed(() =>
   max-width: 50%;
 }
 
+.compact-resource-item {
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+
+.resource-kind-badge {
+  flex-shrink: 0;
+  padding: 1px 7px;
+  border-radius: 9px;
+  background: rgba(116, 116, 116, 0.08);
+  color: var(--color-text-placeholder);
+  font-size: 11px;
+  line-height: 18px;
+}
+
 /* 文件夹入口行 */
 .dropdown-folder-item {
   display: flex;
@@ -838,6 +1177,15 @@ const transitionName = computed(() =>
   color: var(--color-text-placeholder);
 }
 
+.mcp-server-row {
+  margin-top: 1px;
+}
+
+.mcp-tool-row {
+  margin-left: 22px;
+  width: calc(100% - 22px);
+}
+
 .detail-item-name {
   font-size: 14px;
   color: var(--color-text-primary);
@@ -897,4 +1245,5 @@ const transitionName = computed(() =>
   opacity: 0;
   transform: translateY(4px);
 }
+
 </style>

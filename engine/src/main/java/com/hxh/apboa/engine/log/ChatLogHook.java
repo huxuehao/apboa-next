@@ -4,6 +4,7 @@ import com.hxh.apboa.common.entity.ChatMessage;
 import com.hxh.apboa.common.util.AgentMetadataStore;
 import com.hxh.apboa.common.util.BeanUtils;
 import com.hxh.apboa.common.util.JsonUtils;
+import com.hxh.apboa.engine.hook.builtins.IConfirmationHook;
 import com.hxh.apboa.engine.log.telemetry.RunStatAccumulator;
 import com.hxh.apboa.engine.log.telemetry.RunTelemetryExtractor;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -66,6 +67,27 @@ public class ChatLogHook implements Hook {
             TOOL_ELAPSED_MAP.clear();
         }
         TOOL_ELAPSED_MAP.put(toolUseId, elapsed);
+    }
+
+    /**
+     * HITL 改参后同步修正入参缓存（EditedInputApplier 调用）：入参在暂停前的
+     * PostReasoning 就已缓存为模型原始参数，resume 续跑不再触发 PostReasoning，
+     * 不修正则落库 tool 消息的 args 与实际执行参数不一致。
+     * 跨实例 resume 时缓存本就不在本进程（该场景工具消息现状即不落库），保持既有行为。
+     */
+    public static void updateToolArgs(String toolUseId, String newArgsJson) {
+        if (toolUseId == null || newArgsJson == null || newArgsJson.isEmpty()) {
+            return;
+        }
+        Map<String, Object> cache = TOOL_CACHE_MAP.get(toolUseId);
+        if (cache == null) {
+            return;
+        }
+        TOOL_CACHE_MAP.put(toolUseId, Map.of(
+                "tool_name", cache.get("tool_name"),
+                "tool_args", newArgsJson,
+                "tool_start", cache.get("tool_start")
+        ));
     }
 
     /**
@@ -218,7 +240,9 @@ public class ChatLogHook implements Hook {
                                             elapsed,
                                             toolCache.get("tool_args").toString(),
                                             toolRes,
-                                            pollSubProcess(threadId, toolName)),
+                                            pollSubProcess(threadId, toolName),
+                                            // 走到这里=真实执行完成，被拒工具无 PostActing（补偿路径落 rejected）
+                                            IConfirmationHook.isNeedConfirm(toolName) ? "approved" : null),
                                     tenantId));
                         } finally {
                             TOOL_CACHE_MAP.remove(toolId);
@@ -307,6 +331,16 @@ public class ChatLogHook implements Hook {
     // 构建工具内容（subProcess 为子智能体中间过程步骤，非子智能体工具为 null 时不写该字段，保持旧格式）
     private static String buildToolContent(String toolName, Long totalTimes, String args, String result,
                                     List<Map<String, Object>> subProcess) {
+        return buildToolContent(toolName, totalTimes, args, result, subProcess, null);
+    }
+
+    /**
+     * @param confirmState HITL 确认态标记："approved"（need_confirm 工具被放行执行，含一键授权）/
+     *                     "rejected"（用户/自动拒绝）；非确认工具传 null 不落该字段。
+     *                     历史消息据此渲染确认状态徽标与定制确认卡只读回显。
+     */
+    private static String buildToolContent(String toolName, Long totalTimes, String args, String result,
+                                    List<Map<String, Object>> subProcess, String confirmState) {
         Map<String, Object> toolContent = new HashMap<>() {{
             put("name", toolName);
             put("totalTimes", totalTimes);
@@ -315,6 +349,9 @@ public class ChatLogHook implements Hook {
         }};
         if (subProcess != null && !subProcess.isEmpty()) {
             toolContent.put("subProcess", subProcess);
+        }
+        if (confirmState != null) {
+            toolContent.put("confirmState", confirmState);
         }
         return JsonUtils.toJsonStr(toolContent);
     }
@@ -443,7 +480,8 @@ public class ChatLogHook implements Hook {
                             elapsed,
                             toolCache.get("tool_args").toString(),
                             resultText,
-                            null),
+                            null,
+                            "rejected"),
                     tenantId));
             return elapsed;
         } catch (Exception e) {

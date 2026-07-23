@@ -514,7 +514,7 @@ apboa（错误）：
 
 **前端**
 - `ui/src/composables/chat/useChatStream.ts`：`getForwardedProps`:37；`onRunStarted` 清空:61-65；`onToolCallStart`:123；**`onRunFinished` 全标记:197-201**；`sendToolContent`:233-266。
-- `ui/src/components/chat/ToolCallItem.vue`：`handleConfirm`(代执行/mock):23-61；`handleCancel`(塞文本):64-82；按钮:96-107。
+- `ui/src/components/chat/ToolCallItem.vue`：`handleConfirm`(代执行):23-61；`handleCancel`(塞文本):64-82；按钮:96-107。
 - `ui/src/components/chat/MessageList.vue`：`v-for ToolCallItem`:41-50。
 - `ui/src/views/Chat/index.vue`：`memoryActive` computed:52；`handelToolContent`:335。
 - `ui/src/api/agent.ts`：`agentDoTool`:80（废弃）。

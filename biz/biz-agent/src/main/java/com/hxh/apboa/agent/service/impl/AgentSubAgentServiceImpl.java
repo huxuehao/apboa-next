@@ -42,6 +42,14 @@ public class AgentSubAgentServiceImpl extends ServiceImpl<AgentSubAgentMapper, A
     }
 
     @Override
+    public Boolean deleteBySubAgentIds(List<Long> subAgentIds) {
+        if (subAgentIds == null || subAgentIds.isEmpty()) {
+            return true;
+        }
+        return lambdaUpdate().in(AgentSubAgent::getSubAgentId, subAgentIds).remove();
+    }
+
+    @Override
     public Boolean saveSubAgent(Long agentDefinitionId, List<Long> subAgentIds) {
         deleteSubAgent(List.of(agentDefinitionId));
         insertSubAgent(agentDefinitionId, subAgentIds);

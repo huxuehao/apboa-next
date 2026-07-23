@@ -24,6 +24,7 @@ import {
   buildUserTextFromPayload,
   injectSubmissionToRawContent
 } from '@/utils/chat/uip.ts'
+import { shouldReplayLatestTts } from '@/utils/chat/ttsReplayDecision'
 import type { MarkdownInteractionSubmitPayload } from '@/components/markdown/types'
 
 const props = withDefaults(defineProps<{
@@ -204,6 +205,11 @@ const confirmMode = ref<ConfirmMode>('MANUAL')
 // 新会话尚未创建（懒创建，首条消息才有 sessionId）时的本地暂存：
 // 会话创建后由 watch 回放写入 Redis（null 不回放）
 let pendingConfirmMode: ConfirmMode | null = null
+// 本页面刚创建的会话 id：暂存回放仅对它合法。恢复/切换到已有会话（含 URL 不带
+// sessionId 的刷新——watch 首触发无从区分"全新对话"与"待恢复会话"，会误设预设暂存）
+// 一律以后端真值为准，否则预设回放会把既有会话翻转成一键授权，恢复中的挂起确认
+// 连同用户改参一起被误放行
+let lastCreatedSessionId: string | null = null
 
 /** 归一化接口返回的模式值，未知回退 MANUAL */
 const normalizeMode = (m: unknown): ConfirmMode =>
@@ -242,8 +248,8 @@ watch(currentSessionId, async (sid) => {
     pendingConfirmMode = isLoadingExistingSession ? null : 'AUTO_APPROVE'
     return
   }
-  if (pendingConfirmMode) {
-    // 有暂存（无会话状态下用户已选模式）：回放写入并跳过 GET，避免 GET 的默认值冲掉预设
+  if (pendingConfirmMode && sid === lastCreatedSessionId) {
+    // 有暂存且是本页面刚创建的会话：回放写入并跳过 GET，避免 GET 的默认值冲掉预设
     const mode = pendingConfirmMode
     pendingConfirmMode = null
     try {
@@ -254,6 +260,8 @@ watch(currentSessionId, async (sid) => {
     }
     return
   }
+  // 非本页面新建（刷新恢复/侧栏切换到已有会话）：预设暂存作废，后端真值为准
+  pendingConfirmMode = null
   const state = await fetchSessionState(sid)
   confirmMode.value = normalizeMode(state?.confirmMode)
 }, { immediate: true })
@@ -391,9 +399,11 @@ const voiceState = computed<VoiceInputState>(() => ({
 // 订阅即会话：开着播报开关进入会话即订阅（服务端懒合成，无订阅不烧算力）。
 const {
   autoBroadcast: ttsBroadcastActive,
+  speaking: ttsSpeaking,
   setContext: setTtsContext,
   syncSubscription: syncTtsSubscription,
   toggleAutoBroadcast: toggleTtsBroadcast,
+  speakMessage: ttsSpeakMessage,
   interrupt: ttsInterrupt,
   localStop: ttsLocalStop,
   stopAll: ttsStopAll
@@ -408,10 +418,28 @@ watch([agentId, currentSessionId, ttsBroadcastActive, ttsEnabled], ([aid, sid]) 
 /** 播报开关（Toolbar 菜单）：toggle 在用户手势内执行，顺势解锁移动端音频通道 */
 const handleTtsBroadcastChange = (v: boolean) => {
   if (v !== ttsBroadcastActive.value) {
+    const wasSpeaking = ttsSpeaking.value
     toggleTtsBroadcast()
     // 开关 = 静音键语义：关闭时若当前条在播则仅静音（时间轴继续，重开从当前进度
     // 续声），本条播完自动退订；后续新回复不合成，除非重开开关或手动点消息朗读
     syncTtsSubscription(ttsEnabled.value)
+
+    if (v) {
+      const lastAssistant = !wasSpeaking && !isRunning.value
+        ? [...displayMessages.value].reverse()
+          .find(m => m.role === 'assistant' && !m.isStreaming && !!m.content)
+        : undefined
+      // 没有活动音频、回复也已结束时，订阅无法从已清理的 run buffer 补喂；
+      // 复用消息级朗读从头补播最后一条 AI 回复。仍在播则只解除静音续播，
+      // 仍在生成则由服务端对活跃 run 从头补喂，避免重复合成两路音频。
+      if (shouldReplayLatestTts({
+        speaking: wasSpeaking,
+        running: isRunning.value,
+        hasLatestAssistant: !!lastAssistant,
+      }) && lastAssistant) {
+        ttsSpeakMessage(String(lastAssistant.id), lastAssistant.content)
+      }
+    }
   }
 }
 
@@ -594,6 +622,7 @@ const handleNewSession = async () => {
       }
       // 同上：预创建会话路径的默认一键授权
       pendingConfirmMode = 'AUTO_APPROVE'
+      lastCreatedSessionId = String(newSession.id)
       resetSession({
         id: String(newSession.id),
         title:'新对话'
@@ -763,15 +792,16 @@ const submitRename = async () => {
   }
 }
 
-// HITL §6.5：value = { toolUseId, name, approved }，记录该工具决策（全部决策完内部自动调 resume 续跑）
+// HITL §6.5：value = { toolUseId, name, approved, input? }，记录该工具决策（全部决策完内部自动调 resume 续跑）；
+// input 为确认 UI 中用户修改后的参数，缺省=未修改
 const handelToolContent = (value: any) => {
-  decideConfirm(value.toolUseId, value.approved)
+  decideConfirm(value.toolUseId, value.approved, value.input, value.summary)
 }
 
-// 子智能体 HITL：value = { subToolUseId, approved }，记录子工具决策
+// 子智能体 HITL：value = { subToolUseId, approved, input? }，记录子工具决策
 // （批次决策齐 useChatStream 内部自动调 /agui/subagent/resume 唤醒子智能体）
-const handleSubConfirm = (value: { subToolUseId: string; approved: boolean }) => {
-  decideSubConfirm(value.subToolUseId, value.approved)
+const handleSubConfirm = (value: { subToolUseId: string; approved: boolean; input?: Record<string, unknown> }) => {
+  decideSubConfirm(value.subToolUseId, value.approved, value.input)
 }
 
 // 处理交互提交
@@ -864,6 +894,7 @@ const handleSend = async () => {
     const titleInput = text || '新对话'
     const newSession = await createSession(formatSessionTitle(titleInput))
     if (!newSession) return
+    lastCreatedSessionId = String(newSession.id)
     currentSessionId.value = String(newSession.id)
     currentSessionTitle.value = newSession.title || '新对话'
   }

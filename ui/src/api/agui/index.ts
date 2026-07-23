@@ -116,7 +116,7 @@ export interface SubPendingInfo {
   parentThreadId?: string
   parentToolCallId: string
   subagentName: string
-  pending: Array<{ toolUseId: string; name: string; input?: Record<string, unknown> }>
+  pending: Array<{ toolUseId: string; name: string; input?: Record<string, unknown>; fields?: import('@/types').ConfirmFieldMeta[] }>
 }
 
 /**
@@ -125,7 +125,7 @@ export interface SubPendingInfo {
  */
 export async function subagentResume(
   subSessionId: string,
-  decisions: Array<{ toolUseId: string; name: string; approved: boolean }>
+  decisions: Array<{ toolUseId: string; name: string; approved: boolean; input?: Record<string, unknown> }>
 ): Promise<{ resumed: boolean; error?: string }> {
   const url = getSubagentResumeURL()
   const headers = getRESTHeaders()

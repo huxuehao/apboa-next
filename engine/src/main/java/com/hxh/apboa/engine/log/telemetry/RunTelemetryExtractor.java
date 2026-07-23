@@ -68,10 +68,28 @@ public final class RunTelemetryExtractor {
         }
     }
 
-    /** 工具结果的展示文本（与 tool 消息落库口径一致：取首个输出块的字符串形式） */
+    /**
+     * 工具结果全文：拼接输出里的全部文本块（\n 分隔）。实时展示（AguiAgentAdapter）
+     * 与落库（ChatLogHook 主工具/子步骤）共用本单一实现——历史上两链路各写一份且语义
+     * 不一致（落库只取首块），多块结果（如 HITL 改参提示为独立追加的文本块）落库即丢，
+     * 切换会话后与实时所见不同文。无任何文本块返回 null。
+     */
     public static String toolResultText(ToolResultBlock toolResultBlock) {
-        ContentBlock first = toolResultBlock.getOutput().getFirst();
-        return first.toString();
+        java.util.List<ContentBlock> output =
+                toolResultBlock == null ? null : toolResultBlock.getOutput();
+        if (output == null || output.isEmpty()) {
+            return null;
+        }
+        StringBuilder sb = new StringBuilder();
+        for (ContentBlock block : output) {
+            if (block instanceof TextBlock textBlock) {
+                if (sb.length() > 0) {
+                    sb.append("\n");
+                }
+                sb.append(textBlock.getText());
+            }
+        }
+        return sb.length() > 0 ? sb.toString() : null;
     }
 
     // ─── 步骤构造（字段契约单点，前端 SubProcessStep 类型与此对应） ───

@@ -10,6 +10,22 @@ export interface DisplayMessage {
 }
 
 /**
+ * HITL 确认字段元数据（后端注册 need_confirm 时归一登记，随 TOOL_CONFIRM_REQUIRED /
+ * pending 下发）：确认 UI 据此渲染可编辑表单；空/缺失时降级为 JSON 只读展示。
+ */
+export interface ConfirmFieldMeta {
+  /** 原始参数名（决策回传的 key，不做翻译） */
+  name: string
+  /** 参数类型：string / integer / number / boolean / array / object */
+  type: string
+  required?: boolean
+  /** 参数描述（通用表单兜底层的展示辅助，来自工具 schema） */
+  description?: string
+  /** 枚举可选值（仅 MCP schema 声明 enum 时存在，渲染为下拉） */
+  options?: string[]
+}
+
+/**
  * 子智能体过程步骤：实时（SUBAGENT_STEP 自定义事件）与落库（tool 消息 content.subProcess）
  * 结构同构，均由后端 RunTelemetryExtractor 生成（字段契约见 AguiCustomEvents.SUBAGENT_STEP）。
  * v1 旧数据（tool_use/tool_result 分开、内容截断）按普通步降级渲染
@@ -29,6 +45,8 @@ export interface SubProcessStep {
   streaming?: boolean
   /** 实时态：子智能体内 HITL 待确认（挂起等待主会话决策，渲染允许/禁止按钮） */
   needConfirm?: boolean
+  /** 实时态：待确认工具的参数字段元数据（确认表单渲染依据，随 pending 下发） */
+  fields?: ConfirmFieldMeta[]
   /** 实时态：子确认已决策（允许/拒绝），等待续跑完成事件按 subToolUseId 配对；配对时清除 */
   decided?: boolean
   /** 子智能体内工具调用 id（工具完成事件配对 / 确认决策回传） */

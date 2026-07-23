@@ -32,8 +32,19 @@ public final class PendingSubConfirmRegistry {
 
     private PendingSubConfirmRegistry() {}
 
-    /** 单条工具确认决策，字段语义与主流程 AguiRequestProcessor.ResumeDecision 一致 */
-    public record Decision(String toolUseId, String name, boolean approved) {}
+    /**
+     * 单条工具确认决策，字段语义与主流程 AguiRequestProcessor.ResumeDecision 一致。
+     *
+     * @param input 用户在确认 UI 中修改后的完整参数；null/空 = 未修改（旧客户端兼容）
+     */
+    public record Decision(
+            String toolUseId, String name, boolean approved, Map<String, Object> input) {
+
+        /** 兼容构造器：未携带修改参数的决策（超时全拒等内部构造路径沿用） */
+        public Decision(String toolUseId, String name, boolean approved) {
+            this(toolUseId, name, approved, null);
+        }
+    }
 
     /**
      * 挂起等待的确认请求元数据（也是 GET /agui/subagent/pending 的返回元素，供刷新重建 UI）。

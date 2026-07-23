@@ -12,4 +12,9 @@ import java.util.List;
  **/
 public interface StudioConfigService extends IService<StudioConfig> {
     List<Object> usedWithAgent(List<Long> ids);
+
+    /**
+     * 删除配置并级联清理 agent_studio 关联(裸 removeByIds 会留悬空引用)
+     */
+    boolean deleteByIds(List<Long> ids);
 }

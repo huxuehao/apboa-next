@@ -22,6 +22,7 @@ import com.hxh.apboa.engine.hook.builtins.IConfirmationHook;
 import com.hxh.apboa.engine.log.ChatLogHook;
 import com.hxh.apboa.engine.log.telemetry.RunStatAccumulator;
 import com.hxh.apboa.engine.log.telemetry.RunTelemetryExtractor;
+import io.agentscope.core.ReActAgent;
 import io.agentscope.core.agent.Agent;
 import io.agentscope.core.agent.Event;
 import io.agentscope.core.agent.EventType;
@@ -409,6 +410,15 @@ public class AguiAgentAdapter {
                                     new AguiEvent.ToolCallStart(
                                             state.threadId, state.runId, toolCallId, name));
                             state.startToolCall(toolCallId);
+                            // 兜底补完整参数：resume 续跑流没有暂停前那条流的 Args 增量事件，
+                            // 否则前端实时卡与「单工具完成即落地」的本地消息都无请求参数可显示
+                            // （落库消息有参数，切会话重载才可见——两相不一致）。参数从 agent
+                            // 记忆按 id 反查，暂停态若经用户改参，取到的即改后值，与落库同源
+                            String args = findToolArgsFromMemory(toolCallId);
+                            if (args != null && !args.isEmpty()) {
+                                events.add(new AguiEvent.ToolCallArgs(
+                                        state.threadId, state.runId, toolCallId, args));
+                            }
                         }
 
                         // Ensure ToolCallEnd is emitted to close arguments phase
@@ -454,6 +464,13 @@ public class AguiAgentAdapter {
                             Map<String, Object> value = new LinkedHashMap<>();
                             value.put("toolUseId", toolResult.getId() == null ? "" : toolResult.getId());
                             value.put("elapsed", metadata.getOrDefault("tool_elapsed", 0L));
+                            // need_confirm 工具真实执行完成 = 已授权（人工允许或一键授权模式放行）。
+                            // 自动模式下前端没有人工决策事件、无从自行判定确认态，本地落地的
+                            // tool 消息会缺 confirmState（快照回显丢失、与落库版不一致），随本
+                            // 事件下发补齐
+                            if (IConfirmationHook.isNeedConfirm(toolResult.getName())) {
+                                value.put("confirmState", "approved");
+                            }
                             events.add(new AguiEvent.Custom(
                                     state.threadId,
                                     state.runId,
@@ -513,6 +530,8 @@ public class AguiAgentAdapter {
                         item.put("toolUseId", toolUse.getId());
                         item.put("name", toolUse.getName());
                         item.put("input", toolUse.getInput());
+                        // 参数字段元数据（注册时归一登记），确认 UI 据此渲染可编辑表单；空=降级 JSON 展示
+                        item.put("fields", IConfirmationHook.getConfirmFields(toolUse.getName()));
                         pending.add(item);
                     }
                 }
@@ -683,22 +702,39 @@ public class AguiAgentAdapter {
      * @param toolResult The tool result block
      * @return The text content, or null if not present
      */
-    private String extractToolResultText(ToolResultBlock toolResult) {
-        if (toolResult.getOutput() == null || toolResult.getOutput().isEmpty()) {
+    /**
+     * 从 agent 记忆按工具调用 id 反查请求参数（JSON 串），供「兜底补 ToolCallStart」
+     * 场景一并补发完整 Args。优先取 content（与流式 Args 事件同源同格式），
+     * 回退 input 序列化。子智能体冒泡场景主 agent 记忆无该 id，返回 null 静默跳过。
+     */
+    private String findToolArgsFromMemory(String toolCallId) {
+        if (toolCallId == null || !(agent instanceof ReActAgent reActAgent)
+                || reActAgent.getMemory() == null) {
             return null;
         }
-
-        StringBuilder sb = new StringBuilder();
-        for (ContentBlock output : toolResult.getOutput()) {
-            if (output instanceof TextBlock textBlock) {
-                if (sb.length() > 0) {
-                    sb.append("\n");
+        try {
+            List<Msg> messages = reActAgent.getMemory().getMessages();
+            for (int i = messages.size() - 1; i >= 0; i--) {
+                for (ToolUseBlock toolUse : messages.get(i).getContentBlocks(ToolUseBlock.class)) {
+                    if (toolCallId.equals(toolUse.getId())) {
+                        if (toolUse.getContent() != null && !toolUse.getContent().isEmpty()) {
+                            return toolUse.getContent();
+                        }
+                        return toolUse.getInput() == null || toolUse.getInput().isEmpty()
+                                ? null
+                                : JsonUtils.getJsonCodec().toJson(toolUse.getInput());
+                    }
                 }
-                sb.append(textBlock.getText());
             }
+        } catch (Exception ignore) {
+            // 反查失败不阻断事件流（无参数展示即可，与旧行为一致）
         }
+        return null;
+    }
 
-        return sb.length() > 0 ? sb.toString() : null;
+    /** 委托统一实现（RunTelemetryExtractor.toolResultText）：实时与落库必须同文，勿再各写一份 */
+    private String extractToolResultText(ToolResultBlock toolResult) {
+        return RunTelemetryExtractor.toolResultText(toolResult);
     }
 
     /**

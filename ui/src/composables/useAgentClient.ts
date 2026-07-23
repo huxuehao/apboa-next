@@ -131,12 +131,12 @@ export function useAgentClient(options: UseAgentClientOptions = {}) {
   /**
    * HITL resume：提交逐工具确认决策并续接 SSE 流
    * @param threadId 会话 ID
-   * @param decisions 逐工具决策（toolUseId/name/approved）
+   * @param decisions 逐工具决策（toolUseId/name/approved/input?，input=用户修改后的参数）
    * @param memoryActive 是否开启记忆
    */
   async function resume(
     threadId: string,
-    decisions: Array<{ toolUseId: string; name: string; approved: boolean }>,
+    decisions: Array<{ toolUseId: string; name: string; approved: boolean; input?: Record<string, unknown> }>,
     memoryActive: boolean
   ) {
     isRunning.value = true

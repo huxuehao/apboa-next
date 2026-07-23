@@ -10,6 +10,7 @@ import com.hxh.apboa.common.util.AgentMetadataStore;
 import com.hxh.apboa.engine.agent.A2aAgentHelper;
 import com.hxh.apboa.engine.agent.ReActAgentHelper;
 import com.hxh.apboa.engine.agui.AgentContext;
+import com.hxh.apboa.engine.hitl.ConfirmFieldMetaBuilder;
 import com.hxh.apboa.engine.hook.builtins.IConfirmationHook;
 import com.hxh.apboa.engine.mcp.McpClientFactory;
 import com.hxh.apboa.engine.tool.dynamices.DynamicAgentTool;
@@ -154,7 +155,8 @@ public class ToolkitFactory {
                         // §6.4：确认是否生效只取决于工具自身 need_confirm，与 memoryActive 解耦
                         // （修 §2.5 Bug3：不开记忆时 need_confirm 工具被移出清单导致裸跑的安全漏洞）
                         if (Boolean.TRUE.equals(toolConfig.getNeedConfirm())) {
-                            IConfirmationHook.setNeedConfirmTool(toolConfig.getToolId());
+                            IConfirmationHook.setNeedConfirmTool(toolConfig.getToolId(),
+                                    ConfirmFieldMetaBuilder.fromToolConfig(toolConfig));
                         } else {
                             IConfirmationHook.removeNeedConfirmTool(toolConfig.getToolId());
                         }
@@ -189,7 +191,8 @@ public class ToolkitFactory {
                         }
 
                         if (toolConfig.getNeedConfirm()) {
-                            IConfirmationHook.setNeedConfirmTool(toolConfig.getToolId());
+                            IConfirmationHook.setNeedConfirmTool(toolConfig.getToolId(),
+                                    ConfirmFieldMetaBuilder.fromToolConfig(toolConfig));
                         } else {
                             IConfirmationHook.removeNeedConfirmTool(toolConfig.getToolId());
                         }

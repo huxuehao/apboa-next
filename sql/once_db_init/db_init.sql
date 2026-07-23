@@ -422,6 +422,7 @@ CREATE TABLE `mcp_tool` (
   `missing` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否已从当前 MCP 服务中消失',
   `sort` int NOT NULL DEFAULT 0 COMMENT '排序',
   `enabled` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否全局可用',
+  `need_confirm` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否需要用户确认',
   `last_discovered_at` datetime DEFAULT NULL COMMENT '首次发现时间',
   `last_seen_at` datetime DEFAULT NULL COMMENT '最近发现时间',
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,

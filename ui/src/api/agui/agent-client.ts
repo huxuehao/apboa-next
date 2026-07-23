@@ -677,7 +677,7 @@ export class AgentClient {
   async resume(
     url: string,
     body: {
-      decisions: Array<{ toolUseId: string; name: string; approved: boolean }>
+      decisions: Array<{ toolUseId: string; name: string; approved: boolean; input?: Record<string, unknown> }>
       memoryActive: boolean
     }
   ): Promise<void> {

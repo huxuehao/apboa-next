@@ -3,7 +3,7 @@ import { message } from 'ant-design-vue'
 import { useAgentClient } from '@/composables/useAgentClient'
 import { usePlanTracking } from '@/composables/chat/usePlanTracking'
 import { buildToolCallsContent, localNowDateTime } from '@/utils/chat/format'
-import type {ChatMessageVO, RawEvent} from '@/types'
+import type {ChatMessageVO, ConfirmFieldMeta, RawEvent} from '@/types'
 import { stopRun, subagentResume, type SubPendingInfo } from '@/api/agui'
 
 let lastIdBig = BigInt(Date.now()) << 12n;
@@ -61,11 +61,25 @@ export function useChatStream(
   // 工具调用进度（subSteps 为子智能体实时过程步骤，SUBAGENT_STEP 事件按 parentToolCallId 追加；
   // finished 由 TOOL_FINISHED 事件即时置位——工具真正跑完的瞬间翻转完成态，结果详情仍等批量 Result）
   const toolCallsInProgress = ref<
-    Array<{ id: string; name: string; args: string; result?: string; startTime: number; elapsed?: number, finished?: boolean, needConfirm?: boolean, subSteps?: Array<Record<string, unknown>> }>
+    Array<{ id: string; name: string; args: string; result?: string; startTime: number; elapsed?: number, finished?: boolean, needConfirm?: boolean, confirmFields?: ConfirmFieldMeta[], confirmSummary?: string, subSteps?: Array<Record<string, unknown>> }>
   >([])
 
   // HITL §6.5：逐工具确认决策（toolUseId → 状态），所有项决策完即调 /agui/resume
   const pendingConfirms = ref<Record<string, 'pending' | 'approved' | 'rejected'>>({})
+
+  // HITL 改参：确认 UI 中用户修改后的参数暂存（toolUseId / subToolUseId → 参数），
+  // 决策时写入、随 resume 提交后清理；未修改的工具无条目（resume 沿用模型原始参数）
+  let editedInputs: Record<string, Record<string, unknown>> = {}
+  let editedSubInputs: Record<string, Record<string, unknown>> = {}
+
+  // HITL 决策后业务摘要（toolUseId → 定制确认卡提供的一行摘要）：必须存在组件外——
+  // resume 续跑的 onRunStarted 会清空重建工具卡，组件本地状态活不过重建；
+  // onToolCallStart 重建卡片时按 id 回填
+  const confirmSummaries: Record<string, string> = {}
+
+  // HITL 决策态（toolUseId → approved/rejected）：工具完成落地本地 tool 消息时随
+  // buildToolCallsContent 写入 confirmState，与后端落库格式同构（历史渲染确认徽标+只读回显）
+  const confirmStates: Record<string, 'approved' | 'rejected'> = {}
 
   // 工具权威耗时表（TOOL_ELAPSED 事件先于结果事件到达；非响应式，消费即删）。
   // 全链路唯一计时者是后端 ChatLogHook——前端不掐表，表无值就不显示耗时（宁缺毋错），
@@ -91,18 +105,21 @@ export function useChatStream(
    * @param pending 待确认工具 [{toolUseId,name,input}]
    */
   const restorePending = (
-    pending: Array<{ toolUseId: string; name: string; input?: Record<string, unknown> }>
+    pending: Array<{ toolUseId: string; name: string; input?: Record<string, unknown>; fields?: ConfirmFieldMeta[] }>
   ) => {
     if (!pending || pending.length === 0) return
-    const ids = new Set(pending.map(p => p.toolUseId))
-    // 已存在的标记 needConfirm
-    const arr = toolCallsInProgress.value.map(t => (ids.has(t.id) ? { ...t, needConfirm: true } : t))
+    const byId = new Map(pending.map(p => [p.toolUseId, p]))
+    // 已存在的标记 needConfirm（fields 一并挂上，驱动确认表单渲染）
+    const arr = toolCallsInProgress.value.map(t => {
+      const p = byId.get(t.id)
+      return p ? { ...t, needConfirm: true, confirmFields: p.fields } : t
+    })
     // 缺失的新建（刷新场景）
     const existing = new Set(arr.map(t => t.id))
     pending.forEach(p => {
       if (!existing.has(p.toolUseId)) {
         const args = p.input && Object.keys(p.input).length ? JSON.stringify(p.input) : '{}'
-        arr.push({ id: p.toolUseId, name: p.name, args, needConfirm: true, startTime: Date.now() })
+        arr.push({ id: p.toolUseId, name: p.name, args, needConfirm: true, confirmFields: p.fields, startTime: Date.now() })
       }
     })
     toolCallsInProgress.value = arr
@@ -143,10 +160,10 @@ export function useChatStream(
         names[p.toolUseId] = p.name
         const idx = subSteps.findIndex(s => s.subToolUseId === p.toolUseId)
         if (idx >= 0) {
-          subSteps[idx] = { ...subSteps[idx], needConfirm: true, running: undefined, startTime: undefined }
+          subSteps[idx] = { ...subSteps[idx], needConfirm: true, fields: p.fields, running: undefined, startTime: undefined }
         } else {
           const args = p.input && Object.keys(p.input).length ? JSON.stringify(p.input) : '{}'
-          subSteps.push({ type: 'tool', name: p.name, args, needConfirm: true, subToolUseId: p.toolUseId })
+          subSteps.push({ type: 'tool', name: p.name, args, needConfirm: true, fields: p.fields, subToolUseId: p.toolUseId })
         }
       })
       target.subSteps = subSteps
@@ -240,7 +257,7 @@ export function useChatStream(
         agentHasResult.value = true
         toolCallsInProgress.value = [
           ...toolCallsInProgress.value,
-          { id: e.toolCallId, name: e.toolCallName, args: '', startTime: Date.now() }
+          { id: e.toolCallId, name: e.toolCallName, args: '', startTime: Date.now(), confirmSummary: confirmSummaries[e.toolCallId] }
         ]
 
         const sid = currentSessionId.value
@@ -293,7 +310,11 @@ export function useChatStream(
           // 耗时只用后端权威值（TOOL_ELAPSED 已先行到达），不掐表；无值则不显示
           const authElapsed = authoritativeElapsed[e.toolCallId]
           delete authoritativeElapsed[e.toolCallId]
-          const finished = { ...completed, result: e.content, elapsed: authElapsed }
+          // 确认态三源合一：人工决策（decideConfirm）> TOOL_FINISHED 下发（一键授权）>
+          // 拒绝文案前缀兜底（拒绝授权模式就地全拒，无人工决策也无完成事件）
+          const confirmState = confirmStates[e.toolCallId]
+            ?? (typeof e.content === 'string' && e.content.startsWith('Error: 用户拒绝授权调用该工具') ? 'rejected' as const : undefined)
+          const finished = { ...completed, result: e.content, elapsed: authElapsed, confirmState }
 
           // 保存工具调用消息，通过队列保证写入顺序（一次调用一条 tool 消息，与后端历史格式一致）；
           // 回放事件不入列——库版已由 loadMessages 加载，回放版 elapsed 是事件到达间隔而非真实
@@ -354,7 +375,7 @@ export function useChatStream(
       onCustom: (event) => {
         // HITL §6.2/§6.5：收到 TOOL_CONFIRM_REQUIRED 时，精确标记需确认的工具（不再全标记）
         if (event.name === 'TOOL_CONFIRM_REQUIRED') {
-          const pending = (((event.value as any)?.pending) ?? []) as Array<{ toolUseId: string; name: string; input?: Record<string, unknown> }>
+          const pending = (((event.value as any)?.pending) ?? []) as Array<{ toolUseId: string; name: string; input?: Record<string, unknown>; fields?: ConfirmFieldMeta[] }>
           restorePending(pending)
         }
         // 子智能体过程步骤增量（载荷契约见后端 AguiCustomEvents.SUBAGENT_STEP）
@@ -370,8 +391,13 @@ export function useChatStream(
         // 串行执行下本工具完成=下一个未完成工具此刻开始执行，重置其掐表起点
         // （其 startTime 原是 ToolCallStart 到达时刻，含排队等待，直接用会虚大）
         else if (event.name === 'TOOL_FINISHED') {
-          const v = event.value as { toolUseId?: string; elapsed?: number }
+          const v = event.value as { toolUseId?: string; elapsed?: number; confirmState?: 'approved' | 'rejected' }
           if (v?.toolUseId != null) {
+            // 确认态随完成事件下发（一键授权等自动模式无人工决策，本地无从判定），
+            // 先于批量 Result 到达，落地时经 confirmStates 写入 tool 消息
+            if (v.confirmState) {
+              confirmStates[String(v.toolUseId)] = v.confirmState
+            }
             const arr = [...toolCallsInProgress.value]
             const idx = arr.findIndex(t => t.id === String(v.toolUseId))
             if (idx >= 0) {
@@ -472,9 +498,24 @@ export function useChatStream(
    * 所有待确认工具都决策后，调用 /agui/resume 由后端从暂停点续跑。
    * @param toolUseId 工具调用 id（= TOOL_CONFIRM_REQUIRED 的 toolUseId）
    * @param approved true=允许，false=拒绝
+   * @param editedInput 用户在确认 UI 中修改后的参数；缺省=未修改（后端沿用模型原始参数）
    */
-  const decideConfirm = (toolUseId: string, approved: boolean) => {
+  const decideConfirm = (toolUseId: string, approved: boolean, editedInput?: Record<string, unknown>, summary?: string) => {
     if (pendingConfirms.value[toolUseId] === undefined) return
+    if (approved && editedInput && Object.keys(editedInput).length) {
+      editedInputs[toolUseId] = editedInput
+      // 卡片参数展示同步为改后值（与后端记忆改写、落库 args 一致）
+      toolCallsInProgress.value = toolCallsInProgress.value.map(t =>
+        t.id === toolUseId ? { ...t, args: JSON.stringify(editedInput) } : t
+      )
+    }
+    if (approved && summary) {
+      confirmSummaries[toolUseId] = summary
+      toolCallsInProgress.value = toolCallsInProgress.value.map(t =>
+        t.id === toolUseId ? { ...t, confirmSummary: summary } : t
+      )
+    }
+    confirmStates[toolUseId] = approved ? 'approved' : 'rejected'
     pendingConfirms.value = {
       ...pendingConfirms.value,
       [toolUseId]: approved ? 'approved' : 'rejected'
@@ -492,15 +533,17 @@ export function useChatStream(
     }
   }
 
-  /** 汇总逐工具决策并调用后端 resume，续接 SSE 流。 */
+  /** 汇总逐工具决策（含用户修改后的参数）并调用后端 resume，续接 SSE 流。 */
   const submitResume = async () => {
     const sid = currentSessionId.value
     if (!sid) return
     const decisions = Object.entries(pendingConfirms.value).map(([toolUseId, s]) => {
       const t = toolCallsInProgress.value.find(x => x.id === toolUseId)
-      return { toolUseId, name: t?.name ?? '', approved: s === 'approved' }
+      const approved = s === 'approved'
+      return { toolUseId, name: t?.name ?? '', approved, input: approved ? editedInputs[toolUseId] : undefined }
     })
     pendingConfirms.value = {}
+    editedInputs = {}
     agentHasResult.value = false
     await resume(sid, decisions, memoryActive?.value ?? false)
   }
@@ -528,12 +571,16 @@ export function useChatStream(
   /**
    * 子智能体 HITL：记录单个子工具的确认决策（subToolUseId 全局唯一，直接反查所属批次）。
    * 该批次全部决策后自动提交 /agui/subagent/resume 唤醒子智能体续跑（续跑步骤沿原 SSE 流流入）。
+   * @param editedInput 用户在确认 UI 中修改后的参数；缺省=未修改
    */
-  const decideSubConfirm = (subToolUseId: string, approved: boolean) => {
+  const decideSubConfirm = (subToolUseId: string, approved: boolean, editedInput?: Record<string, unknown>) => {
     const entry = Object.entries(pendingSubConfirms.value)
       .find(([, b]) => b.decisions[subToolUseId] === 'pending')
     if (!entry) return
     const [subSessionId, batch] = entry
+    if (approved && editedInput && Object.keys(editedInput).length) {
+      editedSubInputs[subToolUseId] = editedInput
+    }
     const nextBatch = {
       ...batch,
       decisions: { ...batch.decisions, [subToolUseId]: (approved ? 'approved' : 'rejected') as 'approved' | 'rejected' }
@@ -548,7 +595,15 @@ export function useChatStream(
       card.subSteps = card.subSteps.map(s => {
         if (s.subToolUseId !== subToolUseId) return s
         return approved
-          ? { ...s, needConfirm: undefined, decided: true, running: true, startTime: Date.now() }
+          ? {
+              ...s,
+              needConfirm: undefined,
+              decided: true,
+              running: true,
+              startTime: Date.now(),
+              // 改参时步骤参数展示同步为改后值（与子 agent 记忆改写一致）
+              ...(editedInput && Object.keys(editedInput).length ? { args: JSON.stringify(editedInput) } : {})
+            }
           : {
               ...s,
               needConfirm: undefined,
@@ -567,15 +622,20 @@ export function useChatStream(
     }
   }
 
-  /** 汇总某批次的子确认决策并调用 /agui/subagent/resume 唤醒挂起的子智能体。 */
+  /** 汇总某批次的子确认决策（含用户修改后的参数）并调用 /agui/subagent/resume 唤醒挂起的子智能体。 */
   const submitSubResume = async (subSessionId: string) => {
     const batch = pendingSubConfirms.value[subSessionId]
     if (!batch) return
-    const decisions = Object.entries(batch.decisions).map(([toolUseId, s]) => ({
-      toolUseId,
-      name: batch.names[toolUseId] ?? '',
-      approved: s === 'approved'
-    }))
+    const decisions = Object.entries(batch.decisions).map(([toolUseId, s]) => {
+      const approved = s === 'approved'
+      return {
+        toolUseId,
+        name: batch.names[toolUseId] ?? '',
+        approved,
+        input: approved ? editedSubInputs[toolUseId] : undefined
+      }
+    })
+    Object.keys(batch.decisions).forEach(id => { delete editedSubInputs[id] })
     const next = { ...pendingSubConfirms.value }
     delete next[subSessionId]
     pendingSubConfirms.value = next
