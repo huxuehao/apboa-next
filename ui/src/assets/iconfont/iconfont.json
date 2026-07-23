@@ -6,6 +6,13 @@
   "description": "",
   "glyphs": [
     {
+      "icon_id": "20987593",
+      "name": "空操作",
+      "font_class": "noOperation",
+      "unicode": "e69c",
+      "unicode_decimal": 59036
+    },
+    {
       "icon_id": "46270614",
       "name": "过程输出",
       "font_class": "processOutput",

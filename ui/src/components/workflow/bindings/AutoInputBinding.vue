@@ -33,6 +33,7 @@ const props = defineProps<{
   edges: WorkflowFlowEdge[]
   currentNodeId: string
   draggable: boolean
+  title?: string
 }>()
 
 const emit = defineEmits<{
@@ -260,7 +261,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <PanelSection title="输入节点">
+  <PanelSection :title="title || '输入节点'">
     <div
       ref="listRef"
       class="auto-binding-list"

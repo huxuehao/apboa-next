@@ -514,14 +514,21 @@ function updateNode(node: WorkflowFlowNode) {
 }
 
 function deleteNode(nodeId: string) {
+  deleteSelectedNodes([nodeId])
+}
+
+/** 统一删除方法：只读模式下忽略，snapshot 统一记录一次 */
+function deleteSelectedNodes(nodeIds: string[]) {
   if (readonly.value) {
     message.warning('当前工作流为只读模式，无法删除节点')
     return
   }
+  if (!nodeIds.length) return
   snapshot()
-  nodes.value = nodes.value.filter((node) => node.id !== nodeId)
-  edges.value = edges.value.filter((edge) => edge.source !== nodeId && edge.target !== nodeId)
-  if (selectedNodeId.value === nodeId) selectedNodeId.value = null
+  const ids = new Set(nodeIds)
+  nodes.value = nodes.value.filter((node) => !ids.has(node.id))
+  edges.value = edges.value.filter((edge) => !ids.has(edge.source) && !ids.has(edge.target))
+  if (selectedNodeId.value && ids.has(selectedNodeId.value)) selectedNodeId.value = null
   closeContextMenu()
 }
 
@@ -946,6 +953,15 @@ function clearAllPanels() {
   versionModalOpen.value = false
 }
 
+/** 清空画布上所有节点和连线 */
+function clearAllNodes() {
+  if (!nodes.value.length) return
+  snapshot()
+  nodes.value = []
+  edges.value = []
+  clearAllPanels()
+}
+
 /** 进入子流程编辑模式：保存父工作流快照，将 Loop 节点的 subNodes/subEdges 加载到画布 */
 async function enterSubWorkflow(nodeId: string) {
   const loopNode = nodes.value.find((n) => n.id === nodeId)
@@ -1089,6 +1105,7 @@ function computeParentUpstreamNodes(startNodeId: string): WorkflowFlowNode[] {
       @pane-click="closeContextMenu"
       @show-library="openLibraryFromNode"
       @show-library-from-edge="openLibraryFromEdge"
+      @delete-nodes="deleteSelectedNodes"
     />
 
     <WorkflowTopLeft
@@ -1141,6 +1158,7 @@ function computeParentUpstreamNodes(startNodeId: string): WorkflowFlowNode[] {
       @redo="redo"
       @layout="autoLayout"
       @clear-selection="clearAllPanels"
+      @clear-all-nodes="clearAllNodes"
     />
 
     <NodeLibraryPopover

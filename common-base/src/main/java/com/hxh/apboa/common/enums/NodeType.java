@@ -16,6 +16,10 @@ public enum NodeType {
      */
     END,
     /**
+     * 空操作节点
+     */
+    NO_OPERATION,
+    /**
      * 获取缓存节点
      */
     CACHE_FETCH,
@@ -150,5 +154,9 @@ public enum NodeType {
     /**
      * 飞书消息节点
      */
-    FEISHU_SEND
+    FEISHU_SEND,
+    /**
+     * 意图识别节点
+     */
+    INTENT_RECOGNITION
 }

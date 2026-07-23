@@ -71,7 +71,7 @@ public class MatchResultNode extends EnhancedNode {
     }
 
     private String evaluateEquals(Map<String, Object> inputs) {
-        Object o = inputs.get(NodeConst.DEFAULT_INPUT_NAME);
+        Object o = getFirstValue(inputs);
         if (o == null) {
             return config.getDefaultNextNodeId();
         }
@@ -95,6 +95,14 @@ public class MatchResultNode extends EnhancedNode {
             }
             default -> throw new RuntimeException(config.getMatchType() + "规则不支持的输入类型" + inputType);
         };
+    }
+
+    public static Object getFirstValue(Map<String, Object> map) {
+        if (map == null || map.isEmpty()) {
+            return null;
+        }
+        // 获取第一个 entry 的值
+        return map.values().iterator().next();
     }
 
 

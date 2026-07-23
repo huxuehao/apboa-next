@@ -38,6 +38,7 @@ function updateConfig(key: string, value: unknown) {
       :edges="edges"
       :current-node-id="node.id"
       :draggable="false"
+      title="输入节点（第一个有效）"
       @update:model-value="(v: any) => updateNode({ inputConfigs: v })"
     />
     <PanelSection title="节点配置">
