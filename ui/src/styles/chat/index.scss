@@ -503,6 +503,22 @@ $small-mobile-breakpoint: 375px;
   cursor: default;
 }
 
+/* run 元数据项（耗时/轮次/token）：贴 footer 极简风格的图标+文字，悬停微加深提示可交互 */
+.chat-msg-meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-right: 8px;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-placeholder);
+  user-select: none;
+  cursor: default;
+
+  &:hover {
+    color: var(--color-text-secondary);
+  }
+}
+
 /* 导航器点击后的消息高亮闪烁 */
 .msg-highlight {
   background-color: rgba($chat-primary, 0.08) !important;
@@ -1676,4 +1692,60 @@ $small-mobile-breakpoint: 375px;
   color: #555;
   white-space: pre-wrap;
   word-break: break-all;
+}
+
+/* 子智能体过程：分组小标题（下方各步为与请求参数/响应结果平级的小节） */
+.chat-tool-sub-group-title {
+  margin-top: 2px;
+  font-size: 11px;
+  color: #b8bcc4;
+  user-select: none;
+}
+
+/* 步骤类型标签：颜色区分思考/工具/回复/错误 */
+.chat-tool-sub-step-tag {
+  flex-shrink: 0;
+  padding: 0 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  line-height: 18px;
+  color: #7a828e;
+  background: rgba(0, 0, 0, 0.04);
+
+  &.is-thinking { color: #9254de; background: rgba(146, 84, 222, 0.08); }
+  &.is-tool, &.is-tool_use { color: #1677ff; background: rgba(22, 119, 255, 0.08); }
+  &.is-tool_result { color: #52c41a; background: rgba(82, 196, 26, 0.08); }
+  &.is-text { color: #fa8c16; background: rgba(250, 140, 22, 0.08); }
+  &.is-error { color: #f5222d; background: rgba(245, 34, 45, 0.08); }
+}
+
+.chat-tool-sub-step-name {
+  flex-shrink: 0;
+  color: #4a4f57;
+  font-weight: 500;
+}
+
+/* 子步骤状态耗时：与所在标题行字号一致（主卡片头的 14px 版本在这里偏大） */
+.chat-tool-sub-step-status {
+  font-size: 12px;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 执行中递增计时：等宽数字防抖动，中性色区别于完成/失败 */
+.chat-tool-sub-step-status--running {
+  color: #8a919c;
+}
+
+/* 工具步展开后的内嵌小节（请求参数/响应结果）：缩进体现层级 */
+.chat-tool-sub-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 14px;
+}
+
+/* 普通步（思考/回复）展开全文：比常规代码块放宽高度限制 */
+.chat-tool-sub-full {
+  max-height: 320px;
 }

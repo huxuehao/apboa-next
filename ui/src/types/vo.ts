@@ -503,6 +503,8 @@ export interface ChatMessageVO {
   parentId: string | null
   path: string
   depth: number
+  /** 消息元数据 JSON（durationMs/iterationCount/inputTokens/outputTokens/totalTokens），仅 assistant 正文有 */
+  meta?: string
   createdAt: string
 }
 

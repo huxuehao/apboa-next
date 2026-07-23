@@ -117,7 +117,7 @@ public class AguiMvcController {
 
                         sendErrorAndComplete(emitter, threadId, runId, e.getMessage());
                     } catch (Exception e) {
-                        logger.error("Error processing AG-UI request: {}", e.getMessage());
+                        logger.error("Error processing AG-UI request: {}", e.getMessage(), e);
 
                         AgentContext.clean();
 

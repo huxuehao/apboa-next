@@ -34,6 +34,7 @@ const wrappedMessages = computed(() => {
         :role="item.msg.role"
         :content="item.msg.content"
         :created-at="item.msg.createdAt"
+        :meta="item.msg.meta"
       />
     </template>
   </div>

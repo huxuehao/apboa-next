@@ -20,7 +20,8 @@ export function useChatStream(
   memoryActive?: import('vue').Ref<boolean>,
   planActive?: import('vue').Ref<boolean>,
   toolProcessActive?: import('vue').Ref<boolean>,
-  onMessageSaved?: (chatMsg: ChatMessageVO) => void) {
+  onMessageSaved?: (chatMsg: ChatMessageVO) => void,
+  onRunMeta?: (meta: Record<string, unknown>) => void) {
 
   const { userInfo } = useAccountStore()
 
@@ -50,9 +51,9 @@ export function useChatStream(
   const streamingRole = ref<'user' | 'assistant' | 'system' | 'tool' | 'thinking'>('system')
   const streamingContent = ref('')
 
-  // 工具调用进度
+  // 工具调用进度（subSteps 为子智能体实时过程步骤，SUBAGENT_STEP 事件按 parentToolCallId 追加）
   const toolCallsInProgress = ref<
-    Array<{ id: string; name: string; args: string; result?: string; startTime: number; elapsed?: number, needConfirm?: boolean }>
+    Array<{ id: string; name: string; args: string; result?: string; startTime: number; elapsed?: number, needConfirm?: boolean, subSteps?: Array<Record<string, unknown>> }>
   >([])
 
   // HITL §6.5：逐工具确认决策（toolUseId → 状态），所有项决策完即调 /agui/resume
@@ -267,9 +268,78 @@ export function useChatStream(
           const pending = (((event.value as any)?.pending) ?? []) as Array<{ toolUseId: string; name: string; input?: Record<string, unknown> }>
           restorePending(pending)
         }
+        // 子智能体过程步骤增量（载荷契约见后端 AguiCustomEvents.SUBAGENT_STEP）
+        else if (event.name === 'SUBAGENT_STEP') {
+          handleSubagentStep(event.value as Record<string, unknown>)
+        }
+        // run 级元数据（RUN_FINISHED 前下发，与落库 meta 同构）：回填最后一条 assistant 消息
+        else if (event.name === 'RUN_META') {
+          onRunMeta?.(event.value as Record<string, unknown>)
+        }
       }
     }
   })
+
+  /**
+   * SUBAGENT_STEP 装配：把子智能体的实时步骤追加/合并到对应的进行中工具卡片。
+   * 关联优先 parentToolCallId 精确匹配，缺失时按工具名（子智能体 agentCode 小写）降级匹配；
+   * 工具步两段式：running 步先出现，完成事件按 subToolUseId 找回原步骤补 result/elapsed
+   */
+  function handleSubagentStep(value: Record<string, unknown>) {
+    const step = value?.step as Record<string, unknown> | undefined
+    if (!step) return
+
+    const parentToolCallId = String(value.parentToolCallId ?? '')
+    const subagentName = String(value.subagentName ?? '').toLowerCase()
+    const subToolUseId = value.subToolUseId != null ? String(value.subToolUseId) : undefined
+
+    const arr = [...toolCallsInProgress.value]
+    const target = (parentToolCallId && arr.find(t => t.id === parentToolCallId))
+      || arr.find(t => t.name.toLowerCase() === subagentName && t.result == null)
+    if (!target) return
+
+    const subSteps = [...(target.subSteps ?? [])]
+    // 倒序找同类型的流式进行中步骤（delta 追加与轮末定稿共用）
+    const lastStreamingIdx = (type: unknown): number => {
+      for (let i = subSteps.length - 1; i >= 0; i--) {
+        const s = subSteps[i]!
+        if (s.type === type && s.streaming) return i
+      }
+      return -1
+    }
+    if (step.delta != null && (step.type === 'thinking' || step.type === 'text')) {
+      // 流式增量：追加到同类型的进行中步骤，没有则新建（子智能体思考/回复逐字出现）
+      const idx = lastStreamingIdx(step.type)
+      if (idx >= 0) {
+        subSteps[idx] = { ...subSteps[idx], content: String(subSteps[idx]!.content ?? '') + String(step.delta) }
+      } else {
+        subSteps.push({ type: step.type, content: String(step.delta), streaming: true })
+      }
+    } else if ((step.type === 'thinking' || step.type === 'text') && step.content != null) {
+      // 轮末完整步：定稿替换对应的流式步（内容以完整版为准，与落库一致）；无流式步则直接追加
+      const idx = lastStreamingIdx(step.type)
+      if (idx >= 0) {
+        subSteps[idx] = { ...step }
+      } else {
+        subSteps.push({ ...step })
+      }
+    } else if (step.type === 'tool' && !step.running && subToolUseId) {
+      // 工具完成事件：按 subToolUseId 找回 running 步合并；找不到则降级为独立步
+      const idx = subSteps.findIndex(s => s.subToolUseId === subToolUseId && s.running)
+      if (idx >= 0) {
+        subSteps[idx] = { ...subSteps[idx], ...step, running: undefined, startTime: undefined }
+      } else {
+        subSteps.push({ ...step, subToolUseId })
+      }
+    } else if (step.type === 'tool' && step.running) {
+      // 工具发起：记录前端到达时刻，供"执行中"耗时递增显示
+      subSteps.push({ ...step, subToolUseId, startTime: Date.now() })
+    } else {
+      subSteps.push(subToolUseId ? { ...step, subToolUseId } : { ...step })
+    }
+    target.subSteps = subSteps
+    toolCallsInProgress.value = arr
+  }
 
   /**
    * HITL §6.5：记录单个工具的确认决策（替代旧的「前端代执行/塞文本 + run 重开一轮」）。

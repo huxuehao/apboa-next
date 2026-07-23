@@ -21,5 +21,7 @@ public class ChatMessageVO implements SerializableEnable {
     private Integer parentId;
     private String path;
     private Integer depth;
+    /** 消息元数据 JSON（durationMs/iterationCount/inputTokens/outputTokens/totalTokens），无则 NULL */
+    private String meta;
     private LocalDateTime createdAt;
 }

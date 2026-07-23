@@ -15,7 +15,10 @@
  */
 package io.agentscope.core.agui.adapter;
 
+import com.hxh.apboa.engine.agui.AguiCustomEvents;
 import com.hxh.apboa.engine.hook.builtins.IConfirmationHook;
+import com.hxh.apboa.engine.log.telemetry.RunStatAccumulator;
+import com.hxh.apboa.engine.log.telemetry.RunTelemetryExtractor;
 import io.agentscope.core.agent.Agent;
 import io.agentscope.core.agent.Event;
 import io.agentscope.core.agent.EventType;
@@ -63,6 +66,14 @@ public class AguiAgentAdapter {
 
     /** 本轮是否因 HITL 确认而暂停（REASONING_STOP_REQUESTED）。供 processor 决定是否无条件保存暂停态。 */
     private volatile boolean suspended = false;
+
+    /**
+     * run 遥测（Adapter 实例即 run 级生命周期，事件流串行无并发）：
+     * runStat 供收尾下发 RUN_META（与落库 meta 同源 RunStatAccumulator，起点差异见其 javadoc）；
+     * subToolStartMs 为子智能体工具步计时（subToolUseId → 发起时刻，完成事件带 elapsed）
+     */
+    private final RunStatAccumulator runStat = new RunStatAccumulator();
+    private final Map<String, Long> subToolStartMs = new HashMap<>();
 
     public boolean isSuspended() {
         return suspended;
@@ -152,6 +163,12 @@ public class AguiAgentAdapter {
         // HITL：检测到「推理后暂停」即标记本轮挂起，供 AguiRequestProcessor 无条件保存暂停态
         if (msg != null && msg.getGenerateReason() == GenerateReason.REASONING_STOP_REQUESTED) {
             this.suspended = true;
+        }
+
+        // run 遥测：主 agent 每轮推理完成（isLast 事件带完整聚合 Msg，usage 已由框架写入 metadata）
+        // 时累积轮次/token，供 finishRun 下发 RUN_META；子智能体转发块是 TOOL_RESULT 类型，天然不掺入
+        if (type == EventType.REASONING && event.isLast() && msg != null) {
+            runStat.onReasoningComplete(msg);
         }
 
         if (type == EventType.REASONING) {
@@ -314,29 +331,27 @@ public class AguiAgentAdapter {
                     }
                 }
             }
-            /**
-             * 【子Agent流式事件发送】
-             * 此处可以实现子Agent流式事件包装成AguiEvent并发送，但是目前前端适配效果不好。
-             * 此处若想可用，需要对AguiEvent事件进行扩展，同时前端要实现合理的子Agent交互效果，并且支持多个子Agent并行运行。
-             * TODO: 待前端适配完善后再启用
+            /*
+             * 【子智能体流式事件】非 isLast 的 TOOL_RESULT = SubAgentTool.forwardEvent 转发的子智能体
+             * 内部事件（原作者预留 TODO，现启用）。不解包混入主消息流（会与主 agent 消息混淆——
+             * 原注释"前端适配效果不好"的根因），而是提取为与落库 subProcess 同构的步骤，
+             * 经 Custom(SUBAGENT_STEP) 下发；前端按 parentToolCallId 关联到对应工具卡片。
              */
-//            else {
-//                for (ContentBlock block : msg.getContent()) {
-//                    if (block instanceof ToolResultBlock toolResult) {
-//                        Object o = toolResult.getMetadata().get("subagent_id");
-//                        if (o != null) {
-//                            List<ContentBlock> output = toolResult.getOutput();
-//                            for (ContentBlock contentBlock : output) {
-//                                if (contentBlock instanceof TextBlock textBlock){
-//                                    String text = textBlock.getText();
-//                                    Event subEvent = JsonUtils.getJsonCodec().fromJson(text, Event.class);
-//                                    events.addAll(convertEvent(subEvent, state));
-//                                }
-//                            }
-//                        }
-//                    }
-//                }
-//            }
+            else {
+                for (ContentBlock block : msg.getContent()) {
+                    if (block instanceof ToolResultBlock toolResult) {
+                        Object subagentName = toolResult.getMetadata().get("subagent_name");
+                        if (subagentName == null) {
+                            continue;
+                        }
+                        for (ContentBlock contentBlock : toolResult.getOutput()) {
+                            if (contentBlock instanceof TextBlock textBlock) {
+                                emitSubagentSteps(events, state, textBlock.getText(), toolResult.getMetadata());
+                            }
+                        }
+                    }
+                }
+            }
 
         } else if (type == EventType.AGENT_RESULT) {
             // HITL §6.2：推理后暂停（REASONING_STOP_REQUESTED）时推送 TOOL_CONFIRM_REQUIRED，
@@ -359,7 +374,7 @@ public class AguiAgentAdapter {
                             new AguiEvent.Custom(
                                     state.threadId,
                                     state.runId,
-                                    "TOOL_CONFIRM_REQUIRED",
+                                    AguiCustomEvents.TOOL_CONFIRM_REQUIRED,
                                     Map.of("pending", pending)));
                 }
             }
@@ -399,10 +414,122 @@ public class AguiAgentAdapter {
             }
         }
 
+        // run 元数据（字段与落库 meta 同源自 RunStatAccumulator），流式收尾即时下发，前端免补拉
+        if (runStat.hasData()) {
+            events.add(
+                    new AguiEvent.Custom(
+                            state.threadId, state.runId, AguiCustomEvents.RUN_META, runStat.buildMeta()));
+        }
+
         // Emit RUN_FINISHED
         events.add(new AguiEvent.RunFinished(state.threadId, state.runId));
 
         return Flux.fromIterable(events);
+    }
+
+    /**
+     * 解析子智能体转发的内部事件，提取过程步骤并下发 SUBAGENT_STEP 自定义事件。
+     *
+     * <p>只处理完整节点（内层 isLast=true，过滤流式 chunk，一次子智能体运行约产生 轮数×2 条事件）；
+     * 事件类型口径与落库侧（ChatLogHook 收集）一致：REASONING（思考/正文/工具发起）+
+     * TOOL_RESULT（工具完成，按 subToolUseId 配对补 elapsed）。步骤结构由 RunTelemetryExtractor
+     * 统一生成，与落库 subProcess 同构
+     */
+    private void emitSubagentSteps(
+            List<AguiEvent> events,
+            EventConversionState state,
+            String innerEventJson,
+            Map<String, Object> metadata) {
+        Event subEvent;
+        try {
+            subEvent = JsonUtils.getJsonCodec().fromJson(innerEventJson, Event.class);
+        } catch (Exception e) {
+            // 内层事件反序列化失败静默跳过，不影响主流
+            return;
+        }
+        if (subEvent == null || subEvent.getMessage() == null) {
+            return;
+        }
+        Msg subMsg = subEvent.getMessage();
+        EventType subType = subEvent.getType();
+
+        // 流式片段（非 isLast）：子智能体 stream 为 incremental 模式，思考/正文块即增量文本，
+        // 以 delta 步实时下发（前端逐字追加）；轮末 isLast 再发完整步定稿替换，保证与落库一致。
+        // 工具发起（ToolUseBlock）只在 isLast 处理——生成中的 args 不完整
+        if (!subEvent.isLast()) {
+            if (subType == EventType.REASONING) {
+                for (ContentBlock block : subMsg.getContent()) {
+                    if (block instanceof ThinkingBlock thinkingBlock && !thinkingBlock.getThinking().isEmpty()) {
+                        events.add(subagentStepEvent(state, metadata,
+                                streamingDeltaStep("thinking", thinkingBlock.getThinking()), null));
+                    } else if (block instanceof TextBlock textBlock && !textBlock.getText().isEmpty()) {
+                        events.add(subagentStepEvent(state, metadata,
+                                streamingDeltaStep("text", textBlock.getText()), null));
+                    }
+                }
+            }
+            return;
+        }
+
+        if (subType == EventType.REASONING) {
+            RunTelemetryExtractor.visitReasoning(subMsg, new RunTelemetryExtractor.StepVisitor() {
+                @Override
+                public void onPlainStep(Map<String, Object> step) {
+                    events.add(subagentStepEvent(state, metadata, step, null));
+                }
+
+                @Override
+                public void onToolUse(ToolUseBlock block) {
+                    Map<String, Object> step =
+                            RunTelemetryExtractor.toolStep(block.getName(), block.getContent());
+                    step.put("running", true);
+                    String subToolUseId = block.getId();
+                    if (subToolUseId != null) {
+                        subToolStartMs.put(subToolUseId, System.currentTimeMillis());
+                    }
+                    events.add(subagentStepEvent(state, metadata, step, subToolUseId));
+                }
+            });
+        } else if (subType == EventType.TOOL_RESULT) {
+            RunTelemetryExtractor.visitToolResults(subMsg, toolResultBlock -> {
+                String subToolUseId = toolResultBlock.getId();
+                Map<String, Object> step = new LinkedHashMap<>();
+                step.put("type", "tool");
+                step.put("name", toolResultBlock.getName());
+                step.put("result", RunTelemetryExtractor.truncate(
+                        RunTelemetryExtractor.toolResultText(toolResultBlock)));
+                Long start = subToolUseId != null ? subToolStartMs.remove(subToolUseId) : null;
+                if (start != null) {
+                    step.put("elapsed", System.currentTimeMillis() - start);
+                }
+                events.add(subagentStepEvent(state, metadata, step, subToolUseId));
+            });
+        }
+    }
+
+    /** 流式增量步（delta 语义，前端逐字追加到同类型的进行中步骤） */
+    private Map<String, Object> streamingDeltaStep(String type, String delta) {
+        Map<String, Object> step = new LinkedHashMap<>();
+        step.put("type", type);
+        step.put("delta", delta);
+        return step;
+    }
+
+    /** 组装 SUBAGENT_STEP 事件（载荷契约见 AguiCustomEvents.SUBAGENT_STEP） */
+    private AguiEvent subagentStepEvent(
+            EventConversionState state,
+            Map<String, Object> metadata,
+            Map<String, Object> step,
+            String subToolUseId) {
+        Map<String, Object> value = new LinkedHashMap<>();
+        value.put("parentToolCallId", metadata.getOrDefault("parent_tool_call_id", ""));
+        value.put("subagentName", metadata.getOrDefault("subagent_name", ""));
+        value.put("sessionId", metadata.getOrDefault("subagent_session_id", ""));
+        if (subToolUseId != null) {
+            value.put("subToolUseId", subToolUseId);
+        }
+        value.put("step", step);
+        return new AguiEvent.Custom(state.threadId, state.runId, AguiCustomEvents.SUBAGENT_STEP, value);
     }
 
     /**

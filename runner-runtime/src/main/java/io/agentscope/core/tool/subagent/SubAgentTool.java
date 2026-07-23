@@ -174,10 +174,17 @@ public class SubAgentTool implements AgentTool {
                         // Get emitter for event forwarding
                         ToolEmitter emitter = param.getEmitter();
 
+                        // 主 agent 侧的工具调用 ID：随转发事件透传，供 AGUI 适配层把子智能体
+                        // 步骤精确关联到对应的工具卡片（并行同名子智能体也不歧义）
+                        String parentToolCallId = param.getToolUseBlock() != null
+                                ? param.getToolUseBlock().getId()
+                                : null;
+
                         // Execute and save state after completion
                         Mono<ToolResultBlock> result;
                         if (config.isForwardEvents()) {
-                            result = executeWithStreaming(agent, userMsg, finalSessionId, emitter);
+                            result = executeWithStreaming(
+                                    agent, userMsg, finalSessionId, emitter, parentToolCallId);
                         } else {
                             result = executeWithoutStreaming(agent, userMsg, finalSessionId);
                         }
@@ -251,7 +258,7 @@ public class SubAgentTool implements AgentTool {
      * @return A Mono emitting the tool result block
      */
     private Mono<ToolResultBlock> executeWithStreaming(
-            Agent agent, Msg userMsg, String sessionId, ToolEmitter emitter) {
+            Agent agent, Msg userMsg, String sessionId, ToolEmitter emitter, String parentToolCallId) {
 
         StreamOptions streamOptions =
                 config.getStreamOptions() != null
@@ -261,7 +268,7 @@ public class SubAgentTool implements AgentTool {
         return Mono.deferContextual(
                 ctxView ->
                         agent.stream(List.of(userMsg), streamOptions)
-                                .doOnNext(event -> forwardEvent(event, emitter, agent, sessionId))
+                                .doOnNext(event -> forwardEvent(event, emitter, agent, sessionId, parentToolCallId))
                                 .filter(Event::isLast)
                                 .last()
                                 .map(
@@ -321,7 +328,8 @@ public class SubAgentTool implements AgentTool {
      * @param agent The agent
      * @param sessionId Current session ID
      */
-    private void forwardEvent(Event event, ToolEmitter emitter, Agent agent, String sessionId) {
+    private void forwardEvent(
+            Event event, ToolEmitter emitter, Agent agent, String sessionId, String parentToolCallId) {
         try {
             String json = JsonUtils.getJsonCodec().toJson(event);
             Map<String, Object> metadata = new HashMap<>();
@@ -329,6 +337,7 @@ public class SubAgentTool implements AgentTool {
             metadata.put("subagent_name", agent.getName() == null ? "" : agent.getName());
             metadata.put("subagent_id", agent.getAgentId() == null ? "" : agent.getAgentId());
             metadata.put("subagent_session_id", sessionId == null ? "" : sessionId);
+            metadata.put("parent_tool_call_id", parentToolCallId == null ? "" : parentToolCallId);
             emitter.emit(
                     new ToolResultBlock(
                             null, null, List.of(TextBlock.builder().text(json).build()), metadata));

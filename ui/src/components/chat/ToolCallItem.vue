@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useToolCallDisplayName } from '@/composables/chat/useToolCallDisplayName'
+import SubProcessSteps from './SubProcessSteps.vue'
+import type { SubProcessStep } from '@/types'
 
 const props = defineProps<{
   id: string,
@@ -11,6 +13,8 @@ const props = defineProps<{
   loading?: boolean
   needConfirm?: boolean
   startTime?: number
+  /** 子智能体实时过程步骤（SUBAGENT_STEP 事件装配，与落库 subProcess 同构） */
+  subSteps?: SubProcessStep[]
 }>()
 
 const { resolveToolCallName } = useToolCallDisplayName()
@@ -53,6 +57,16 @@ const emit = defineEmits<{
 
 const foldArgs = ref<boolean>(true)
 
+// 执行中的请求参数（流式增量拼接中可能是不完整 JSON，原样展示；完整后自然美化）
+const prettyRunningArgs = computed(() => {
+  if (!props.args || props.args === '{}') return ''
+  try {
+    return JSON.stringify(JSON.parse(props.args), null, 2)
+  } catch {
+    return props.args
+  }
+})
+
 /** 允许：仅记录决策（§6.5），工具实际由后端 resume 续跑执行（天然带租户/MCP 上下文） */
 const handleConfirm = (id: string, name: string) => {
   emit('toolContent', { toolUseId: id, name, approved: true })
@@ -94,6 +108,16 @@ const handleShowArgs = () => {
     <div class="chat-tool-call" v-if="args && args !== '{}' && !foldArgs">
       {{ args && args !== '{}' ? args : '无参数' }}
     </div>
+    <!-- 执行中实时详情：请求参数（流式增量）+ 子智能体过程步骤（逐步出现） -->
+    <div v-if="loading && !needConfirm && (prettyRunningArgs || subSteps?.length)" class="chat-tool-call-live">
+      <div v-if="prettyRunningArgs" class="chat-tool-section">
+        <div class="chat-tool-section-header">
+          <span class="chat-tool-section-label">请求参数</span>
+        </div>
+        <pre class="chat-tool-item-code">{{ prettyRunningArgs }}</pre>
+      </div>
+      <SubProcessSteps v-if="subSteps?.length" :steps="subSteps" />
+    </div>
   </div>
 </template>
 
@@ -103,5 +127,13 @@ const handleShowArgs = () => {
 /* 等宽数字：计时滚动时不左右抖动 */
 .chat-tool-call-elapsed {
   font-variant-numeric: tabular-nums;
+}
+
+/* 执行中实时详情区：与完成后工具卡片体的内边距对齐 */
+.chat-tool-call-live {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 10px 6px 22px;
 }
 </style>

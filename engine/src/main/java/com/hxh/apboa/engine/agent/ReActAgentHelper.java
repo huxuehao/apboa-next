@@ -10,6 +10,7 @@ import com.hxh.apboa.common.util.JsonUtils;
 import com.hxh.apboa.common.wrapper.KnowledgeWrapper;
 import com.hxh.apboa.engine.agui.AgentContext;
 import com.hxh.apboa.engine.hook.HooksFactory;
+import com.hxh.apboa.engine.hook.builtins.IConfirmationHook;
 import com.hxh.apboa.engine.knowledge.KnowledgeFactory;
 import com.hxh.apboa.engine.model.ChatModelFactory;
 import com.hxh.apboa.engine.prompt.AgentSysPromptFactory;
@@ -63,8 +64,21 @@ public class ReActAgentHelper {
      * @param definition agent 定义
      */
     public ReActAgent getReActAgent(AgentDefinition definition) {
+        return getReActAgent(definition, false);
+    }
+
+    /**
+     * 获取 ReActAgent
+     *
+     * @param definition  agent 定义
+     * @param asSubAgent 是否作为子智能体构建：子智能体运行在主 agent 的一次工具调用内部，
+     *                   其 HITL 确认暂停无法冒泡到主事件流（主流会一直等工具返回，会话卡死），
+     *                   故一律剥离确认 Hook（授权语义收敛在主 agent 层）。
+     *                   TODO: 支持子智能体确认冒泡到主流后，允许用户配置子智能体内工具是否需确认
+     */
+    public ReActAgent getReActAgent(AgentDefinition definition, boolean asSubAgent) {
         // 构建reActAgent
-        return getReactAgentBuilder(definition).build();
+        return getReactAgentBuilder(definition, asSubAgent).build();
     }
 
     /**
@@ -72,6 +86,16 @@ public class ReActAgentHelper {
      * @param definition  agent 定义
      */
     public ReActAgent.Builder getReactAgentBuilder(AgentDefinition definition) {
+        return getReactAgentBuilder(definition, false);
+    }
+
+    /**
+     * 获取 ReActAgent.Builder
+     *
+     * @param definition  agent 定义
+     * @param asSubAgent 是否作为子智能体构建（剥离确认 Hook，见 getReActAgent 重载说明）
+     */
+    public ReActAgent.Builder getReactAgentBuilder(AgentDefinition definition, boolean asSubAgent) {
         Model model = chatModelFactory.getModel(definition);
         Toolkit toolkit = toolkitFactory.getToolkit(definition);
         CodeExecutionConfig codeExecutionConfig = getCodeExecutionConfig(definition.getId());
@@ -113,6 +137,11 @@ public class ReActAgentHelper {
         // 使用可变列表，避免 getHooks 返回 List.of() 时 add 抛 UnsupportedOperationException
         List<Hook> hooks = hooksFactory.getHooks(definition);
         hooks = hooks != null ? new ArrayList<>(hooks) : new ArrayList<>();
+
+        // 子智能体一律免确认（原因与 TODO 见方法 javadoc）
+        if (asSubAgent) {
+            hooks.removeIf(hook -> hook instanceof IConfirmationHook);
+        }
 
         // 配置记忆
         Boolean isMemoryActive = AgentContext.getIfExists().map(AgentContext::isMemoryActive).orElse(false);

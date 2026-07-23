@@ -142,7 +142,7 @@ public class ConcurrentLogConsumer {
                 KeyHolder keyHolder = new GeneratedKeyHolder();
                 jdbcTemplate.update(connection -> {
                     PreparedStatement ps = connection.prepareStatement(
-                            "INSERT INTO chat_message (tenant_id, session_id, role, content, parent_id, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                            "INSERT INTO chat_message (tenant_id, session_id, role, content, parent_id, meta, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
                             Statement.RETURN_GENERATED_KEYS
                     );
                     ps.setLong(1, message.getTenantId());
@@ -150,7 +150,8 @@ public class ConcurrentLogConsumer {
                     ps.setString(3, message.getRole());
                     ps.setString(4, message.getContent());
                     ps.setInt(5, parent.id);
-                    ps.setObject(6, message.getCreatedAt());
+                    ps.setString(6, message.getMeta());
+                    ps.setObject(7, message.getCreatedAt());
                     return ps;
                 }, keyHolder);
                 Integer newId = keyHolder.getKey().intValue();

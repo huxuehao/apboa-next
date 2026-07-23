@@ -45,6 +45,7 @@ const displayMessages = computed<DisplayMessage[]>(() => {
       role: m.role as any,
       content: (m.content || '') as string,
       createdAt: m.createdAt,
+      meta: m.meta,
       isStreaming: false,
     })
   }

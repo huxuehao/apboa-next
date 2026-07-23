@@ -58,6 +58,12 @@ public class ChatMessage implements SerializableEnable {
      */
     private Integer depth;
 
+    /**
+     * 消息元数据 JSON：durationMs / iterationCount / inputTokens / outputTokens / totalTokens，
+     * 仅 assistant 正文消息写入（ChatLogHook），其余消息为 NULL
+     */
+    private String meta;
+
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;
 }

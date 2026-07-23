@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { BulbOutlined, ToolOutlined, RightOutlined, DownOutlined, CopyOutlined, CheckOutlined, CheckCircleFilled, CloseCircleFilled } from '@ant-design/icons-vue'
+import { BulbOutlined, ToolOutlined, RightOutlined, DownOutlined, CopyOutlined, CheckOutlined, CheckCircleFilled, CloseCircleFilled, ClockCircleOutlined, RetweetOutlined, ThunderboltOutlined } from '@ant-design/icons-vue'
 import MediaPreview from '@/components/common/MediaPreview.vue'
 import type { UploadedFileItem } from '@/types'
 import MediaIcon from '@/components/common/MediaIcon.vue'
@@ -9,8 +9,10 @@ import { isImageExtension } from '@/utils/chat/attachImage'
 import MarkdownRenderer from "@/components/markdown/MarkdownRenderer.vue";
 import TaggedContentRenderer from '../chat/TaggedContentRenderer.vue';
 import ErrorMessageCard from '../chat/ErrorMessageCard.vue';
+import SubProcessSteps from '../chat/SubProcessSteps.vue';
+import type { SubProcessStep } from '@/types';
 import { useToolCallDisplayName } from '@/composables/chat/useToolCallDisplayName'
-import { formatElapsed, fmtFullTime, fmtRelativeTime } from '@/utils/chat/format'
+import { formatElapsed, fmtFullTime, fmtRelativeTime, fmtDuration, fmtTokens, fmtTokensPerSec } from '@/utils/chat/format'
 
 const FILE_SEP = '@==##::::##==@'
 
@@ -41,6 +43,7 @@ const props = defineProps<{
   role: 'user' | 'assistant' | 'system' | 'tool' | 'error' | 'thinking'
   content: string
   createdAt?: string
+  meta?: string
 }>()
 
 defineEmits(['inputTagPreview'])
@@ -56,6 +59,38 @@ const parsedUserContent = computed(() => parseUserContent(props.content))
 const relativeTime = computed(() => fmtRelativeTime(props.createdAt))
 const fullTime = computed(() => fmtFullTime(props.createdAt))
 
+/** 消息元数据类型（后端 ChatLogHook 写入的 run 级统计，与聊天页一致） */
+interface MessageMeta {
+  durationMs?: number
+  iterationCount?: number
+  inputTokens?: number
+  outputTokens?: number
+  totalTokens?: number
+}
+
+// 后端 Jackson 把 Long 序列化为字符串（防精度丢失），统一归一化为 number；0/非法值归 undefined 让 v-if 兜底不展示
+const parsedMeta = computed<MessageMeta | null>(() => {
+  if (!props.meta) return null
+  try {
+    const raw = JSON.parse(props.meta) as Record<string, unknown>
+    const num = (v: unknown): number | undefined => {
+      const n = Number(v)
+      return Number.isFinite(n) && n > 0 ? n : undefined
+    }
+    return {
+      durationMs: num(raw.durationMs),
+      iterationCount: num(raw.iterationCount),
+      inputTokens: num(raw.inputTokens),
+      outputTokens: num(raw.outputTokens),
+      totalTokens: num(raw.totalTokens),
+    }
+  } catch {
+    return null
+  }
+})
+const tokensPerSec = computed(() =>
+  fmtTokensPerSec(parsedMeta.value?.outputTokens, parsedMeta.value?.totalTokens, parsedMeta.value?.durationMs))
+
 // 预览相关状态
 const previewVisible = ref(false)
 const previewCurrentIndex = ref(0)
@@ -66,12 +101,25 @@ const reasoningExpanded = ref(false)
 // 工具调用面板展开状态（默认收起）
 const toolExpanded = ref(false)
 
-/** 工具调用类型 */
+/** 工具调用类型（subProcess 与实时步骤同构，渲染统一走 SubProcessSteps 组件） */
 interface ToolCallItem {
   name: string
   totalTimes: number
   args: string
   result: string
+  subProcess?: SubProcessStep[]
+}
+
+/**
+ * 工具结果是否失败（内容启发式：TOOL 消息无显式状态位，与聊天页一致）：
+ * agentscope "Error:" 前缀 / 执行层 "Tool execution failed" / 结构化 "status":"failed"
+ */
+function isToolResultFailed(result?: string): boolean {
+  if (!result) return false
+  const t = String(result).trim()
+  return t.startsWith('Error:')
+    || t.includes('Tool execution failed')
+    || /"status"\s*:\s*"failed"/.test(t)
 }
 
 /** 解析工具调用 JSON 内容 */
@@ -86,19 +134,8 @@ const parsedToolCall = computed<ToolCallItem>(() => {
   }
 })
 
-/**
- * 工具是否失败（内容启发式：TOOL 消息无显式状态位，与 chat 版判定一致）：
- * - agentscope 错误约定：ToolResultBlock.error 的 "Error:" 前缀 / 执行层 "Tool execution failed"
- * - 内置工具结构化返回的 "status":"failed"（如 web_search）
- */
-const toolFailed = computed(() => {
-  const r = parsedToolCall.value?.result
-  if (!r) return false
-  const t = String(r).trim()
-  return t.startsWith('Error:')
-    || t.includes('Tool execution failed')
-    || /"status"\s*:\s*"failed"/.test(t)
-})
+/** 工具是否失败（内容启发式：TOOL 消息无显式状态位，与子过程工具步共用判定） */
+const toolFailed = computed(() => isToolResultFailed(parsedToolCall.value?.result))
 
 // 请求参数/响应结果小节折叠态（默认都展开，可各自收起）
 const argsExpanded = ref(true)
@@ -276,8 +313,24 @@ const openPreview = (index: number) => {
             :disabled="true"/>
         </div>
       </div>
-      <!-- footer：相对时间（悬停看完整时间）+ 复制按钮，气泡外左下角（与聊天页一致） -->
+      <!-- footer：run 元数据（耗时/轮次/token）+ 相对时间（悬停看完整时间）+ 复制按钮，气泡外左下角（与聊天页一致） -->
       <div v-if="content" class="chat-msg-footer chat-msg-footer--assistant">
+        <template v-if="parsedMeta">
+          <a-tooltip v-if="parsedMeta.durationMs" :title="tokensPerSec ? `生成速率 ${tokensPerSec} token/s` : '本次回复总耗时'" :overlay-style="{ maxWidth: 'none' }">
+            <span class="chat-msg-meta-item"><ClockCircleOutlined /> {{ fmtDuration(parsedMeta.durationMs) }}</span>
+          </a-tooltip>
+          <a-tooltip v-if="parsedMeta.iterationCount" title="模型推理轮数（含工具调用轮次）" :overlay-style="{ maxWidth: 'none' }">
+            <span class="chat-msg-meta-item"><RetweetOutlined /> {{ parsedMeta.iterationCount }} 轮</span>
+          </a-tooltip>
+          <a-tooltip v-if="parsedMeta.totalTokens">
+            <template #title>
+              <div>输入 token：{{ fmtTokens(parsedMeta.inputTokens) }}</div>
+              <div>输出 token：{{ fmtTokens(parsedMeta.outputTokens) }}</div>
+              <div>合计：{{ fmtTokens(parsedMeta.totalTokens) }}</div>
+            </template>
+            <span class="chat-msg-meta-item"><ThunderboltOutlined /> {{ fmtTokens(parsedMeta.totalTokens) }} tokens</span>
+          </a-tooltip>
+        </template>
         <a-tooltip v-if="relativeTime" :title="fullTime">
           <span class="chat-msg-time">{{ relativeTime }}</span>
         </a-tooltip>
@@ -341,6 +394,8 @@ const openPreview = (index: number) => {
                 </div>
                 <pre v-show="argsExpanded" class="chat-tool-item-code">{{ prettyArgs }}</pre>
               </div>
+              <!-- 子智能体过程（公共组件，与聊天页/实时卡片共用；在响应结果之前） -->
+              <SubProcessSteps v-if="parsedToolCall.subProcess?.length" :steps="parsedToolCall.subProcess" />
               <div v-if="parsedToolCall.result" class="chat-tool-section">
                 <div class="chat-tool-section-header">
                   <span class="chat-tool-section-label chat-tool-section-label--clickable" @click="resultExpanded = !resultExpanded">

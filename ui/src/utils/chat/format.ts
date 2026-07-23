@@ -17,10 +17,19 @@ export function formatToolDisplay(text: string): string {
 }
 
 /**
- * 构建工具调用的 JSON 内容（用于保存到消息中）
+ * 构建工具调用的 JSON 内容（用于保存到消息中）。
+ * subSteps 为流式期间实时积累的子智能体过程（SUBAGENT_STEP 事件），随消息本地落定写入
+ * subProcess 字段——与后端落库的结构同构，前端流式结束即最终态，无需刷新或补拉
  */
 export function buildToolCallsContent(
-  toolCalls: Array<{ id: string; name: string; args: string; result?: string; elapsed?: number }>
+  toolCalls: Array<{
+    id: string
+    name: string
+    args: string
+    result?: string
+    elapsed?: number
+    subSteps?: Array<Record<string, unknown>>
+  }>
 ): string {
   if (toolCalls.length === 0) return ''
 
@@ -30,6 +39,12 @@ export function buildToolCallsContent(
     totalTimes: t.elapsed ?? 0,
     args: t.args ?? '',
     result: t.result ?? ''
+  }
+  if (t.subSteps?.length) {
+    // 清理实时态字段（running/streaming 标记、subToolUseId 配对键、startTime 计时起点），只留展示契约字段
+    toolContent.subProcess = t.subSteps.map(
+      ({ running: _running, subToolUseId: _sid, startTime: _st, streaming: _streaming, ...rest }) => rest
+    )
   }
 
   return JSON.stringify(toolContent)
@@ -44,6 +59,36 @@ export function formatElapsed(ms: number | string): string {
   if (!Number.isFinite(n) || n < 0) return ''
   if (n < 1000) return `${Math.round(n)}ms`
   return `${(n / 1000).toFixed(2)}s`
+}
+
+/** 回复总耗时：< 1s 用 ms，否则 "X.XX 秒"（jm 风格，中文单位）。兼容字符串输入 */
+export function fmtDuration(ms: number | string | null | undefined): string {
+  if (ms == null) return ''
+  const n = Number(ms)
+  if (!Number.isFinite(n) || n < 0) return ''
+  if (n < 1000) return `${n} ms`
+  return `${(n / 1000).toFixed(2)} 秒`
+}
+
+/** token 数：千位分隔的完整数字（不简记） */
+export function fmtTokens(n: number | null | undefined): string {
+  if (!n && n !== 0) return ''
+  return new Intl.NumberFormat('en-US').format(n)
+}
+
+/**
+ * 生成速率：outputTokens / (durationMs / 1000)，2 位小数。
+ * outputTokens 缺失时 fallback totalTokens（数字偏大但保留参考值）
+ */
+export function fmtTokensPerSec(
+  outputTokens: number | null | undefined,
+  totalTokens: number | null | undefined,
+  ms: number | null | undefined,
+): string {
+  if (!ms || ms <= 0) return ''
+  const n = outputTokens || totalTokens
+  if (!n) return ''
+  return (n / (ms / 1000)).toFixed(2)
 }
 
 /** 本地时间 yyyy-MM-dd HH:mm:ss（跟后端 jackson 默认序列化一致，流式落定的消息前端先补时间） */

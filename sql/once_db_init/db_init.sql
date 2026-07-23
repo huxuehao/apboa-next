@@ -260,10 +260,11 @@ CREATE TABLE `chat_message` (
   `id` int NOT NULL AUTO_INCREMENT COMMENT '消息ID',
   `session_id` bigint NOT NULL COMMENT '会话ID',
   `role` varchar(20) NOT NULL COMMENT '消息角色',
-  `content` text NOT NULL COMMENT '消息内容',
+  `content` mediumtext NOT NULL COMMENT '消息内容（tool 消息含子智能体过程 subProcess 全量步骤，可能较大）',
   `parent_id` int DEFAULT NULL COMMENT '父消息ID',
   `path` text COMMENT '消息路径，格式如：/1/2/3/',
   `depth` int DEFAULT NULL COMMENT '消息深度，从0开始，根消息深度为0',
+  `meta` text COMMENT '消息元数据JSON：durationMs/iterationCount/inputTokens/outputTokens/totalTokens，仅assistant正文消息写入',
   `created_at` datetime DEFAULT NULL COMMENT '创建时间',
   `tenant_id` bigint NOT NULL,
   PRIMARY KEY (`id`)

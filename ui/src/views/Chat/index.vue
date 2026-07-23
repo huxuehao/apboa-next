@@ -173,6 +173,14 @@ const {
   toolProcessActive,
   (chatMsg: ChatMessageVO) => {
     messagesList.value.push(chatMsg)
+  },
+  // RUN_META（run 收尾实时下发，与落库 meta 同构）：回填最后一条 assistant 消息，
+  // 前端流式结束即最终态，无需补拉查库
+  (meta) => {
+    const lastAssistant = [...messagesList.value].reverse().find((m) => m.role === 'assistant')
+    if (lastAssistant) {
+      lastAssistant.meta = JSON.stringify(meta)
+    }
   })
 
 // 一键授权（会话级，source of truth 在 Redis：换端/刷新一致；无记录默认逐步确认）
@@ -285,6 +293,7 @@ const displayMessages = computed<DisplayMessage[]>(() => {
       role: m.role as DisplayMessage['role'],
       content: m.content || '',
       createdAt: m.createdAt,
+      meta: m.meta,
       isStreaming: false,
     })
   }

@@ -204,6 +204,7 @@ const visibleMessages = computed(() =>{
       role: m.role as DisplayMessage['role'],
       content: parsed.content,
       createdAt: m.createdAt,
+      meta: m.meta,
       isStreaming: false
     })
   }

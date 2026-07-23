@@ -10,7 +10,7 @@ import type { InteractionSubmitPayload } from '@/components/markdown/uip/types'
 const props = defineProps<{
   messages: DisplayMessage[]
   agentHasResult?: boolean
-  toolCalls: Array<{ id: string; name: string; args: string; result?: string; elapsed?: number, needConfirm?: boolean, startTime?: number }>
+  toolCalls: Array<{ id: string; name: string; args: string; result?: string; elapsed?: number, needConfirm?: boolean, startTime?: number, subSteps?: Array<Record<string, unknown>> }>
 }>()
 
 /**
@@ -54,6 +54,7 @@ defineEmits<{
         :role="item.msg.role"
         :content="item.msg.content"
         :created-at="item.msg.createdAt"
+        :meta="item.msg.meta"
         :agent-has-result="agentHasResult"
         :is-streaming="item.msg.isStreaming"
       />
@@ -70,6 +71,7 @@ defineEmits<{
         :loading="t.result == null"
         :need-confirm="t.needConfirm"
         :start-time="t.startTime"
+        :sub-steps="(t.subSteps as any)"
         @toolContent="(content: any) => $emit('toolContent', content)"
       />
     </TransitionGroup>

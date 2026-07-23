@@ -147,11 +147,20 @@ public class AguiRequestProcessor {
         // Create adapter and run
         AguiAgentAdapter adapter = new AguiAgentAdapter(agent, config);
 
-        // 设置租户信息
+        // 设置租户信息：metadata 缺失时（runtime 重启后旧会话首条消息——AgentContext.init 不含租户，
+        // 实测会让整个 run 失败）按 threadId 查 chat_session 兜底并回填 metadata，下游（ChatLogHook
+        // 落库、session 持久化）随之恢复正常
         Object tenantId = AgentMetadataStore.get(agent.getAgentId(), "tenantId");
         Object tenantCode = AgentMetadataStore.get(agent.getAgentId(), "tenantCode");
         if (tenantId == null || tenantCode == null) {
-            throw new IllegalStateException("Tenant information not found");
+            ResumeContext rc = loadResumeContext(threadId);
+            if (rc == null) {
+                throw new IllegalStateException("Tenant information not found");
+            }
+            tenantId = rc.tenantId;
+            tenantCode = rc.tenantCode;
+            AgentMetadataStore.put(agent.getAgentId(), "tenantId", rc.tenantId);
+            AgentMetadataStore.put(agent.getAgentId(), "tenantCode", rc.tenantCode);
         }
         TenantUtils.setCurrentTenant(Long.valueOf(tenantId.toString()), tenantCode.toString());
 
