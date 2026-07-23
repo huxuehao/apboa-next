@@ -14,7 +14,7 @@ import RenameModal from '@/components/chat/RenameModal.vue'
 import WorkspacePanel from '@/components/workspace/WorkspacePanel.vue'
 import type { DisplayMessage, ChatMessageVO, UploadedFileItem, ChatSessionVO } from '@/types'
 import * as chatSessionApi from '@/api/chatSession'
-import { getActiveRuns, getStatus } from '@/api/agui'
+import { getActiveRuns, getStatus, getPending } from '@/api/agui'
 import { LoadingOutlined } from '@ant-design/icons-vue'
 import {
   buildUserTextFromPayload,
@@ -136,7 +136,8 @@ const {
   isRunning,
   currentPlan,
   sendMessage,
-  sendToolContent,
+  decideConfirm,
+  restorePending,
   abortRun,
   reconnect: reconnectStream,
   disconnect: disconnectStream,
@@ -263,6 +264,21 @@ const handleNewSession = async () => {
   preserveRunningSession.value = false
 }
 
+/**
+ * HITL 刷新恢复：非运行中的会话可能处于「工具确认暂停态」（刷新/重进后前端内存态已丢），
+ * 调 /agui/pending 从后端持久暂停态重建「允许/禁止」确认 UI，使其可续点并正常 resume。
+ * 暂停态会话已不在 active-runs（RunTracker 已 markCompleted），故独立于 reconnect 单独恢复。
+ * @param sid 会话 ID
+ */
+const restoreConfirm = async (sid: string) => {
+  try {
+    const pending = await getPending(sid)
+    if (pending.length) restorePending(pending)
+  } catch {
+    // 忽略：无暂停态或网络错误
+  }
+}
+
 // 选择会话
 const handleSelectSession = async (session: ChatSessionVO) => {
   // 切换前断开当前 SSE，但不中断后台 Agent
@@ -274,6 +290,9 @@ const handleSelectSession = async (session: ChatSessionVO) => {
   if (runningSessions.value.has(String(session.id))) {
     // 注意：不要加 await，否则会阻塞会话切换
     reconnectStream(String(session.id))
+  } else {
+    // 非运行中：尝试恢复 HITL 确认暂停态（不加 await，避免阻塞会话切换）
+    void restoreConfirm(String(session.id))
   }
   preserveRunningSession.value = false
 }
@@ -331,9 +350,9 @@ const submitRename = async () => {
   }
 }
 
-// 发送工具执行结果
-const handelToolContent = async (value: any) => {
-  await sendToolContent(value)
+// HITL §6.5：value = { toolUseId, name, approved }，记录该工具决策（全部决策完内部自动调 resume 续跑）
+const handelToolContent = (value: any) => {
+  decideConfirm(value.toolUseId, value.approved)
 }
 
 // 处理交互提交
@@ -499,8 +518,13 @@ onMounted(async () => {
   try {
     const activeIds = await getActiveRuns()
     runningSessions.value = new Set(activeIds)
-    if (currentSessionId.value && activeIds.includes(currentSessionId.value)) {
-      reconnectStream(currentSessionId.value)
+    if (currentSessionId.value) {
+      if (activeIds.includes(currentSessionId.value)) {
+        reconnectStream(currentSessionId.value)
+      } else {
+        // 非运行中：可能是 HITL 确认暂停态，尝试从持久暂停态重建确认 UI
+        void restoreConfirm(currentSessionId.value)
+      }
     }
     if (activeIds.length > 0) {
       startPolling()

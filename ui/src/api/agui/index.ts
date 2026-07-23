@@ -2,7 +2,7 @@
  * AGUI SSE 模块：工厂与统一导出
  */
 
-import { getAgentRunURL, getSSEHeaders, getRESTHeaders, getReconnectURL, getStatusURL, getStopURL, getActiveRunsURL } from './request'
+import { getAgentRunURL, getSSEHeaders, getRESTHeaders, getReconnectURL, getResumeURL, getPendingURL, getStatusURL, getStopURL, getActiveRunsURL } from './request'
 import { AgentClient } from './agent-client'
 import type { EventHandlers, ToolHandler } from './agent-client'
 import type { RunAgentInput } from '@/types'
@@ -41,7 +41,7 @@ export function createAgentClient(
 
 export type { RunAgentInput }
 
-export { getReconnectURL, getStatusURL, getStopURL, getActiveRunsURL }
+export { getReconnectURL, getResumeURL, getPendingURL, getStatusURL, getStopURL, getActiveRunsURL }
 
 /**
  * 查询指定会话的运行状态
@@ -78,4 +78,20 @@ export async function getActiveRuns(): Promise<string[]> {
   const resp = await fetch(url, { headers })
   if (!resp.ok) throw new Error(`Active runs check failed: ${resp.status}`)
   return await resp.json()
+}
+
+/**
+ * HITL 刷新恢复：获取会话的待确认工具列表（从后端持久暂停态重建）
+ * @param threadId 会话 ID
+ * @returns 待确认工具 [{toolUseId,name,input}]；无暂停态返回空数组
+ */
+export async function getPending(
+  threadId: string
+): Promise<Array<{ toolUseId: string; name: string; input?: Record<string, unknown> }>> {
+  const url = getPendingURL(threadId)
+  const headers = getRESTHeaders()
+  const resp = await fetch(url, { headers })
+  if (!resp.ok) throw new Error(`Pending check failed: ${resp.status}`)
+  const data = await resp.json()
+  return data.pending ?? []
 }

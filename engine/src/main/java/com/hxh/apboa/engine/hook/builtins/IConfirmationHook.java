@@ -88,6 +88,16 @@ public class IConfirmationHook implements IAgentHook {
         NEED_CONFIRM_TOOLS.remove(toolName);
     }
 
+    /**
+     * 查询某工具是否登记为需确认。
+     *
+     * <p>HITL §6.2：AguiAgentAdapter 暂停时据此从本轮所有 pending 工具中精确过滤出需确认的，
+     * 避免把同轮被 stopAgent 连累的普通/MCP 工具也算进 TOOL_CONFIRM_REQUIRED（修 §2.2「MCP 确认假象」）。
+     */
+    public static boolean isNeedConfirm(String toolName) {
+        return NEED_CONFIRM_TOOLS.contains(toolName);
+    }
+
     @Override
     public String getDescription() {
         return "人工确认钩子，配置后当需要确认的工具被调用时，用户决定是否执行";

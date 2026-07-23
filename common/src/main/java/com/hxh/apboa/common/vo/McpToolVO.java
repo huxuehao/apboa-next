@@ -19,6 +19,7 @@ public class McpToolVO implements SerializableEnable {
     private JsonNode inputSchema;
     private JsonNode outputSchema;
     private Boolean enabled;
+    private Boolean needConfirm;
     private Boolean missing;
     private Integer sort;
     private LocalDateTime lastDiscoveredAt;

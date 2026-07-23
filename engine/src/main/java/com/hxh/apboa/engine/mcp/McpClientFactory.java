@@ -9,6 +9,7 @@ import com.hxh.apboa.common.enums.McpProtocol;
 import com.hxh.apboa.common.enums.McpToolExposureMode;
 import com.hxh.apboa.common.vo.AgentMcpBindingVO;
 import com.hxh.apboa.node.agent.McpConfig;
+import com.hxh.apboa.engine.hook.builtins.IConfirmationHook;
 import com.hxh.apboa.mcp.config.impl.HttpMcpClientConfig;
 import com.hxh.apboa.mcp.config.impl.SseMcpClientConfig;
 import com.hxh.apboa.mcp.config.impl.StdioMcpClientConfig;
@@ -125,6 +126,13 @@ public class McpClientFactory {
                 McpSchema.Tool toolSchema = parseToolSchema(tool);
                 if (toolSchema == null) {
                     return;
+                }
+                // HITL §6.6：按 MCP 工具自身 need_confirm 登记确认清单
+                // （key 用原生名 toolSchema.name() 匹配 ToolUseBlock.name；确认后由 agent 自执行，天然带租户/MCP 上下文）
+                if (Boolean.TRUE.equals(tool.getNeedConfirm())) {
+                    IConfirmationHook.setNeedConfirmTool(toolSchema.name());
+                } else {
+                    IConfirmationHook.removeNeedConfirmTool(toolSchema.name());
                 }
                 result.add(new LazyMcpAgentTool(
                         degradeContext,

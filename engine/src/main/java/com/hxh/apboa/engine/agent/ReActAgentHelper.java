@@ -135,13 +135,19 @@ public class ReActAgentHelper {
             } else {
                 builder.memory(new InMemoryMemory());
             }
-            // 启用会话持久化时，确保 Memory 可被 saveTo/loadFrom；若启用规划则同时持久化 PlanNotebook
-            builder.statePersistence(
-                    StatePersistence.builder()
-                            .memoryManaged(true)
-                            .planNotebookManaged(definition.getEnablePlanning() && isPlanActive)
-                            .build());
         }
+
+        // HITL（docs/hitl-confirmation-refactor.md §6.1）：无条件开启「待确认工具恢复」+ 状态持久化，
+        // 让工具暂停态可被 saveTo/loadFrom，且不依赖 memoryActive（修 §2.5 Bug3：不开记忆时确认也不能失效）。
+        // 暂停态恢复必须连 memory 一起持久化（V0 实测：仅 statefulTools 会因缺 user query 被模型拒绝），
+        // 故 memoryManaged 恒为 true；长期记忆「是否保留」交由 AguiRequestProcessor/resume 的 session 生命周期控制。
+        builder.enablePendingToolRecovery(true);
+        builder.statePersistence(
+                StatePersistence.builder()
+                        .memoryManaged(true)
+                        .statefulToolsManaged(true)
+                        .planNotebookManaged(definition.getEnablePlanning() && isPlanActive)
+                        .build());
 
         // 配置长期记忆
         LongTermMemory longTermMemory = longTermMemoryFactory.createLongTermMemory(definition);

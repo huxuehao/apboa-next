@@ -231,6 +231,7 @@ export interface McpToolVO {
   inputSchema: Record<string, unknown> | null
   outputSchema: Record<string, unknown> | null
   enabled: boolean
+  needConfirm: boolean
   missing: boolean
   sort: number
   lastDiscoveredAt: string | null

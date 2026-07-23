@@ -142,6 +142,42 @@ public class AguiRestController {
     }
 
     /**
+     * HITL resume 端点（docs/hitl-confirmation-refactor.md §6.3）：提交逐工具确认决策，
+     * 后端用 AgentScope 官方「暂停-恢复」从暂停点续跑（全允许→agent 继续执行 pending；
+     * 含拒绝→喂入「用户已拒绝执行」后继续），并续接暂停前的 SSE 事件流。
+     *
+     * @param threadId 会话 ID（暂停态的 key）
+     * @param body 逐工具确认决策 + 是否开启记忆
+     * @return SseEmitter 流式续接恢复后的事件
+     */
+    @SkAccess
+    @ChatKeyAccess
+    @PostMapping(
+            value = "${agentscope.agui.path-prefix:/agui}/resume/{threadId}",
+            consumes = MediaType.APPLICATION_JSON_VALUE,
+            produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter resume(
+            @PathVariable("threadId") String threadId, @RequestBody ResumeRequest body) {
+        return aguiMvcController.handleResume(threadId, body.decisions(), body.memoryActive());
+    }
+
+    /**
+     * HITL 待确认列表端点：从持久 Session 的暂停态重建「待确认工具」，供前端刷新/重进会话时
+     * 重建确认 UI（暂停态会话已不在 active-runs、RunTracker 内存态跨重启会丢，故不能靠 reconnect 回放）。
+     *
+     * @param threadId 会话 ID
+     * @return { pending: [{toolUseId,name,input}] }；无暂停态则 pending 为空数组
+     */
+    @SkAccess
+    @ChatKeyAccess
+    @GetMapping(
+            value = "${agentscope.agui.path-prefix:/agui}/pending/{threadId}",
+            produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<Map<String, Object>> pending(@PathVariable("threadId") String threadId) {
+        return ResponseEntity.ok(Map.of("pending", aguiMvcController.getPendingConfirms(threadId)));
+    }
+
+    /**
      * 运行状态查询端点。
      *
      * @param threadId 会话 ID

@@ -98,3 +98,25 @@ export function getActiveRunsURL(): string {
   if (base) return `${base}${path}`
   return path
 }
+
+/**
+ * 获取 HITL resume URL（提交逐工具确认决策，续接 SSE 事件流）
+ * @param threadId 会话 ID
+ */
+export function getResumeURL(threadId: string): string {
+  const base = (import.meta.env.VITE_APP_BASE_API as string) || ''
+  const path = `${DEFAULT_SSE_BASE}/resume/${encodeURIComponent(threadId)}`
+  if (base) return `${base}${path}`
+  return path
+}
+
+/**
+ * 获取 HITL 待确认列表 URL（刷新/重进会话时从持久暂停态重建确认 UI）
+ * @param threadId 会话 ID
+ */
+export function getPendingURL(threadId: string): string {
+  const base = (import.meta.env.VITE_APP_BASE_API as string) || ''
+  const path = `${DEFAULT_SSE_BASE}/pending/${encodeURIComponent(threadId)}`
+  if (base) return `${base}${path}`
+  return path
+}

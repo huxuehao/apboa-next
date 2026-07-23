@@ -4,7 +4,7 @@
  */
 
 import { ref, onUnmounted } from 'vue'
-import { createAgentClient, getReconnectURL } from '@/api/agui'
+import { createAgentClient, getReconnectURL, getResumeURL } from '@/api/agui'
 import type { Message, RunAgentInput } from '@/types'
 import type { EventHandlers, ToolHandler } from '@/api/agui'
 
@@ -128,6 +128,27 @@ export function useAgentClient(options: UseAgentClientOptions = {}) {
     }
   }
 
+  /**
+   * HITL resume：提交逐工具确认决策并续接 SSE 流
+   * @param threadId 会话 ID
+   * @param decisions 逐工具决策（toolUseId/name/approved）
+   * @param memoryActive 是否开启记忆
+   */
+  async function resume(
+    threadId: string,
+    decisions: Array<{ toolUseId: string; name: string; approved: boolean }>,
+    memoryActive: boolean
+  ) {
+    isRunning.value = true
+    error.value = null
+    try {
+      await client.resume(getResumeURL(threadId), { decisions, memoryActive })
+    } finally {
+      isRunning.value = false
+      syncFromClient(client)
+    }
+  }
+
   function addUserMessage(content: string, id?: string) {
     const msg = client.addUserMessage(content, id)
     messages.value = [...client.messages]
@@ -150,6 +171,7 @@ export function useAgentClient(options: UseAgentClientOptions = {}) {
     abort,
     disconnect,
     reconnect,
+    resume,
     addUserMessage,
     /** 需直接操作 client 时使用（如 set messages/state） */
     client
