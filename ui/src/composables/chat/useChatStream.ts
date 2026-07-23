@@ -55,8 +55,39 @@ export function useChatStream(
     Array<{ id: string; name: string; args: string; result?: string; startTime: number; elapsed?: number, needConfirm?: boolean }>
   >([])
 
+  // HITL §6.5：逐工具确认决策（toolUseId → 状态），所有项决策完即调 /agui/resume
+  const pendingConfirms = ref<Record<string, 'pending' | 'approved' | 'rejected'>>({})
+
+  /**
+   * HITL：根据待确认列表重建确认 UI（标记/新建工具项 + 建立逐工具决策态）。两条来源共用：
+   * - 实时 TOOL_CONFIRM_REQUIRED 事件：工具项已由 ToolCallStart 建立，只需标记 needConfirm；
+   * - 刷新/重进会话（GET /agui/pending 恢复）：toolCallsInProgress 已被清空，须按 input 新建工具项，
+   *   否则没有任何工具项承载「允许/禁止」按钮，暂停态卡死无法续点。
+   * @param pending 待确认工具 [{toolUseId,name,input}]
+   */
+  const restorePending = (
+    pending: Array<{ toolUseId: string; name: string; input?: Record<string, unknown> }>
+  ) => {
+    if (!pending || pending.length === 0) return
+    const ids = new Set(pending.map(p => p.toolUseId))
+    // 已存在的标记 needConfirm
+    const arr = toolCallsInProgress.value.map(t => (ids.has(t.id) ? { ...t, needConfirm: true } : t))
+    // 缺失的新建（刷新场景）
+    const existing = new Set(arr.map(t => t.id))
+    pending.forEach(p => {
+      if (!existing.has(p.toolUseId)) {
+        const args = p.input && Object.keys(p.input).length ? JSON.stringify(p.input) : '{}'
+        arr.push({ id: p.toolUseId, name: p.name, args, needConfirm: true, startTime: Date.now() })
+      }
+    })
+    toolCallsInProgress.value = arr
+    const next: Record<string, 'pending' | 'approved' | 'rejected'> = { ...pendingConfirms.value }
+    pending.forEach(p => { next[p.toolUseId] = 'pending' })
+    pendingConfirms.value = next
+  }
+
   // 使用原有的 useAgentClient
-  const { messages, isRunning, isReplaying, run, abort, disconnect, reconnect, addUserMessage, client } = useAgentClient({
+  const { messages, isRunning, isReplaying, run, abort, disconnect, reconnect, resume, addUserMessage, client } = useAgentClient({
     handlers: {
       onRunStarted: () => {
         toolCallsInProgress.value = []
@@ -196,9 +227,8 @@ export function useChatStream(
       },
       onRunFinished: (_e) => {
         agentHasResult.value = true
-        if (toolCallsInProgress.value.length > 0) {
-          toolCallsInProgress.value.forEach(item => item.needConfirm = true)
-        }
+        // §6.5：不再全标记 needConfirm（旧 Bug1/MCP 假象根源）；
+        // 确认改由 onCustom 的 TOOL_CONFIRM_REQUIRED 事件精确驱动
       },
       onRaw: (event) => {
         const e = event as RawEvent
@@ -225,44 +255,51 @@ export function useChatStream(
             streamingRole.value = 'system'
           }
         }
-     }
+     },
+      onCustom: (event) => {
+        // HITL §6.2/§6.5：收到 TOOL_CONFIRM_REQUIRED 时，精确标记需确认的工具（不再全标记）
+        if (event.name === 'TOOL_CONFIRM_REQUIRED') {
+          const pending = (((event.value as any)?.pending) ?? []) as Array<{ toolUseId: string; name: string; input?: Record<string, unknown> }>
+          restorePending(pending)
+        }
+      }
     }
   })
 
-  // 发送消息
-  const sendToolContent = async (value: any) => {
-    const {id, name, args, result, content } = value
-    client.messages = [{
-      id,
-      role: 'tool',
-      content: JSON.stringify(content),
-      toolCallId: content[0].id,
-    }]
-
-    // 判断是否开启了显示工具调用
-    if ((toolProcessActive?.value ?? true)) {
-      const sid = currentSessionId.value as string
-      // 保存历史，通过队列保证写入顺序
-      const contentToSave = buildToolCallsContent([{ id, name, args, result, elapsed: 0 }])
-      if (contentToSave) {
-        onMessageSaved?.({
-          id: nextIdBig(),
-          sessionId: sid,
-          role: 'tool',
-          content: contentToSave,
-          parentId: '',
-          path: '',
-          depth: 0,
-          createdAt: ''
-        } as ChatMessageVO)
-      }
+  /**
+   * HITL §6.5：记录单个工具的确认决策（替代旧的「前端代执行/塞文本 + run 重开一轮」）。
+   * 所有待确认工具都决策后，调用 /agui/resume 由后端从暂停点续跑。
+   * @param toolUseId 工具调用 id（= TOOL_CONFIRM_REQUIRED 的 toolUseId）
+   * @param approved true=允许，false=拒绝
+   */
+  const decideConfirm = (toolUseId: string, approved: boolean) => {
+    if (pendingConfirms.value[toolUseId] === undefined) return
+    pendingConfirms.value = {
+      ...pendingConfirms.value,
+      [toolUseId]: approved ? 'approved' : 'rejected'
     }
+    // 该工具按钮收起（已决策）
+    toolCallsInProgress.value = toolCallsInProgress.value.map(t =>
+      t.id === toolUseId ? { ...t, needConfirm: false } : t
+    )
+    // 所有待确认工具都已决策 → 提交 resume
+    const states = Object.values(pendingConfirms.value)
+    if (states.length > 0 && states.every(s => s !== 'pending')) {
+      void submitResume()
+    }
+  }
 
-    await run({
-      threadId: currentSessionId.value || undefined,
-      runId: `run_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
-      forwardedProps: getForwardedProps()
+  /** 汇总逐工具决策并调用后端 resume，续接 SSE 流。 */
+  const submitResume = async () => {
+    const sid = currentSessionId.value
+    if (!sid) return
+    const decisions = Object.entries(pendingConfirms.value).map(([toolUseId, s]) => {
+      const t = toolCallsInProgress.value.find(x => x.id === toolUseId)
+      return { toolUseId, name: t?.name ?? '', approved: s === 'approved' }
     })
+    pendingConfirms.value = {}
+    agentHasResult.value = false
+    await resume(sid, decisions, memoryActive?.value ?? false)
   }
 
   // 中止运行
@@ -382,7 +419,9 @@ export function useChatStream(
     hasPlan,
     abortRun,
     sendMessage,
-    sendToolContent,
+    decideConfirm,
+    pendingConfirms,
+    restorePending,
     reconnect,
     disconnect,
     resetStreamingState,

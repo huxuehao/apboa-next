@@ -144,5 +144,18 @@
             <artifactId>org.eclipse.jgit.ssh.apache</artifactId>
             <version>7.3.0.202506031305-r</version>
         </dependency>
+        <!-- HITL V0 验证用：仅 test scope，版本由父 dependencyManagement 统一管理 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- HITL V0 阶段2：验证暂停态落 MySQL（agentscope 官方 session 扩展，仅 test scope） -->
+        <dependency>
+            <groupId>io.agentscope</groupId>
+            <artifactId>agentscope-extensions-session-mysql</artifactId>
+            <version>${agentscope.version}</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 </project>

@@ -10,6 +10,7 @@ import com.hxh.apboa.common.cluster.core.MessagePublisher;
 import com.hxh.apboa.common.consts.RedisChannelTopic;
 import com.hxh.apboa.common.consts.TableConst;
 import com.hxh.apboa.common.dto.McpToolEnabledDTO;
+import com.hxh.apboa.common.dto.McpToolNeedConfirmDTO;
 import com.hxh.apboa.common.entity.AgentDefinition;
 import com.hxh.apboa.common.entity.AgentMcpServer;
 import com.hxh.apboa.common.entity.McpServer;
@@ -178,6 +179,21 @@ public class McpServerServiceImpl extends ServiceImpl<McpServerMapper, McpServer
                 : new ArrayList<>(new LinkedHashSet<>(dto.getToolIds()));
         if (!toolIds.isEmpty()) {
             mcpToolService.updateGlobalEnabled(id, toolIds, Boolean.TRUE.equals(dto.getEnabled()));
+            publishAgentReregisterAfterCommit(agentMcpServerService.getAgentIds(List.of(id)));
+        }
+        return requireServer(id);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public McpServer updateToolNeedConfirm(Long id, McpToolNeedConfirmDTO dto) {
+        McpServer server = requireServer(id);
+        ensureToolGovernanceWritable(server);
+        List<Long> toolIds = dto == null || dto.getToolIds() == null
+                ? List.of()
+                : new ArrayList<>(new LinkedHashSet<>(dto.getToolIds()));
+        if (!toolIds.isEmpty()) {
+            mcpToolService.updateNeedConfirm(id, toolIds, Boolean.TRUE.equals(dto.getNeedConfirm()));
             publishAgentReregisterAfterCommit(agentMcpServerService.getAgentIds(List.of(id)));
         }
         return requireServer(id);

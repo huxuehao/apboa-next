@@ -73,6 +73,17 @@ export function updateToolsGlobalEnabled(id: string, toolIds: string[], enabled:
 }
 
 /**
+ * 批量设置工具是否需要人工确认（HITL §6.6）
+ * PUT /mcp/server/{id}/tools/global-need-confirm
+ */
+export function updateToolsNeedConfirm(id: string, toolIds: string[], needConfirm: boolean) {
+  return request.put<ApiResponse<McpServerVO>>(`/api/mcp/server/${id}/tools/global-need-confirm`, {
+    toolIds,
+    needConfirm
+  })
+}
+
+/**
  * 删除
  * DELETE /mcp/server
  */

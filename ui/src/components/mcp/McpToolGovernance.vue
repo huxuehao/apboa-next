@@ -6,7 +6,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { BugOutlined, SearchOutlined, ToolOutlined } from '@ant-design/icons-vue'
-import SimpleSwitch from '@/components/common/SimpleSwitch.vue'
 import type { McpServerVO, McpToolVO } from '@/types'
 
 const props = defineProps<{
@@ -20,6 +19,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:open': [value: boolean]
   toolEnabledChange: [tool: McpToolVO, enabled: boolean]
+  toolNeedConfirmChange: [tool: McpToolVO, needConfirm: boolean]
   debugTool: [tool: McpToolVO]
 }>()
 
@@ -57,6 +57,11 @@ watch(
 function handleToggleEnabled(tool: McpToolVO, checked: boolean) {
   togglingMap.value.set(tool.id, checked)
   emit('toolEnabledChange', tool, checked)
+}
+
+/** 切换工具「需要人工确认」（HITL §6.6）：调用前由 IConfirmationHook 暂停等用户允许/拒绝 */
+function handleToggleNeedConfirm(tool: McpToolVO, checked: boolean) {
+  emit('toolNeedConfirmChange', tool, checked)
 }
 
 function handleClose() {
@@ -100,7 +105,7 @@ function handleClose() {
         />
       </div>
 
-      <ApboaSpin :spinning="loading">
+      <ASpin :spinning="loading">
         <AEmpty v-if="!tools.length" description="暂无工具目录" />
         <template v-else>
           <AEmpty v-if="!filteredTools.length" description="未找到匹配的工具" />
@@ -133,22 +138,33 @@ function handleClose() {
                 {{ tool.description || '暂无描述' }}
               </div>
               <div class="card-footer">
-                <div class="card-tags">
+                <div class="footer-row">
                   <ATag v-if="tool.missing" color="warning" :bordered="false">已消失</ATag>
-                  <ATag v-else-if="tool.enabled" color="success" :bordered="false">全局可用</ATag>
-                  <ATag v-else color="default" :bordered="false">全局禁用</ATag>
+                  <ATag v-else :color="tool.enabled ? 'success' : 'error'" :bordered="false">全局可用</ATag>
+                  <ASwitch
+                    :checked="tool.enabled"
+                    :loading="togglingMap.has(tool.id)"
+                    :disabled="loading || readonly || togglingMap.has(tool.id)"
+                    checked-children="开"
+                    un-checked-children="关"
+                    @change="(checked: boolean) => handleToggleEnabled(tool, checked)"
+                  />
                 </div>
-                <SimpleSwitch
-                  :checked="tool.enabled"
-                  :loading="togglingMap.has(tool.id)"
-                  :disabled="loading || readonly || togglingMap.has(tool.id)"
-                  @change="(checked: boolean) => handleToggleEnabled(tool, checked)"
-                />
+                <div class="footer-row">
+                  <ATag :color="tool.needConfirm ? 'warning' : 'success'" :bordered="false">需确认</ATag>
+                  <ASwitch
+                    :checked="tool.needConfirm"
+                    :disabled="loading || readonly || !tool.enabled"
+                    checked-children="开"
+                    un-checked-children="关"
+                    @change="(checked: boolean) => handleToggleNeedConfirm(tool, checked)"
+                  />
+                </div>
               </div>
             </div>
           </div>
         </template>
-      </ApboaSpin>
+      </ASpin>
     </div>
   </ApboaModal>
 </template>
@@ -264,16 +280,15 @@ function handleClose() {
 
   .card-footer {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
+    flex-direction: column;
+    gap: 10px;
     padding-top: var(--spacing-xs);
 
-    .card-tags {
-      flex: 1;
-      min-width: 0;
+    .footer-row {
       display: flex;
-      flex-wrap: wrap;
-      gap: 4px;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
     }
   }
 }

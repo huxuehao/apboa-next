@@ -112,6 +112,10 @@ public class McpToolServiceImpl extends ServiceImpl<McpToolMapper, McpTool> impl
             entity.setEnabled(existingTool == null || existingTool.getEnabled() == null
                     ? Boolean.TRUE
                     : existingTool.getEnabled());
+            // HITL §6.6：schema 刷新时保留用户设置的 need_confirm（默认 false，不覆盖已有设置）
+            entity.setNeedConfirm(existingTool == null || existingTool.getNeedConfirm() == null
+                    ? Boolean.FALSE
+                    : existingTool.getNeedConfirm());
 
             if (existingTool == null) {
                 save(entity);
@@ -150,6 +154,25 @@ public class McpToolServiceImpl extends ServiceImpl<McpToolMapper, McpTool> impl
         lambdaUpdate()
                 .in(McpTool::getId, toolIds)
                 .set(McpTool::getEnabled, enabled)
+                .update();
+    }
+
+    @Override
+    public void updateNeedConfirm(Long mcpServerId, List<Long> toolIds, Boolean needConfirm) {
+        if (toolIds == null || toolIds.isEmpty()) {
+            return;
+        }
+        List<McpTool> tools = listByIdsPreserveOrder(toolIds);
+        if (tools.size() != new LinkedHashSet<>(toolIds).size()) {
+            throw new RuntimeException("存在无效的 MCP 工具选择");
+        }
+        boolean mismatch = tools.stream().anyMatch(item -> !Objects.equals(item.getMcpServerId(), mcpServerId));
+        if (mismatch) {
+            throw new RuntimeException("存在不属于当前 MCP 的工具");
+        }
+        lambdaUpdate()
+                .in(McpTool::getId, toolIds)
+                .set(McpTool::getNeedConfirm, needConfirm)
                 .update();
     }
 

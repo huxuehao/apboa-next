@@ -15,6 +15,7 @@
  */
 package io.agentscope.core.agui.adapter;
 
+import com.hxh.apboa.engine.hook.builtins.IConfirmationHook;
 import io.agentscope.core.agent.Agent;
 import io.agentscope.core.agent.Event;
 import io.agentscope.core.agent.EventType;
@@ -23,6 +24,7 @@ import io.agentscope.core.agui.converter.AguiMessageConverter;
 import io.agentscope.core.agui.event.AguiEvent;
 import io.agentscope.core.agui.model.RunAgentInput;
 import io.agentscope.core.message.ContentBlock;
+import io.agentscope.core.message.GenerateReason;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.TextBlock;
 import io.agentscope.core.message.ThinkingBlock;
@@ -59,6 +61,13 @@ import reactor.core.publisher.Flux;
 public class AguiAgentAdapter {
     private final Map<String, Map<String, Object>> TOOL_CACHE_MAP = new HashMap<>();
 
+    /** 本轮是否因 HITL 确认而暂停（REASONING_STOP_REQUESTED）。供 processor 决定是否无条件保存暂停态。 */
+    private volatile boolean suspended = false;
+
+    public boolean isSuspended() {
+        return suspended;
+    }
+
     private final Agent agent;
     private final AguiAdapterConfig config;
     private final AguiMessageConverter messageConverter;
@@ -85,12 +94,19 @@ public class AguiAgentAdapter {
      * @return A Flux of AG-UI events
      */
     public Flux<AguiEvent> run(RunAgentInput input) {
-        String threadId = input.getThreadId();
-        String runId = input.getRunId();
-
         // Convert AG-UI messages to AgentScope messages
         List<Msg> msgs = messageConverter.toMsgList(input.getMessages());
+        return runWithMessages(msgs, input.getThreadId(), input.getRunId());
+    }
 
+    /**
+     * HITL resume：直接以 AgentScope 原生 Msg 列表继续执行（绕过 AG-UI 消息转换），
+     * 复用同一套事件转换与 SSE 输出。
+     *
+     * <p>空列表 = 让 agent 继续执行 pending 工具（全允许）；
+     * 传入含 ToolResultBlock 的 TOOL 角色消息 = 喂入工具结果（如「用户已拒绝执行」）后继续。
+     */
+    public Flux<AguiEvent> runWithMessages(List<Msg> msgs, String threadId, String runId) {
         // Create stream options - use incremental mode for true streaming
         StreamOptions options =
                 StreamOptions.builder().eventTypes(EventType.ALL).incremental(true).build();
@@ -132,6 +148,11 @@ public class AguiAgentAdapter {
         List<AguiEvent> events = new ArrayList<>();
         Msg msg = event.getMessage();
         EventType type = event.getType();
+
+        // HITL：检测到「推理后暂停」即标记本轮挂起，供 AguiRequestProcessor 无条件保存暂停态
+        if (msg != null && msg.getGenerateReason() == GenerateReason.REASONING_STOP_REQUESTED) {
+            this.suspended = true;
+        }
 
         if (type == EventType.REASONING) {
             // Handle reasoning events - convert to text messages and tool calls
@@ -309,6 +330,31 @@ public class AguiAgentAdapter {
 //                }
 //            }
 
+        } else if (type == EventType.AGENT_RESULT) {
+            // HITL §6.2：推理后暂停（REASONING_STOP_REQUESTED）时推送 TOOL_CONFIRM_REQUIRED，
+            // pending 精确为 need_confirm 工具——过滤掉同轮被 stopAgent 连累的普通/MCP 工具
+            // （修 §2.2「MCP 确认假象」）。前端据此逐工具渲染「允许/禁止」，决策齐了调 /agui/resume。
+            if (msg != null
+                    && msg.getGenerateReason() == GenerateReason.REASONING_STOP_REQUESTED) {
+                List<Map<String, Object>> pending = new ArrayList<>();
+                for (ToolUseBlock toolUse : msg.getContentBlocks(ToolUseBlock.class)) {
+                    if (IConfirmationHook.isNeedConfirm(toolUse.getName())) {
+                        Map<String, Object> item = new LinkedHashMap<>();
+                        item.put("toolUseId", toolUse.getId());
+                        item.put("name", toolUse.getName());
+                        item.put("input", toolUse.getInput());
+                        pending.add(item);
+                    }
+                }
+                if (!pending.isEmpty()) {
+                    events.add(
+                            new AguiEvent.Custom(
+                                    state.threadId,
+                                    state.runId,
+                                    "TOOL_CONFIRM_REQUIRED",
+                                    Map.of("pending", pending)));
+                }
+            }
         }
 
         return events;

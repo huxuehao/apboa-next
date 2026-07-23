@@ -22,6 +22,8 @@ public interface McpToolService extends IService<McpTool> {
 
     void updateGlobalEnabled(Long mcpServerId, List<Long> toolIds, Boolean enabled);
 
+    void updateNeedConfirm(Long mcpServerId, List<Long> toolIds, Boolean needConfirm);
+
     List<McpTool> listRuntimeTools(Long mcpServerId);
 
     List<McpTool> listByServerIds(List<Long> mcpServerIds);
