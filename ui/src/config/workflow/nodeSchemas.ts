@@ -40,6 +40,14 @@ export const workflowNodeSchemas: WorkflowNodeSchema[] = [
     showSummary: false,
   }),
   schema({
+    type: 'NO_OPERATION', title: '空操作', group: 'basic',
+    description: '不执行任何操作，仅用于桥接两个节点。',
+    icon: 'noOperation', color: '#8E58DA', panelComponent: 'NoOperationNodePanel',
+    defaultConfig: {},
+    inputConfigs: [], outputConfigs: [],
+    showSummary: false,
+  }),
+  schema({
     type: 'END', title: '结束', group: 'basic',
     description: '工作流结束节点，按模板生成最终响应。',
     icon: 'stop', color: '#8c8c8c', panelComponent: 'EndNodePanel',
@@ -92,7 +100,7 @@ public class DataProcess implements IteratorExecutor {
     showSummary: true,
   }),
   schema({
-    type: 'LOOP', title: '循环', group: 'logic',
+    type: 'LOOP', title: '循环节点', group: 'logic',
     description: '按次数或数据源执行子工作流。',
     icon: 'loop', color: '#fa8c16', panelComponent: 'LoopNodePanel',
     defaultConfig: { loopVariable: 'loopIndex', maxIterations: 1000, terminationExpression: '', iterateDataSource: '', itemVariable: 'item', entryNodeId: '', subNodes: [], subEdges: [] },
@@ -202,6 +210,23 @@ public class DataProcess implements IteratorExecutor {
       { name: 'structured', type: 'Object', description: 'Agent 结构化输出' },
     ],
     summaryComponent: 'AgentNodeSummary',
+    showSummary: true,
+  }),
+  schema({
+    type: 'INTENT_RECOGNITION', title: '意图识别', group: 'integration',
+    description: '借助大模型识别用户输入的意图，并与预设意图选项进行匹配。',
+    icon: 'intentRecognition', color: '#eb2f96', panelComponent: 'IntentRecognitionNodePanel',
+    defaultConfig: {
+      modelConfigId: undefined,
+      modelParamsOverrideEnabled: false,
+      modelParamsOverride: {},
+      systemPromptExtension: '',
+      intents: [],
+      defaultNextNodeId: undefined,
+    },
+    inputConfigs: input(),
+    outputConfigs: [{ name: 'intent', type: 'String', description: '匹配到的意图名称' }],
+    summaryComponent: 'IntentRecognitionNodeSummary',
     showSummary: true,
   }),
   schema({
