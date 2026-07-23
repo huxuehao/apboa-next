@@ -7,10 +7,8 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { RoutePaths } from '@/router/constants.ts'
 import SmartCodeEditor from '@/components/editor/SmartCodeEditor.vue'
-import ExtendConfigEditor, { type ExtendConfigData } from '@/components/model/ExtendConfigEditor.vue'
 import TtsVoiceSelect from '@/components/model/TtsVoiceSelect.vue'
-import ParamSlider from '@/components/model/ParamSlider.vue'
-import ParamLabel from '@/components/model/ParamLabel.vue'
+import ModelParamsOverrideForm from '@/components/model/ModelParamsOverrideForm.vue'
 import * as modelApi from '@/api/model'
 import * as promptApi from '@/api/prompt'
 import type { ModelProviderVO, ModelConfigVO, SystemPromptTemplateVO } from '@/types'
@@ -21,6 +19,10 @@ import { ModelCategory } from '@/types'
 const props = defineProps<{
   modelValue: {
     modelConfigId: string
+    /** 额外候选对话模型（不含默认；对话页用户可切换） */
+    models: string[]
+    /** 各候选模型的参数覆盖（key=候选 id；空对象/缺省=跟随模型默认。默认模型的覆盖走 modelParamsOverride） */
+    modelsParamsOverride: Record<string, Record<string, unknown> | null>
     asrModelConfigId: string | null
     ttsModelConfigId: string | null
     modelParamsOverride: Record<string, unknown> | null
@@ -48,22 +50,6 @@ const allPrompts = ref<SystemPromptTemplateVO[]>([])
 
 const selectedProviderId = ref<string>('')
 const selectedPromptCategory = ref<string>('')
-const showModelParamsOverride = ref(false)
-
-/** 覆盖模型参数表单结构（滑块控件需要明确的 number 类型） */
-interface ModelParamsForm {
-  streaming?: boolean
-  temperature?: number
-  topP?: number
-  topK?: number
-  maxTokens?: number
-  repeatPenalty?: number
-  seed?: number | string | null
-  extendConfig?: ExtendConfigData | null
-  [key: string]: unknown
-}
-
-const modelParamsForm = ref<ModelParamsForm>({})
 
 /**
  * 表单数据
@@ -311,52 +297,51 @@ async function loadAllPrompts() {
 /**
  * 处理模型选择
  */
-async function handleModelChange(modelId: string) {
+function handleModelChange(modelId: string) {
   formData.value.modelConfigId = modelId
 
-  if (showModelParamsOverride.value) {
-    await loadModelParams(modelId)
+  // 新默认若在额外候选里则移除（默认模型天然是候选，避免关联表重复存）；
+  // 参数覆盖的重灌由 ModelParamsOverrideForm 监听 modelId 变化自理
+  if (formData.value.models?.some(id => String(id) === String(modelId))) {
+    formData.value.models = formData.value.models.filter(id => String(id) !== String(modelId))
   }
 }
 
-/**
- * 加载模型参数
- */
-async function loadModelParams(modelId: string) {
-  const response = await modelApi.configDetail(modelId)
-  const model = response.data.data
-
-  const ec = model.extendConfig as ExtendConfigData | null | undefined
-  const extendConfig = ec && typeof ec === 'object'
-    ? { headers: ec.headers || {}, queryParams: ec.queryParams || {}, bodyParams: ec.bodyParams || {}, fixedSystemMessage: ec.fixedSystemMessage ?? false }
-    : null
-
-  modelParamsForm.value = {
-    streaming: model.streaming,
-    temperature: model.temperature,
-    topP: model.topP,
-    topK: model.topK,
-    maxTokens: model.maxTokens,
-    repeatPenalty: model.repeatPenalty,
-    seed: model.seed,
-    extendConfig
-  }
-
-  formData.value.modelParamsOverride = { ...modelParamsForm.value }
+/** 目标模型的供应商类型（组件内 OPEN_AI 才显示固定系统消息项） */
+function providerTypeOf(modelId: string | null | undefined): string | null {
+  if (!modelId) return null
+  const model = allModels.value.find(m => String(m.id) === String(modelId))
+  if (!model) return null
+  const provider = modelProviders.value.find(p => String(p.id) === String(model.providerId))
+  return provider?.type ?? null
 }
 
-/**
- * 处理覆盖模型参数开关
- */
-function handleOverrideToggle(checked: boolean) {
-  showModelParamsOverride.value = checked
-  if (checked && formData.value.modelConfigId) {
-    loadModelParams(formData.value.modelConfigId)
-  } else {
-    formData.value.modelParamsOverride = {}
-    modelParamsForm.value = {}
-  }
+/** 候选模型显示名（参数覆盖块标题用） */
+function modelNameOf(modelId: string): string {
+  return allModels.value.find(m => String(m.id) === String(modelId))?.name || modelId
 }
+
+// 候选取消勾选时清掉它的参数覆盖（孤儿键不落库）
+watch(() => formData.value.models, (ids) => {
+  const map = formData.value.modelsParamsOverride
+  if (!map) return
+  const keep = new Set((ids || []).map(String))
+  Object.keys(map).forEach(k => {
+    if (!keep.has(k)) {
+      delete map[k]
+    }
+  })
+})
+
+/** 额外候选模型的分组选项（按供应商分组；默认模型置灰防重复勾选） */
+const candidateModelGroups = computed(() =>
+  modelProviders.value
+    .map(p => ({
+      label: p.name,
+      models: llmModels.value.filter(m => String(m.providerId) === String(p.id))
+    }))
+    .filter(g => g.models.length > 0)
+)
 
 /**
  * 处理提示词模板选择
@@ -379,36 +364,6 @@ function handleFollowTemplateToggle(checked: boolean) {
     handlePromptChange(formData.value.systemPromptTemplateId)
   }
 }
-
-/**
- * 是否显示固定系统消息配置（仅 OpenAI 供应商）
- */
-const showFixedSystemMessage = computed(() => {
-  if (!formData.value.modelConfigId) return false
-  const model = allModels.value.find(m => String(m.id) === String(formData.value.modelConfigId))
-  if (!model) return false
-  const provider = modelProviders.value.find(p => String(p.id) === String(model.providerId))
-  return provider?.type === 'OPEN_AI'
-})
-
-/**
- * 扩展配置（用于 v-model 绑定）
- */
-const extendConfigForm = computed({
-  get: () => (modelParamsForm.value.extendConfig as ExtendConfigData) || null,
-  set: (v: ExtendConfigData | null) => {
-    modelParamsForm.value = { ...modelParamsForm.value, extendConfig: v }
-  }
-})
-
-/**
- * 更新模型参数
- */
-watch(modelParamsForm, (newVal) => {
-  if (showModelParamsOverride.value) {
-    formData.value.modelParamsOverride = { ...newVal }
-  }
-}, { deep: true })
 
 /**
  * 验证表单
@@ -442,17 +397,6 @@ onMounted(() => {
     }
   }
 
-  if (formData.value.modelParamsOverride && Object.keys(formData.value.modelParamsOverride).length > 0) {
-    showModelParamsOverride.value = true
-    const override = formData.value.modelParamsOverride
-    const ec = override.extendConfig as ExtendConfigData | null | undefined
-    modelParamsForm.value = {
-      ...override,
-      extendConfig: ec && typeof ec === 'object'
-        ? { headers: ec.headers || {}, queryParams: ec.queryParams || {}, bodyParams: ec.bodyParams || {}, fixedSystemMessage: ec.fixedSystemMessage ?? false }
-        : null
-    }
-  }
 })
 
 defineExpose({
@@ -503,71 +447,49 @@ defineExpose({
         </template>
       </AFormItem>
 
-      <AFormItem label="覆盖模型参数" v-if="formData.modelConfigId">
-        <ASwitch
-          :checked="showModelParamsOverride"
-          @change="handleOverrideToggle"
-        />
+      <AFormItem name="models" v-if="llmModels.length > 1">
+        <template #label>
+          额外候选模型
+          <span class="text-placeholder text-xs" style="margin-left: 8px;">对话页可切换；默认模型始终是候选，无需重复勾选</span>
+        </template>
+        <ASelect
+          v-model:value="formData.models"
+          mode="multiple"
+          placeholder="不选 = 仅默认模型，对话页不出现切换入口"
+          allow-clear
+          style="width: 100%"
+        >
+          <ASelectOptGroup v-for="g in candidateModelGroups" :key="g.label" :label="g.label">
+            <ASelectOption
+              v-for="m in g.models"
+              :key="m.id"
+              :value="m.id"
+              :disabled="String(m.id) === String(formData.modelConfigId)"
+            >
+              {{ m.name }}
+            </ASelectOption>
+          </ASelectOptGroup>
+        </ASelect>
       </AFormItem>
 
-      <div v-if="formData.modelConfigId && showModelParamsOverride" class="params-override-section">
-        <ARow :gutter="16" :key="showModelParamsOverride">
-          <ACol :span="8">
-            <AFormItem>
-              <template #label><ParamLabel param="temperature" /></template>
-              <ParamSlider v-model="modelParamsForm.temperature" :min="0" :max="2" :step="0.1" :ticks="[0, 0.5, 1, 1.5, 2]" />
-            </AFormItem>
-          </ACol>
-          <ACol :span="8">
-            <AFormItem>
-              <template #label><ParamLabel param="topP" /></template>
-              <ParamSlider v-model="modelParamsForm.topP" :min="0" :max="1" :step="0.05" :ticks="[0, 0.5, 0.9, 1]" />
-            </AFormItem>
-          </ACol>
-          <ACol :span="8">
-            <AFormItem>
-              <template #label><ParamLabel param="repeatPenalty" /></template>
-              <ParamSlider v-model="modelParamsForm.repeatPenalty" :min="1" :max="2" :step="0.05" :ticks="[1, 1.2, 1.5, 2]" />
-            </AFormItem>
-          </ACol>
-          <ACol :span="8">
-            <AFormItem>
-              <template #label><ParamLabel param="maxTokens" /></template>
-              <ParamSlider v-model="modelParamsForm.maxTokens" preset="token" />
-            </AFormItem>
-          </ACol>
-          <ACol :span="8">
-            <AFormItem>
-              <template #label><ParamLabel param="topK" /></template>
-              <ParamSlider v-model="modelParamsForm.topK" :min="0" :max="100" :step="1" :ticks="[0, 20, 40, 60, 80, 100]" />
-            </AFormItem>
-          </ACol>
-          <ACol :span="8">
-            <AFormItem name="seed">
-              <template #label><ParamLabel param="seed" /></template>
-              <AInputNumber
-                v-model:value="modelParamsForm.seed"
-                style="width: 100%"
-                placeholder="请输入随机种子，留空表示随机" />
-            </AFormItem>
-          </ACol>
-          <ACol :span="8">
-            <AFormItem>
-              <template #label><ParamLabel param="streaming" /></template>
-              <ASwitch v-model:checked="modelParamsForm.streaming" />
-            </AFormItem>
-          </ACol>
-        </ARow>
-        <div class="extend-config-wrapper">
-          <AFormItem label="扩展配置">
-            <ExtendConfigEditor
-              v-model="extendConfigForm"
-              compact
-              :show-fixed-system-message="showFixedSystemMessage"
-            />
-          </AFormItem>
-        </div>
-      </div>
+      <ModelParamsOverrideForm
+        v-if="formData.modelConfigId"
+        v-model="formData.modelParamsOverride"
+        :model-id="formData.modelConfigId"
+        :provider-type="providerTypeOf(formData.modelConfigId)"
+        label="覆盖模型参数"
+      />
+
+      <template v-if="formData.models?.length">
+        <ModelParamsOverrideForm
+          v-for="mid in formData.models"
+          :key="mid"
+          v-model="formData.modelsParamsOverride[mid]"
+          :model-id="mid"
+          :provider-type="providerTypeOf(mid)"
+          :label="`覆盖参数 · ${modelNameOf(mid)}`"
+        />
+      </template>
 
       <AFormItem label="语音识别模型">
         <div class="mb-md">
@@ -743,16 +665,4 @@ defineExpose({
   }
 }
 
-.params-override-section {
-  padding: var(--spacing-md);
-  background-color: var(--color-bg-light);
-  border-radius: var(--border-radius-md);
-  margin-bottom: var(--spacing-md);
-
-  .extend-config-wrapper {
-    margin-top: var(--spacing-md);
-    padding-top: var(--spacing-md);
-    border-top: 1px solid var(--color-border-light);
-  }
-}
 </style>

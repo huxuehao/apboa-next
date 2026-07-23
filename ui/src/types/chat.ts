@@ -60,4 +60,7 @@ export interface RunMeta {
   inputTokens?: number
   outputTokens?: number
   totalTokens?: number
+  /** 本次回复实际使用的模型（消息级审计；多候选切换后可追溯） */
+  modelConfigId?: string
+  modelLabel?: string
 }

@@ -14,15 +14,19 @@ defineProps<{
   commonQuestions?: CommonQuestion[] | null
   uploadedFiles?: import('@/types').UploadedFileItem[]
   isRunning?: boolean
-  memoryActive?: boolean
   planActive?: boolean
-  enableMemory?: boolean
   enablePlanning?: boolean
   toolProcessActive?: boolean
   showToolProcess?: boolean
   confirmMode?: import('@/api/chatSession').ConfirmMode
   thinkingSupported?: boolean
   thinkingActive?: boolean
+  /** 候选模型选项（>1 才展示切换按钮） */
+  modelOptions?: import('@/types').AgentModelOptionVO[]
+  /** 会话当前生效模型 id */
+  activeModelId?: string
+  /** 有待确认的 HITL 操作：禁用模型/思考切换 */
+  hasPendingConfirm?: boolean
   allowUploadFileType?: string[]
   sessionId?: string | null
   mentionAllowed?: boolean
@@ -33,11 +37,11 @@ defineEmits<{
   (e: 'update:inputValue', value: string): void
   (e: 'update:uploadedFiles', value: import('@/types').UploadedFileItem[]): void
   (e: 'send'): void
-  (e: 'memory', value: boolean): void
   (e: 'plan', value: boolean): void
   (e: 'toolProcess', value: boolean): void
   (e: 'confirmMode', value: import('@/api/chatSession').ConfirmMode): void
   (e: 'thinking', value: boolean): void
+  (e: 'model', value: string): void
   (e: 'voiceToggle'): void
   (e: 'voicePress', action: import('@/composables/chat/useVoiceInput').VoicePressAction): void
   (e: 'newSession'): void
@@ -81,9 +85,7 @@ defineEmits<{
         :agent-id="agentId"
         :uploaded-files="uploadedFiles"
         :isRunning="isRunning"
-        :memory-active="memoryActive"
         :plan-active="planActive"
-        :enable-memory="enableMemory"
         :enable-planning="enablePlanning"
         :allow-upload-file-type="allowUploadFileType"
         :show-tool-process="showToolProcess"
@@ -91,16 +93,19 @@ defineEmits<{
         :confirm-mode="confirmMode"
         :thinking-supported="thinkingSupported"
         :thinking-active="thinkingActive"
+        :model-options="modelOptions"
+        :active-model-id="activeModelId"
+        :has-pending-confirm="hasPendingConfirm"
         :voice-state="voiceState"
         :session-id="sessionId"
         :mention-allowed="mentionAllowed"
         @update:model-value="$emit('update:inputValue', $event)"
         @update:uploaded-files="$emit('update:uploadedFiles', $event)"
-        @memory="$emit('memory', $event)"
         @plan="$emit('plan', $event)"
         @toolProcess="$emit('toolProcess', $event)"
         @confirm-mode="$emit('confirmMode', $event)"
         @thinking="$emit('thinking', $event)"
+        @model="$emit('model', $event)"
         @voice-toggle="$emit('voiceToggle')"
         @voice-press="$emit('voicePress', $event)"
         @send="$emit('send')"

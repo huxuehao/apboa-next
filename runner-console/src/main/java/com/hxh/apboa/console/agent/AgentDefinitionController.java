@@ -15,6 +15,7 @@ import com.hxh.apboa.common.r.R;
 import com.hxh.apboa.common.util.BeanUtils;
 import com.hxh.apboa.common.vo.AgentChatContextVO;
 import com.hxh.apboa.common.vo.AgentDefinitionVO;
+import com.hxh.apboa.common.vo.AgentModelOptionVO;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.hxh.apboa.studio.mapper.AgentStudioMapper;
 import com.hxh.apboa.longterm.mapper.AgentLongTermMemoryMapper;
@@ -23,6 +24,7 @@ import com.hxh.apboa.model.service.ModelConfigService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -107,6 +109,7 @@ public class AgentDefinitionController {
         AgentDefinitionVO vo = agentDefinitionService.agentDefinitionDetail(id);
         vo.setUsed(agentDefinitionService.usedWithAgent(List.of(id)));
         vo.setThinkingSwitchSupported(resolveThinkingSwitchSupported(vo.getModelConfigId()));
+        vo.setModelOptions(buildModelOptions(vo));
         List<JobInfo> agent = iJobInfoMapper.selectList(
                 new LambdaQueryWrapper<JobInfo>()
                         .eq(JobInfo::getType, "AGENT")
@@ -115,6 +118,43 @@ public class AgentDefinitionController {
             vo.setJobInfo(agent.getFirst());
         }
         return vo;
+    }
+
+    /**
+     * 拼装候选模型选项（默认模型 + 额外候选，detail 已做存在性过滤），
+     * 供对话页模型切换下拉与 per-model 思考开关显隐。单个候选查询失败跳过不拖垮 detail。
+     */
+    private List<AgentModelOptionVO> buildModelOptions(AgentDefinitionVO vo) {
+        List<AgentModelOptionVO> options = new ArrayList<>();
+        List<Long> ids = new ArrayList<>();
+        if (vo.getModelConfigId() != null) {
+            ids.add(vo.getModelConfigId());
+        }
+        if (vo.getModels() != null) {
+            vo.getModels().stream().filter(id -> !ids.contains(id)).forEach(ids::add);
+        }
+        for (Long id : ids) {
+            try {
+                ModelWrapper wrapper = modelConfigService.getModelWrapperById(id);
+                if (wrapper == null || wrapper.getConfig() == null) {
+                    continue;
+                }
+                AgentModelOptionVO option = new AgentModelOptionVO();
+                option.setId(id);
+                option.setName(wrapper.getConfig().getName());
+                option.setDescription(wrapper.getConfig().getDescription());
+                option.setLogo(wrapper.getConfig().getLogo());
+                option.setLogoColor(wrapper.getConfig().getLogoColor());
+                option.setProviderType(wrapper.getProvider() != null && wrapper.getProvider().getType() != null
+                        ? wrapper.getProvider().getType().name() : null);
+                option.setIsDefault(id.equals(vo.getModelConfigId()));
+                option.setThinkingSwitchSupported(Boolean.TRUE.equals(wrapper.getConfig().getThinking()));
+                options.add(option);
+            } catch (Exception e) {
+                // 悬空/异常候选跳过，读取端收口
+            }
+        }
+        return options;
     }
 
     /**

@@ -1,6 +1,8 @@
 package com.hxh.apboa.engine.model;
 
+import com.hxh.apboa.agent.service.AgentModelConfigService;
 import com.hxh.apboa.common.entity.AgentDefinition;
+import com.hxh.apboa.common.entity.ModelConfig;
 import com.hxh.apboa.common.enums.ModelProviderType;
 import com.hxh.apboa.common.util.ExtendConfigHelper;
 import com.hxh.apboa.engine.agui.AgentContext;
@@ -9,6 +11,7 @@ import com.hxh.apboa.common.wrapper.ModelWrapper;
 import com.hxh.apboa.model.service.ModelConfigService;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.agentscope.core.model.Model;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
@@ -22,14 +25,18 @@ import java.util.stream.Collectors;
  *
  * @author huxuehao
  **/
+@Slf4j
 @Component
 public class ChatModelFactory {
     private static final Map<ModelProviderType, IChatModel> MODEL_MAP = new ConcurrentHashMap<>();
 
     private final ModelConfigService modelConfigService;
+    private final AgentModelConfigService agentModelConfigService;
 
-    public ChatModelFactory(List<IChatModel> IChatModels, ModelConfigService modelConfigService) {
+    public ChatModelFactory(List<IChatModel> IChatModels, ModelConfigService modelConfigService,
+                            AgentModelConfigService agentModelConfigService) {
         this.modelConfigService = modelConfigService;
+        this.agentModelConfigService = agentModelConfigService;
         IChatModels.stream()
                 .collect(Collectors.groupingBy(IChatModel::getProvider))
                 .forEach((provider, models) -> {
@@ -59,8 +66,26 @@ public class ChatModelFactory {
     public Model getModel(AgentDefinition agentDefinition, boolean multi) {
         ModelConfigWrapper configWrapper = ModelConfigWrapper.builder().build();
 
-        // 获取agent中配置的参数
-        JsonNode modelParamsOverride = agentDefinition.getModelParamsOverride();
+        // 会话级模型覆盖（前台在候选集内切换，Redis 实时写入，agent 重建时此处读到新值）：
+        // 覆盖必须仍是该 agent 的额外候选且模型可用，失效（解绑/禁用后的旧覆盖）静默回落默认，不断对话。
+        // 先解析本次实际使用的模型，参数覆盖再按归属选取
+        Long modelConfigIdToUse = agentDefinition.getModelConfigId();
+        Long modelOverride = SessionModelResolver.resolveOverride(
+                AgentContext.getIfExists().map(AgentContext::getThreadId).orElse(null));
+        if (modelOverride != null && !modelOverride.equals(modelConfigIdToUse)) {
+            if (isUsableCandidate(agentDefinition.getId(), modelOverride)) {
+                modelConfigIdToUse = modelOverride;
+            } else {
+                log.warn("会话模型覆盖已失效，回落默认模型: agentId={}, override={}",
+                        agentDefinition.getId(), modelOverride);
+            }
+        }
+
+        // 参数覆盖按归属：默认模型用 agent 级 model_params_override，
+        // 候选模型用其关联行的 model_params_override（per-model；null=跟随模型自身默认）
+        JsonNode modelParamsOverride = modelConfigIdToUse.equals(agentDefinition.getModelConfigId())
+                ? agentDefinition.getModelParamsOverride()
+                : agentModelConfigService.getParamsOverride(agentDefinition.getId(), modelConfigIdToUse);
         if (modelParamsOverride != null && !modelParamsOverride.isEmpty()) {
             if (modelParamsOverride.has("temperature")) {
                 configWrapper.setTemperature(modelParamsOverride.get("temperature").asDouble());
@@ -90,7 +115,14 @@ public class ChatModelFactory {
             }
         }
 
-        ModelWrapper config = modelConfigService.getModelWrapperById(agentDefinition.getModelConfigId());
+        ModelWrapper config = modelConfigService.getModelWrapperById(modelConfigIdToUse);
+        // 记录本次实际选定的模型（消息级审计：ReActAgentHelper 搬进 AgentMetadataStore，
+        // ChatLogHook 落 meta / Adapter 下发 RUN_META 按 agentId 读取）
+        final Long selectedModelId = modelConfigIdToUse;
+        AgentContext.getIfExists().ifPresent(ctx -> {
+            ctx.setActiveModelConfigId(selectedModelId);
+            ctx.setActiveModelLabel(config.getConfig() != null ? config.getConfig().getName() : null);
+        });
         // 填充模型配置
         config.getConfig().fillModelConfigWrapper(configWrapper);
         // 填充供应商配置
@@ -136,6 +168,22 @@ public class ChatModelFactory {
         }
 
         return IChatModel.getModel(configWrapper);
+    }
+
+    /**
+     * 覆盖目标是否可用的候选：仍在关联表候选集内、模型存在且启用。
+     * （覆盖值等于默认模型时上游直接跳过，不走本判断）
+     */
+    private boolean isUsableCandidate(Long agentId, Long modelConfigId) {
+        try {
+            if (!agentModelConfigService.getModelIds(agentId).contains(modelConfigId)) {
+                return false;
+            }
+            ModelConfig candidate = modelConfigService.getById(modelConfigId);
+            return candidate != null && Boolean.TRUE.equals(candidate.getEnabled());
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /**

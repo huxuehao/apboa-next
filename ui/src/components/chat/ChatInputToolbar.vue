@@ -10,7 +10,6 @@ import {
   ArrowUpOutlined,
   AudioOutlined,
   BulbOutlined,
-  ClockCircleOutlined,
   LoadingOutlined,
   LockOutlined,
   MessageOutlined,
@@ -20,14 +19,13 @@ import {
   UnlockOutlined
 } from '@ant-design/icons-vue'
 import type { ConfirmMode } from '@/api/chatSession'
+import { resolveModelIcon, DEFAULT_MODEL_ICON_COLOR } from '@/constants/modelIcons'
 
 const props = withDefaults(
   defineProps<{
     isRunning?: boolean
     /** 是否允许触发发送（综合上传中、内容、附件等条件） */
     canSend: boolean
-    enableMemory?: boolean
-    memoryActive?: boolean
     showToolProcess?: boolean
     toolProcessActive?: boolean
     /** HITL 授权模式（三态） */
@@ -36,6 +34,12 @@ const props = withDefaults(
     thinkingSupported?: boolean
     /** 会话思考模式有效值 */
     thinkingActive?: boolean
+    /** 候选模型选项（>1 才展示切换按钮） */
+    modelOptions?: import('@/types').AgentModelOptionVO[]
+    /** 会话当前生效模型 id */
+    activeModelId?: string
+    /** 有待确认的 HITL 操作：禁用模型/思考切换（防重建冲掉挂起现场） */
+    hasPendingConfirm?: boolean
     mentionAllowed?: boolean
     allowUploadFileType?: string[]
     /** 语音输入聚合状态（未透传视为不可用） */
@@ -51,8 +55,6 @@ const props = withDefaults(
   }>(),
   {
     isRunning: false,
-    enableMemory: false,
-    memoryActive: false,
     showToolProcess: false,
     toolProcessActive: false,
     confirmMode: 'MANUAL',
@@ -70,10 +72,10 @@ const props = withDefaults(
 const tooltipTrigger = computed<Array<'hover'>>(() => (props.isMobile ? [] : ['hover']))
 
 const emit = defineEmits<{
-  (e: 'memory', value: boolean): void
   (e: 'toolProcess', value: boolean): void
   (e: 'confirmMode', value: ConfirmMode): void
   (e: 'thinking', value: boolean): void
+  (e: 'model', value: string): void
   (e: 'mentionTrigger'): void
   (e: 'pickFile'): void
   (e: 'voiceToggle'): void
@@ -162,25 +164,6 @@ const handlePrimaryClick = () => {
   emit('send')
 }
 
-/** 记忆开关菜单项（菜单自解释：标题+行为说明，两端统一下拉、不依赖 hover tooltip） */
-const MEMORY_OPTIONS = [
-  { key: 'on', label: '开启记忆', desc: '对话携带上下文历史，记住之前聊过的内容' },
-  { key: 'off', label: '关闭记忆', desc: '每条消息独立发送，不携带历史' }
-] as const
-
-/** 记忆按钮 tooltip（桌面悬停简述；移动端已禁用 tooltip，信息由菜单承载） */
-const memoryTip = computed(() => {
-  if (!props.enableMemory) return '该智能体不支持记忆持久化'
-  return props.memoryActive ? '记忆已开启（点击选择）' : '记忆已关闭（点击选择）'
-})
-
-const handleMemorySelect = ({ key }: { key: string | number }) => {
-  const next = key === 'on'
-  if (next !== props.memoryActive) {
-    emit('memory', next)
-  }
-}
-
 /**
  * 切换工具调用历史按钮，未启用时不响应
  */
@@ -202,6 +185,11 @@ const confirmModeTip = computed(() => {
   return opt ? `${opt.label}：${opt.desc}（点击切换）` : ''
 })
 
+/** 锁按钮桌面端文字：当前授权模式名 */
+const currentConfirmLabel = computed(() =>
+  CONFIRM_MODE_OPTIONS.find((o) => o.key === props.confirmMode)?.label ?? '授权模式'
+)
+
 const handleConfirmModeSelect = ({ key }: { key: string | number }) => {
   const mode = String(key) as ConfirmMode
   if (mode !== props.confirmMode) {
@@ -215,14 +203,40 @@ const THINKING_OPTIONS = [
   { key: 'off', label: '关闭思考', desc: '跳过深度推理直接回答，响应更快' }
 ] as const
 
-const thinkingTip = computed(() =>
-  props.thinkingActive ? '思考模式已开启（点击选择）' : '思考模式已关闭（点击选择）'
-)
+const thinkingTip = computed(() => {
+  if (props.hasPendingConfirm) {
+    return '有待确认的操作，请先处理再切换思考模式'
+  }
+  return props.thinkingActive ? '思考模式已开启（点击选择）' : '思考模式已关闭（点击选择）'
+})
 
 const handleThinkingSelect = ({ key }: { key: string | number }) => {
   const next = key === 'on'
   if (next !== props.thinkingActive) {
     emit('thinking', next)
+  }
+}
+
+// ========== 会话级模型切换（候选 >1 才展示；切换写会话覆盖，下一条消息生效） ==========
+const modelSwitchEnabled = computed(() => (props.modelOptions?.length ?? 0) > 1)
+
+const activeModelOption = computed(() =>
+  props.modelOptions?.find((o) => String(o.id) === String(props.activeModelId))
+)
+
+const modelTip = computed(() => {
+  if (props.hasPendingConfirm) {
+    return '有待确认的操作，请先处理再切换模型'
+  }
+  return activeModelOption.value
+    ? `当前模型：${activeModelOption.value.name}（点击切换）`
+    : '切换模型'
+})
+
+const handleModelSelect = ({ key }: { key: string | number }) => {
+  const id = String(key)
+  if (id !== String(props.activeModelId)) {
+    emit('model', id)
   }
 }
 
@@ -253,31 +267,32 @@ const uploadTooltip = computed(() => {
 <template>
   <div class="chat-input-toolbar">
     <div class="chat-input-toolbar-left">
-      <ADropdown :trigger="['click']" placement="topLeft" :disabled="!enableMemory">
-        <ATooltip placement="bottom" :trigger="tooltipTrigger" :title="memoryTip">
+      <ADropdown v-if="modelSwitchEnabled" :trigger="['click']" placement="topLeft" :disabled="hasPendingConfirm">
+        <ATooltip placement="bottom" :trigger="tooltipTrigger" :overlay-style="{ maxWidth: 'none' }" :overlay-inner-style="{ whiteSpace: 'nowrap' }" :title="modelTip">
           <button
-            :disabled="!enableMemory"
             type="button"
-            class="chat-toolbar-btn chat-toolbar-btn-icon chat-toolbar-btn-circle"
-            :class="{ 'is-active': memoryActive && enableMemory }"
+            class="chat-toolbar-btn chat-toolbar-btn-icon chat-toolbar-btn-circle chat-toolbar-btn-labeled chat-toolbar-btn-model"
+            :style="{ color: activeModelOption?.logoColor || DEFAULT_MODEL_ICON_COLOR }"
+            :disabled="hasPendingConfirm"
           >
-            <ClockCircleOutlined />
+            <component :is="resolveModelIcon(activeModelOption?.logo)" />
+            <span class="chat-toolbar-btn-label">{{ activeModelOption?.name || '模型' }}</span>
           </button>
         </ATooltip>
         <template #overlay>
           <AMenu
             class="toolbar-toggle-menu"
-            :selected-keys="[memoryActive ? 'on' : 'off']"
-            @click="handleMemorySelect"
+            :selected-keys="[String(activeModelId ?? '')]"
+            @click="handleModelSelect"
           >
-            <AMenuItem v-for="opt in MEMORY_OPTIONS" :key="opt.key">
+            <AMenuItem v-for="opt in modelOptions" :key="String(opt.id)">
               <div class="toolbar-toggle-option">
-                <span class="toolbar-toggle-option-icon" :class="'is-' + opt.key">
-                  <ClockCircleOutlined />
+                <span class="toolbar-toggle-option-icon" :style="{ color: opt.logoColor || DEFAULT_MODEL_ICON_COLOR }">
+                  <component :is="resolveModelIcon(opt.logo)" />
                 </span>
                 <span class="toolbar-toggle-option-text">
-                  <span class="toolbar-toggle-option-label">{{ opt.label }}</span>
-                  <span class="toolbar-toggle-option-desc">{{ opt.desc }}</span>
+                  <span class="toolbar-toggle-option-label">{{ opt.name }}</span>
+                  <span v-if="opt.description" class="toolbar-toggle-option-desc">{{ opt.description }}</span>
                 </span>
               </div>
             </AMenuItem>
@@ -303,14 +318,16 @@ const uploadTooltip = computed(() => {
       </ATooltip>
       -->
 
-      <ADropdown v-if="thinkingSupported" :trigger="['click']" placement="topLeft">
+      <ADropdown v-if="thinkingSupported" :trigger="['click']" placement="topLeft" :disabled="hasPendingConfirm">
         <ATooltip placement="bottom" :trigger="tooltipTrigger" :title="thinkingTip">
           <button
             type="button"
-            class="chat-toolbar-btn chat-toolbar-btn-icon chat-toolbar-btn-circle"
+            class="chat-toolbar-btn chat-toolbar-btn-icon chat-toolbar-btn-circle chat-toolbar-btn-labeled"
             :class="{ 'is-active': thinkingActive }"
+            :disabled="hasPendingConfirm"
           >
             <BulbOutlined />
+            <span class="chat-toolbar-btn-label">{{ thinkingActive ? '开启思考' : '关闭思考' }}</span>
           </button>
         </ATooltip>
         <template #overlay>
@@ -334,11 +351,12 @@ const uploadTooltip = computed(() => {
         </template>
       </ADropdown>
 
+
       <ADropdown :trigger="['click']" placement="topLeft">
         <ATooltip placement="bottom" :trigger="tooltipTrigger" :overlay-style="{ maxWidth: 'none' }" :overlay-inner-style="{ whiteSpace: 'nowrap' }" :title="confirmModeTip">
           <button
             type="button"
-            class="chat-toolbar-btn chat-toolbar-btn-icon chat-toolbar-btn-circle"
+            class="chat-toolbar-btn chat-toolbar-btn-icon chat-toolbar-btn-circle chat-toolbar-btn-labeled"
             :class="{
               'is-warn-active': confirmMode === 'AUTO_APPROVE',
               'is-active': confirmMode === 'MANUAL',
@@ -348,6 +366,7 @@ const uploadTooltip = computed(() => {
             <UnlockOutlined v-if="confirmMode === 'AUTO_APPROVE'" />
             <StopOutlined v-else-if="confirmMode === 'AUTO_REJECT'" />
             <LockOutlined v-else />
+            <span class="chat-toolbar-btn-label">{{ currentConfirmLabel }}</span>
           </button>
         </ATooltip>
         <template #overlay>
@@ -371,25 +390,27 @@ const uploadTooltip = computed(() => {
     </div>
     <div class="chat-input-toolbar-right">
       <!-- @ 添加上下文按钮（仅编辑器在场时显示） -->
-      <ATooltip v-if="editorPresent" placement="bottom" :trigger="tooltipTrigger" title="添加上下文">
+      <ATooltip v-if="editorPresent" placement="bottom" :trigger="tooltipTrigger" title="引用资源">
         <button
           :disabled="!mentionAllowed"
           type="button"
-          class="chat-toolbar-btn chat-toolbar-btn-icon chat-toolbar-btn-circle chat-toolbar-btn-accent"
+          class="chat-toolbar-btn chat-toolbar-btn-icon chat-toolbar-btn-circle chat-toolbar-btn-accent chat-toolbar-btn-labeled"
           @mousedown.prevent
           @click="emit('mentionTrigger')"
         >
           @
+          <span class="chat-toolbar-btn-label">引用资源</span>
         </button>
       </ATooltip>
       <ATooltip placement="bottom" :trigger="tooltipTrigger" :overlay-style="{ maxWidth: 'none' }" :overlay-inner-style="{ whiteSpace: 'nowrap' }" :title="uploadTooltip">
         <button
           type="button"
-          class="chat-toolbar-btn chat-toolbar-btn-icon chat-toolbar-btn-circle chat-toolbar-btn-accent"
+          class="chat-toolbar-btn chat-toolbar-btn-icon chat-toolbar-btn-circle chat-toolbar-btn-accent chat-toolbar-btn-labeled"
           style="margin-right: 15px"
           @click="emit('pickFile')"
         >
           <PaperClipOutlined />
+          <span class="chat-toolbar-btn-label">上传附件</span>
         </button>
       </ATooltip>
       <ATooltip placement="bottom" :trigger="tooltipTrigger" :title="primaryTooltip">

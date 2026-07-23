@@ -25,15 +25,19 @@ const props = withDefaults(
     uploadedFiles?: UploadedFileItem[]
     isRunning?: boolean
     placeholder?: string
-    memoryActive?: boolean
     planActive?: boolean
-    enableMemory?: boolean
     enablePlanning?: boolean
     toolProcessActive?: boolean
     showToolProcess?: boolean
     confirmMode?: import('@/api/chatSession').ConfirmMode
     thinkingSupported?: boolean
     thinkingActive?: boolean
+    /** 候选模型选项（>1 才展示切换按钮） */
+    modelOptions?: import('@/types').AgentModelOptionVO[]
+    /** 会话当前生效模型 id */
+    activeModelId?: string
+    /** 有待确认的 HITL 操作：禁用模型/思考切换 */
+    hasPendingConfirm?: boolean
     allowUploadFileType?: string[]
     sessionId?: string | null
     mentionAllowed?: boolean
@@ -42,9 +46,7 @@ const props = withDefaults(
   }>(),
   {
     uploadedFiles: () => [],
-    memoryActive: false,
     planActive: false,
-    enableMemory: false,
     enablePlanning: false,
     toolProcessActive: false,
     showToolProcess: false,
@@ -60,11 +62,11 @@ const emit = defineEmits<{
   (e: 'update:uploadedFiles', value: UploadedFileItem[]): void
   (e: 'send'): void
   (e: 'abort'): void
-  (e: 'memory', value: boolean): void
   (e: 'plan', value: boolean): void
   (e: 'toolProcess', value: boolean): void
   (e: 'confirmMode', value: import('@/api/chatSession').ConfirmMode): void
   (e: 'thinking', value: boolean): void
+  (e: 'model', value: string): void
   (e: 'voiceToggle'): void
   (e: 'voicePress', action: import('@/composables/chat/useVoiceInput').VoicePressAction): void
   (e: 'inputTagPreview', value: FlatFileItem): void
@@ -254,13 +256,14 @@ onMounted(() => {
       <ChatInputToolbar
         :is-running="isRunning"
         :can-send="canSend"
-        :enable-memory="enableMemory"
-        :memory-active="memoryActive"
         :show-tool-process="showToolProcess"
         :tool-process-active="toolProcessActive"
         :confirm-mode="confirmMode"
         :thinking-supported="thinkingSupported"
         :thinking-active="thinkingActive"
+        :model-options="modelOptions"
+        :active-model-id="activeModelId"
+        :has-pending-confirm="hasPendingConfirm"
         :mention-allowed="mentionAllowed"
         :allow-upload-file-type="allowUploadFileType"
         :voice-state="voiceState"
@@ -269,10 +272,10 @@ onMounted(() => {
         :mobile-voice-ui="isMobile && !!voiceState?.enabled"
         :is-mobile="isMobile"
         @switch-input-mode="handleSwitchInputMode"
-        @memory="(v) => emit('memory', v)"
         @tool-process="(v) => emit('toolProcess', v)"
         @confirm-mode="(v: import('@/api/chatSession').ConfirmMode) => emit('confirmMode', v)"
         @thinking="(v: boolean) => emit('thinking', v)"
+        @model="(v: string) => emit('model', v)"
         @mention-trigger="editorRef?.triggerMention()"
         @pick-file="fileInputRef?.click()"
         @voice-toggle="emit('voiceToggle')"

@@ -171,7 +171,7 @@ public class ChatLogHook implements Hook {
                                     "assistant",
                                     longTextContent,
                                     tenantId,
-                                    buildMeta(RUN_STAT_MAP.remove(threadId))));
+                                    buildMeta(RUN_STAT_MAP.remove(threadId), event)));
                         }
                     } else if (block instanceof ThinkingBlock thinkingBlock) {
                         // 思考保存
@@ -289,6 +289,14 @@ public class ChatLogHook implements Hook {
     private String extractThreadId(HookEvent event) {
         if (event.getAgent() instanceof AgentBase agentBase) {
             return AgentMetadataStore.get(agentBase.getAgentId(), "threadId");
+        }
+        return null;
+    }
+
+    /** 读构建期登记的 agent 元数据（消息级模型审计等；无记录返回 null，meta 不带该字段） */
+    private Object extractAgentMeta(HookEvent event, String key) {
+        if (event.getAgent() instanceof AgentBase agentBase) {
+            return AgentMetadataStore.get(agentBase.getAgentId(), key);
         }
         return null;
     }
@@ -561,13 +569,23 @@ public class ChatLogHook implements Hook {
 
     /**
      * 构建 run 级元数据 JSON：durationMs 为墙钟总耗时（含工具执行与 HITL 等待），
-     * token 为全 run 各轮模型调用累计。usage 全程未取到（provider 不回）时 token 记 0，前端按字段值兜底不展示
+     * token 为全 run 各轮模型调用累计。usage 全程未取到（provider 不回）时 token 记 0，前端按字段值兜底不展示。
+     * 追加本次 run 实际使用的模型（消息级审计；构建期登记，多候选切换后可追溯每条消息的生成模型）
      */
-    private String buildMeta(RunStatAccumulator stat) {
+    private String buildMeta(RunStatAccumulator stat, HookEvent event) {
         if (stat == null) {
             return null;
         }
-        return JsonUtils.toJsonStr(stat.buildMeta());
+        Map<String, Object> meta = stat.buildMeta();
+        Object modelConfigId = extractAgentMeta(event, "activeModelConfigId");
+        Object modelLabel = extractAgentMeta(event, "activeModelLabel");
+        if (modelConfigId != null) {
+            meta.put("modelConfigId", String.valueOf(modelConfigId));
+        }
+        if (modelLabel != null) {
+            meta.put("modelLabel", modelLabel);
+        }
+        return JsonUtils.toJsonStr(meta);
     }
 
     // 构建错误消息

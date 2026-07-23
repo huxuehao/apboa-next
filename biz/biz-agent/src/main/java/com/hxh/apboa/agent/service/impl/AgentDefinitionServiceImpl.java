@@ -7,6 +7,7 @@ import com.hxh.apboa.agent.mapper.AgentChatKeyMapper;
 import com.hxh.apboa.agent.mapper.AgentDefinitionMapper;
 import com.hxh.apboa.agent.mapper.IJobInfoMapper;
 import com.hxh.apboa.agent.service.AgentDefinitionService;
+import com.hxh.apboa.agent.service.AgentModelConfigService;
 import com.hxh.apboa.agent.service.AgentSubAgentService;
 import com.hxh.apboa.agent.service.CodeExecutionConfigService;
 import com.hxh.apboa.common.cluster.core.MessagePublisher;
@@ -66,6 +67,7 @@ import com.hxh.apboa.common.vo.AgentMcpBindingVO;
 @RequiredArgsConstructor
 public class AgentDefinitionServiceImpl extends ServiceImpl<AgentDefinitionMapper, AgentDefinition> implements AgentDefinitionService {
     private final AgentHookService agentHookService;
+    private final AgentModelConfigService agentModelConfigService;
     private final AgentToolService agentToolService;
     private final ToolService toolService;
     private final AgentMcpServerService agentMcpServerService;
@@ -111,6 +113,9 @@ public class AgentDefinitionServiceImpl extends ServiceImpl<AgentDefinitionMappe
         // 架构页等"逐 id 拉详情"的消费方不再撞"XX不存在"。
         vo.setHook(retainExisting(agentHookService.getHookIds(id),
                 ids -> hookConfigService.listByIds(ids).stream().map(HookConfig::getId).collect(Collectors.toSet())));
+        vo.setModels(retainExisting(agentModelConfigService.getModelIds(id),
+                ids -> modelConfigService.listByIds(ids).stream().map(ModelConfig::getId).collect(Collectors.toSet())));
+        vo.setModelsParamsOverride(agentModelConfigService.getParamsOverrideMap(id));
         Long studioConfigId = agentStudioService.getStudioIdByAgentId(id);
         if (studioConfigId != null && studioConfigService.getById(studioConfigId) != null) {
             vo.setStudioConfigId(studioConfigId);
@@ -195,6 +200,7 @@ public class AgentDefinitionServiceImpl extends ServiceImpl<AgentDefinitionMappe
     public Boolean saveAgentDefinition(AgentDefinitionVO vo) {
         validateAsrModelConfig(vo.getAsrModelConfigId());
         validateTtsModelConfig(vo.getTtsModelConfigId());
+        validateCandidateModels(vo.getModels());
         AgentDefinition agentDefinition = BeanUtils.copy(vo, AgentDefinition.class);
         save(agentDefinition);
         vo.setId(agentDefinition.getId());
@@ -214,6 +220,7 @@ public class AgentDefinitionServiceImpl extends ServiceImpl<AgentDefinitionMappe
     public Boolean updateAgentDefinition(AgentDefinitionVO vo) {
         validateAsrModelConfig(vo.getAsrModelConfigId());
         validateTtsModelConfig(vo.getTtsModelConfigId());
+        validateCandidateModels(vo.getModels());
         AgentDefinition oldAgent = getById(vo.getId());
         updateById(BeanUtils.copy(vo, AgentDefinition.class));
 
@@ -257,6 +264,7 @@ public class AgentDefinitionServiceImpl extends ServiceImpl<AgentDefinitionMappe
     private void saveSubItems(AgentDefinitionVO vo) {
         agentHookService.saveAgentHook(vo.getId(), vo.getHook());
         if (vo.getAgentType() == AgentType.CUSTOM) {
+            agentModelConfigService.saveAgentModel(vo.getId(), vo.getModels(), vo.getModelsParamsOverride());
             agentSubAgentService.saveSubAgent(vo.getId(), vo.getSubAgent());
             agentToolService.saveAgentTool(vo.getId(), vo.getTool());
             agentMcpServerService.saveAgentMcpServer(vo.getId(), vo.getMcp(), vo.getMcpBindings());
@@ -304,6 +312,7 @@ public class AgentDefinitionServiceImpl extends ServiceImpl<AgentDefinitionMappe
         // 被删 agent 也可能被别的 agent 挂作子智能体(sub_agent_id 侧),不清会留悬空引用
         agentSubAgentService.deleteBySubAgentIds(ids);
         agentHookService.deleteAgentHook(ids);
+        agentModelConfigService.deleteAgentModel(ids);
         agentToolService.deleteAgentTool(ids);
         agentMcpServerService.deleteAgentMcpServer(ids);
         agentSkillPackageService.deleteAgentSkillPackage(ids);
@@ -482,6 +491,24 @@ public class AgentDefinitionServiceImpl extends ServiceImpl<AgentDefinitionMappe
     /**
      * 校验语音识别模型绑定：必须指向存在、启用、且用途为 ASR 的模型配置
      */
+    /**
+     * 校验额外候选对话模型：每个都必须指向存在、启用、且用途为 LLM 的模型配置
+     */
+    private void validateCandidateModels(List<Long> modelConfigIds) {
+        if (modelConfigIds == null || modelConfigIds.isEmpty()) {
+            return;
+        }
+        for (Long id : modelConfigIds) {
+            ModelConfig modelConfig = modelConfigService.getById(id);
+            if (modelConfig == null || !modelConfig.getEnabled()) {
+                throw new RuntimeException("候选对话模型不存在或已禁用");
+            }
+            if (modelConfig.getCategory() != ModelCategory.LLM) {
+                throw new RuntimeException("候选模型的用途不是对话生成");
+            }
+        }
+    }
+
     private void validateAsrModelConfig(Long asrModelConfigId) {
         if (asrModelConfigId == null) {
             return;

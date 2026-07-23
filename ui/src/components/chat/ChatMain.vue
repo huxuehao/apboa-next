@@ -40,15 +40,19 @@ const props = defineProps<{
   uploadedFiles?: UploadedFileItem[]
   isRunning: boolean
   agentId: string
-  memoryActive?: boolean
   planActive?: boolean
-  enableMemory?: boolean
   enablePlanning?: boolean
   toolProcessActive?: boolean
   showToolProcess?: boolean
   confirmMode?: import('@/api/chatSession').ConfirmMode
   thinkingSupported?: boolean
   thinkingActive?: boolean
+  /** 候选模型选项（>1 才展示切换按钮） */
+  modelOptions?: import('@/types').AgentModelOptionVO[]
+  /** 会话当前生效模型 id */
+  activeModelId?: string
+  /** 有待确认的 HITL 操作：禁用模型/思考切换（防重建冲掉挂起现场） */
+  hasPendingConfirm?: boolean
   /** 会话 agent 是否绑定语音合成模型 */
   ttsEnabled?: boolean
   /** 自动语音播报是否开启 */
@@ -79,11 +83,11 @@ const emit = defineEmits<{
   (e: 'toolContent', value: any): void
   (e: 'subConfirm', value: { subToolUseId: string; approved: boolean }): void
   (e: 'abort'): void
-  (e: 'memory', value: boolean): void
   (e: 'plan', value: boolean): void
   (e: 'toolProcess', value: boolean): void
   (e: 'confirmMode', value: import('@/api/chatSession').ConfirmMode): void
   (e: 'thinking', value: boolean): void
+  (e: 'model', value: string): void
   (e: 'ttsBroadcast', value: boolean): void
   (e: 'voiceToggle'): void
   (e: 'voicePress', action: import('@/composables/chat/useVoiceInput').VoicePressAction): void
@@ -373,9 +377,7 @@ defineExpose({
         :common-questions="commonQuestions"
         :uploaded-files="uploadedFiles"
         :isRunning="isRunning"
-        :memory-active="memoryActive"
         :plan-active="planActive"
-        :enable-memory="enableMemory"
         :enable-planning="enablePlanning"
         :allow-upload-file-type="allowUploadFileType"
         :show-tool-process="showToolProcess"
@@ -383,16 +385,19 @@ defineExpose({
         :confirm-mode="confirmMode"
         :thinking-supported="thinkingSupported"
         :thinking-active="thinkingActive"
+        :model-options="modelOptions"
+        :active-model-id="activeModelId"
+        :has-pending-confirm="hasPendingConfirm"
         :voice-state="voiceState"
         :session-id="sessionId"
         :mention-allowed="true"
         @update:input-value="$emit('update:inputValue', $event)"
         @update:uploaded-files="$emit('update:uploadedFiles', $event)"
-        @memory="$emit('memory', $event)"
         @plan="$emit('plan', $event)"
         @toolProcess="$emit('toolProcess', $event)"
         @confirm-mode="$emit('confirmMode', $event)"
         @thinking="$emit('thinking', $event)"
+        @model="$emit('model', $event)"
         @voice-toggle="$emit('voiceToggle')"
         @voice-press="$emit('voicePress', $event)"
         @send="handleSend"
@@ -488,27 +493,28 @@ defineExpose({
             :agent-id="agentId"
             :uploaded-files="uploadedFiles"
             :isRunning="isRunning"
-            :memory-active="memoryActive"
-            :plan-active="planActive"
-            :enable-memory="enableMemory"
-            :enable-planning="enablePlanning"
+                :plan-active="planActive"
+                :enable-planning="enablePlanning"
             :allow-upload-file-type="allowUploadFileType"
             :show-tool-process="showToolProcess"
             :tool-process-active="toolProcessActive"
             :confirm-mode="confirmMode"
             :thinking-supported="thinkingSupported"
             :thinking-active="thinkingActive"
+            :model-options="modelOptions"
+            :active-model-id="activeModelId"
+            :has-pending-confirm="hasPendingConfirm"
             :voice-state="voiceState"
             :session-id="sessionId"
             :mention-allowed="true"
             @inputTagPreview="inputTagPreviewHandle"
             @update:model-value="$emit('update:inputValue', $event)"
             @update:uploaded-files="$emit('update:uploadedFiles', $event)"
-            @memory="$emit('memory', $event)"
-            @plan="$emit('plan', $event)"
+                @plan="$emit('plan', $event)"
             @toolProcess="$emit('toolProcess', $event)"
             @confirm-mode="$emit('confirmMode', $event)"
             @thinking="$emit('thinking', $event)"
+            @model="$emit('model', $event)"
             @voice-toggle="$emit('voiceToggle')"
             @voice-press="$emit('voicePress', $event)"
             @send="handleSend"

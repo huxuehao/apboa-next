@@ -64,4 +64,11 @@ public class RedisChannelTopic {
      * ChatModelFactory 构建模型时读取合成，AguiRequestProcessor 检测变化触发 agent 重建。
      */
     public static final String CHAT_THINKING_KEY_PREFIX = "apboa:chat:thinking:";
+
+    /**
+     * 会话级对话模型覆盖 key 前缀（key = 前缀 + threadId）。
+     * 值 = 候选 modelConfigId / 无 key=用 agent 默认模型（agent_definition.model_config_id）。
+     * ChatModelFactory 构建模型时读取选定，AguiRequestProcessor 检测变化触发 agent 重建。
+     */
+    public static final String CHAT_MODEL_KEY_PREFIX = "apboa:chat:model:";
 }

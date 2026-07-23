@@ -492,7 +492,9 @@ $small-mobile-breakpoint: 375px;
 .chat-msg-footer {
   display: flex;
   align-items: center;
+  flex-wrap: wrap; /* 窄屏（移动端）元数据项挤不下时自动折行 */
   gap: 2px;
+  row-gap: 2px;
   min-height: 22px; /* 固定占位：复制按钮 hover 渐显时不引起布局跳动 */
   padding: 2px var(--spacing-xs) 0;
 }
@@ -1220,6 +1222,43 @@ $small-mobile-breakpoint: 375px;
 
 .chat-toolbar-btn-circle {
   border-radius: 50%;
+}
+
+/* 桌面端带文字的工具栏按钮：图标+功能描述横排成胶囊；移动端隐藏文字回纯图标圆钮。
+   双类提权：本文件被多组件 scoped 引入成多份拷贝，单类会被 .chat-toolbar-btn-icon 的定宽压制 */
+.chat-toolbar-btn-icon.chat-toolbar-btn-labeled {
+  width: auto;
+  padding: 0 12px;
+  gap: 5px;
+  border-radius: 16px;
+
+  .chat-toolbar-btn-label {
+    font-size: 12px;
+    white-space: nowrap;
+    max-width: 180px; /* 模型名过长截断 */
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  @media (max-width: $mobile-breakpoint) {
+    width: 36px;
+    padding: 0;
+    border-radius: 50%;
+
+    .chat-toolbar-btn-label {
+      display: none;
+    }
+  }
+}
+
+/* 模型切换按钮：灰底 + 图标/文字色跟随当前模型的 logoColor（inline style 注入，
+   默认主题蓝）。双类提权原因同上 */
+.chat-toolbar-btn.chat-toolbar-btn-model {
+  background-color: var(--color-bg-light);
+
+  &:hover {
+    background-color: rgba($chat-primary, 0.1);
+  }
 }
 
 /* HITL 授权模式下拉菜单（Dropdown overlay 挂 body，样式须走全局）：图标 + 标题/说明两行 */

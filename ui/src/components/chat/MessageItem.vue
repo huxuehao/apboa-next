@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { LoadingOutlined, BulbOutlined, CopyOutlined, CheckOutlined, ToolOutlined, RightOutlined, DownOutlined, CheckCircleFilled, CloseCircleFilled, ClockCircleOutlined, RetweetOutlined, ThunderboltOutlined, SoundOutlined, PauseCircleOutlined } from '@ant-design/icons-vue'
+import { LoadingOutlined, BulbOutlined, CopyOutlined, CheckOutlined, ToolOutlined, RightOutlined, DownOutlined, CheckCircleFilled, CloseCircleFilled, ClockCircleOutlined, DeploymentUnitOutlined, RetweetOutlined, ThunderboltOutlined, SoundOutlined, PauseCircleOutlined } from '@ant-design/icons-vue'
 import { useTtsPlayback } from '@/composables/chat/useTtsPlayback'
 import MediaPreview from '@/components/common/MediaPreview.vue'
 import type { UploadedFileItem } from '@/types'
@@ -94,6 +94,8 @@ interface MessageMeta {
   inputTokens?: number
   outputTokens?: number
   totalTokens?: number
+  /** 本次回复实际使用的模型（消息级审计） */
+  modelLabel?: string
 }
 
 // assistant 正文的 run 级元数据：耗时 / 推理轮次 / token 用量（历史消息即有，当轮流式结束后由补拉填充）。
@@ -112,6 +114,7 @@ const parsedMeta = computed<MessageMeta | null>(() => {
       inputTokens: num(raw.inputTokens),
       outputTokens: num(raw.outputTokens),
       totalTokens: num(raw.totalTokens),
+      modelLabel: typeof raw.modelLabel === 'string' && raw.modelLabel ? raw.modelLabel : undefined,
     }
   } catch {
     return null
@@ -387,6 +390,9 @@ const openPreview = (index: number) => {
               <div>合计：{{ fmtTokens(parsedMeta.totalTokens) }}</div>
             </template>
             <span class="chat-msg-meta-item"><ThunderboltOutlined /> {{ fmtTokens(parsedMeta.totalTokens) }} tokens</span>
+          </a-tooltip>
+          <a-tooltip v-if="parsedMeta.modelLabel" title="本次回复使用的模型" :overlay-style="{ maxWidth: 'none' }">
+            <span class="chat-msg-meta-item"><DeploymentUnitOutlined /> {{ parsedMeta.modelLabel }}</span>
           </a-tooltip>
         </template>
         <a-tooltip v-if="relativeTime" :title="fullTime">

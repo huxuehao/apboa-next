@@ -55,6 +55,16 @@ public class ModelConfig extends BaseTenantEntity {
     private String description;
 
     /**
+     * 展示图标（antd 图标组件名，如 DeploymentUnitOutlined；null=前端用默认图标）
+     */
+    private String logo;
+
+    /**
+     * 展示图标颜色（hex；null=前端用默认主题色）
+     */
+    private String logoColor;
+
+    /**
      * 是否支持流式
      */
     private Boolean streaming;

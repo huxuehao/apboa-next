@@ -24,6 +24,10 @@ public class ModelConfigVO implements SerializableEnable {
     private ModelCategory category;
     private JsonNode modelType;
     private String description;
+    /** 展示图标（antd 图标组件名；null=前端用默认图标） */
+    private String logo;
+    /** 展示图标颜色（hex；null=前端用默认主题色） */
+    private String logoColor;
     private Boolean streaming;
     private Boolean thinking;
     private Integer contextWindow;

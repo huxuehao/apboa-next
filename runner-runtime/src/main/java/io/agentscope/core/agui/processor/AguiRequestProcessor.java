@@ -11,6 +11,7 @@ import com.hxh.apboa.engine.agui.AguiCustomEvents;
 import com.hxh.apboa.engine.hitl.EditedInputApplier;
 import com.hxh.apboa.engine.hook.builtins.IConfirmationHook;
 import com.hxh.apboa.engine.log.ChatLogHook;
+import com.hxh.apboa.engine.model.SessionModelResolver;
 import com.hxh.apboa.engine.model.ThinkingModeResolver;
 import io.agentscope.spring.boot.agui.common.ThreadSessionManager;
 import io.agentscope.core.ReActAgent;
@@ -67,22 +68,50 @@ public class AguiRequestProcessor {
      * 无法动态改；重建后上下文由前端传入的全量历史消息恢复——与 runtime 重启后续聊同机制）。
      * 只比覆盖值（构建时记录 vs Redis 当前），无覆盖态之间零开销。
      */
-    private Agent resolveAgentWithThinkingCheck(String agentId, String threadId) {
+    private Agent resolveAgentWithOverrideCheck(String agentId, String threadId) {
         Agent agent = agentResolver.resolveAgent(agentId, threadId);
         if (sessionManager == null || !(agent instanceof AgentBase built)) {
             return agent;
         }
-        String builtOverride = AgentMetadataStore.get(built.getAgentId(), "builtThinkingOverride");
-        if (builtOverride == null) {
+        String changed = firstChangedOverride(built.getAgentId(), threadId);
+        if (changed == null) {
             return agent;
         }
-        String current = ThinkingModeResolver.overrideKey(ThinkingModeResolver.resolveOverride(threadId));
-        if (builtOverride.equals(current)) {
+        // 挂起保护：会话有待确认工具时跳过重建——removeSession 会连挂起现场一起删，
+        // 确认卡变死卡且刷新恢复（getPendingConfirms）失效。前端已禁用挂起中切换，
+        // 本兜底防 API 直调/多端旧页面/外置集成方绕过。覆盖值仍在 Redis，
+        // 挂起处理完之后的下一条消息照常检测重建（只延后生效，不丢覆盖）。
+        // getPendingConfirms 异常降级为空列表 = 回到现状重建行为，失败模式温和。
+        if (!getPendingConfirms(threadId).isEmpty()) {
+            logger.info("会话级配置变化（{}）但存在待确认工具，跳过重建保护挂起现场: threadId={}",
+                    changed, threadId);
             return agent;
         }
-        logger.info("会话思考模式变化（{} -> {}），重建 agent: threadId={}", builtOverride, current, threadId);
+        logger.info("会话级配置变化（{}），重建 agent: threadId={}", changed, threadId);
         sessionManager.removeSession(threadId);
         return agentResolver.resolveAgent(agentId, threadId);
+    }
+
+    /**
+     * 对比构建期记录的会话级覆盖（思考模式 / 对话模型）与 Redis 当前值，
+     * 返回首个变化描述；null=无变化。构建期未记录（旧 agent）不参与对比。
+     */
+    private String firstChangedOverride(String builtAgentId, String threadId) {
+        String builtThinking = AgentMetadataStore.get(builtAgentId, "builtThinkingOverride");
+        if (builtThinking != null) {
+            String current = ThinkingModeResolver.overrideKey(ThinkingModeResolver.resolveOverride(threadId));
+            if (!builtThinking.equals(current)) {
+                return "thinking " + builtThinking + " -> " + current;
+            }
+        }
+        String builtModel = AgentMetadataStore.get(builtAgentId, "builtModelOverride");
+        if (builtModel != null) {
+            String current = SessionModelResolver.overrideKey(SessionModelResolver.resolveOverride(threadId));
+            if (!builtModel.equals(current)) {
+                return "model " + builtModel + " -> " + current;
+            }
+        }
+        return null;
     }
 
     /**
@@ -110,7 +139,7 @@ public class AguiRequestProcessor {
         String agentId = resolveAgentId(input, headerAgentId, pathAgentId);
 
         // Resolve agent（含思考模式覆盖变化的重建检查）
-        Agent agent = resolveAgentWithThinkingCheck(agentId, threadId);
+        Agent agent = resolveAgentWithOverrideCheck(agentId, threadId);
 
         // 添加threadId和租户信息
         if (agent instanceof AgentBase agentBase) {
@@ -319,10 +348,12 @@ public class AguiRequestProcessor {
         }
         // 快速否定：Session 无任何暂停态/记忆 → 直接空（避免无谓重建 agent）
         if (session == null || !session.exists(SimpleSessionKey.of(threadId))) {
+            logger.debug("[pending判定] session空或不存在: sessionNull={}, threadId={}", session == null, threadId);
             return List.of();
         }
         ResumeContext rc = loadResumeContext(threadId);
         if (rc == null) {
+            logger.debug("[pending判定] loadResumeContext=null: threadId={}", threadId);
             return List.of();
         }
         TenantUtils.setCurrentTenant(rc.tenantId, rc.tenantCode);
@@ -331,16 +362,23 @@ public class AguiRequestProcessor {
             // 再 loadFrom 加载暂停态。二者顺序不能反。
             Agent agent = agentResolver.resolveAgent(rc.agentCode, threadId);
             if (!(agent instanceof ReActAgent reActAgent) || reActAgent.getMemory() == null) {
+                logger.debug("[pending判定] agent非ReAct或无memory: type={}, threadId={}",
+                        agent == null ? "null" : agent.getClass().getSimpleName(), threadId);
                 return List.of();
             }
             reActAgent.loadFrom(session, threadId);
 
             List<Msg> messages = reActAgent.getMemory().getMessages();
             if (messages == null || messages.isEmpty()) {
+                logger.debug("[pending判定] loadFrom后memory为空: memoryType={}, threadId={}",
+                        reActAgent.getMemory().getClass().getSimpleName(), threadId);
                 return List.of();
             }
             Msg last = messages.get(messages.size() - 1);
             if (last.getRole() != MsgRole.ASSISTANT) {
+                logger.debug("[pending判定] 尾消息非ASSISTANT: lastRole={}, size={}, memoryType={}, threadId={}",
+                        last.getRole(), messages.size(),
+                        reActAgent.getMemory().getClass().getSimpleName(), threadId);
                 return List.of();
             }
             List<Map<String, Object>> pending = new ArrayList<>();

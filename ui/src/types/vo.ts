@@ -111,6 +111,27 @@ export interface CommonQuestion {
 }
 
 /**
+ * 智能体候选模型选项（对话页模型切换下拉数据源，detail 拼装）
+ */
+export interface AgentModelOptionVO {
+  id: string
+  /** 模型显示名 */
+  name: string
+  /** 供应商类型（分组/图标用） */
+  providerType?: string | null
+  /** 模型描述（下拉菜单第二行） */
+  description?: string | null
+  /** 展示图标（antd 图标组件名；空=默认 DeploymentUnitOutlined） */
+  logo?: string | null
+  /** 展示图标颜色（hex；空=默认 #0F74FF） */
+  logoColor?: string | null
+  /** 是否 agent 默认模型 */
+  isDefault?: boolean
+  /** 该模型是否支持会话级思考开关（切模型后据此显隐思考按钮） */
+  thinkingSwitchSupported?: boolean
+}
+
+/**
  * 智能体定义VO
  */
 export interface AgentDefinitionVO {
@@ -123,6 +144,12 @@ export interface AgentDefinitionVO {
   /** 常用问题是否在对话中常驻显示（DB 默认 1） */
   commonQuestionsPinned?: boolean
   modelConfigId: string
+  /** 额外候选对话模型 id（不含默认 modelConfigId；detail 回显 + 保存提交） */
+  models?: string[]
+  /** 各候选模型的参数覆盖（key=候选 id；空/缺省=跟随模型默认。默认模型的覆盖走 modelParamsOverride） */
+  modelsParamsOverride?: Record<string, Record<string, unknown> | null>
+  /** 候选模型选项（默认+额外候选，detail 拼装；对话页模型切换下拉数据源） */
+  modelOptions?: AgentModelOptionVO[]
   /** 语音识别模型配置ID（null=不启用语音输入） */
   asrModelConfigId?: string | null
   /** 语音合成模型配置ID（null=不启用语音播报） */
@@ -322,6 +349,10 @@ export interface ModelConfigVO {
   providerId: string
   name: string
   modelId: string
+  /** 展示图标（antd 图标组件名；空=默认 DeploymentUnitOutlined） */
+  logo?: string | null
+  /** 展示图标颜色（hex；空=默认 #0F74FF） */
+  logoColor?: string | null
   /** 模型用途（LLM=对话生成 / ASR=语音识别） */
   category?: ModelCategory
   modelType: ModelType[] | null
@@ -533,6 +564,8 @@ export interface ChatSessionVO {
 export interface ChatSessionStateVO {
   confirmMode: 'AUTO_APPROVE' | 'MANUAL' | 'AUTO_REJECT'
   thinkingMode: boolean
+  /** 会话模型覆盖（候选 modelConfigId；null=用 agent 默认模型） */
+  modelConfigId?: string | null
 }
 
 /**

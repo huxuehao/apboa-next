@@ -6,6 +6,7 @@ import com.hxh.apboa.common.entity.JobInfo;
 import com.hxh.apboa.common.enums.AgentType;
 import com.hxh.apboa.common.enums.ToolChoiceStrategy;
 import com.fasterxml.jackson.databind.JsonNode;
+import java.util.Map;
 import io.agentscope.core.model.StructuredOutputReminder;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -31,6 +32,10 @@ public class AgentDefinitionVO implements SerializableEnable {
     private Long modelConfigId;
     private Long asrModelConfigId;
     private Long ttsModelConfigId;
+    /** 额外候选对话模型 id（不含默认 modelConfigId；detail 回显 + 保存提交） */
+    private List<Long> models;
+    /** 各候选模型的参数覆盖（key=modelConfigId 字符串；缺省=跟随模型默认。默认模型的覆盖仍走 modelParamsOverride） */
+    private Map<String, JsonNode> modelsParamsOverride;
     private JsonNode modelParamsOverride;
     private JsonNode ttsParamsOverride;
     private JsonNode asrParamsOverride;
@@ -74,6 +79,8 @@ public class AgentDefinitionVO implements SerializableEnable {
     private Long createdBy;
     private Long updatedBy;
     private List<Object> used;
+    /** 候选模型选项（默认+额外候选，detail 拼装；对话页模型切换下拉数据源） */
+    private List<AgentModelOptionVO> modelOptions;
     private AgentA2A agentA2A;
     private JobInfo jobInfo;
     private Long studioConfigId;

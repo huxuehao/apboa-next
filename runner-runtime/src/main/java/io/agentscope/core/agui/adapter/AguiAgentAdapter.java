@@ -20,6 +20,7 @@ import com.hxh.apboa.engine.agui.AguiCustomEvents;
 import com.hxh.apboa.engine.hitl.ConfirmModeResolver;
 import com.hxh.apboa.engine.hook.builtins.IConfirmationHook;
 import com.hxh.apboa.engine.log.ChatLogHook;
+import com.hxh.apboa.common.util.AgentMetadataStore;
 import com.hxh.apboa.engine.log.telemetry.RunStatAccumulator;
 import com.hxh.apboa.engine.log.telemetry.RunTelemetryExtractor;
 import io.agentscope.core.ReActAgent;
@@ -580,11 +581,23 @@ public class AguiAgentAdapter {
             }
         }
 
-        // run 元数据（字段与落库 meta 同源自 RunStatAccumulator），流式收尾即时下发，前端免补拉
+        // run 元数据（字段与落库 meta 同源自 RunStatAccumulator），流式收尾即时下发，前端免补拉；
+        // 追加本次 run 实际使用的模型（消息级审计，与 ChatLogHook 落库 meta 同源 AgentMetadataStore）
         if (runStat.hasData()) {
+            Map<String, Object> runMeta = runStat.buildMeta();
+            if (agent instanceof io.agentscope.core.agent.AgentBase agentBase) {
+                Object modelConfigId = AgentMetadataStore.get(agentBase.getAgentId(), "activeModelConfigId");
+                Object modelLabel = AgentMetadataStore.get(agentBase.getAgentId(), "activeModelLabel");
+                if (modelConfigId != null) {
+                    runMeta.put("modelConfigId", String.valueOf(modelConfigId));
+                }
+                if (modelLabel != null) {
+                    runMeta.put("modelLabel", modelLabel);
+                }
+            }
             events.add(
                     new AguiEvent.Custom(
-                            state.threadId, state.runId, AguiCustomEvents.RUN_META, runStat.buildMeta()));
+                            state.threadId, state.runId, AguiCustomEvents.RUN_META, runMeta));
         }
 
         // Emit RUN_FINISHED

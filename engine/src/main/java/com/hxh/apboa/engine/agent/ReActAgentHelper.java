@@ -14,6 +14,7 @@ import com.hxh.apboa.engine.hook.HooksFactory;
 import com.hxh.apboa.engine.knowledge.KnowledgeFactory;
 import com.hxh.apboa.common.util.AgentMetadataStore;
 import com.hxh.apboa.engine.model.ChatModelFactory;
+import com.hxh.apboa.engine.model.SessionModelResolver;
 import com.hxh.apboa.engine.model.ThinkingModeResolver;
 import com.hxh.apboa.engine.prompt.AgentSysPromptFactory;
 import com.hxh.apboa.engine.skill.SkillBoxFactory;
@@ -82,11 +83,22 @@ public class ReActAgentHelper {
         // 构建reActAgent
         ReActAgent agent = getReactAgentBuilder(definition, asSubAgent).build();
 
-        // 记录构建时的会话思考覆盖值（"1"/"0"/"follow"），供 AguiRequestProcessor 每次 run
-        // 对比 Redis 当前值——变化则重建 agent（模型 thinking 在构建期固化，无法动态改）
-        AgentContext.getIfExists().map(AgentContext::getThreadId).ifPresent(threadId ->
+        // 记录构建时的会话级覆盖值（思考 "1"/"0"/"follow"、模型 modelConfigId/"follow"），
+        // 供 AguiRequestProcessor 每次 run 对比 Redis 当前值——变化则重建 agent
+        // （模型与 thinking 都在构建期固化，无法动态改）
+        AgentContext.getIfExists().ifPresent(ctx -> {
+            String threadId = ctx.getThreadId();
+            if (threadId != null && !threadId.isEmpty()) {
                 AgentMetadataStore.put(agent.getAgentId(), "builtThinkingOverride",
-                        ThinkingModeResolver.overrideKey(ThinkingModeResolver.resolveOverride(threadId))));
+                        ThinkingModeResolver.overrideKey(ThinkingModeResolver.resolveOverride(threadId)));
+                AgentMetadataStore.put(agent.getAgentId(), "builtModelOverride",
+                        SessionModelResolver.overrideKey(SessionModelResolver.resolveOverride(threadId)));
+            }
+            // 消息级模型审计：本次构建实际选定的模型（ChatModelFactory 写入 ctx），
+            // ChatLogHook 落 meta / Adapter 下发 RUN_META 按 agentId 读取
+            AgentMetadataStore.put(agent.getAgentId(), "activeModelConfigId", ctx.getActiveModelConfigId());
+            AgentMetadataStore.put(agent.getAgentId(), "activeModelLabel", ctx.getActiveModelLabel());
+        });
 
         return agent;
     }

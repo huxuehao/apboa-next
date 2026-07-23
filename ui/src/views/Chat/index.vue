@@ -63,12 +63,9 @@ const ttsEnabled = computed(() => !!agentDetail.value?.ttsModelConfigId && !embe
 // 是否配置了代码执行
 const hasCodeExecutionConfig = computed(() => agentDetail.value?.codeExecutionConfigId)
 
-// 记忆/规划/侧边栏状态：从 Pinia store 读取（持久化由 pinia-plugin-persistedstate 处理）
-const memoryActive = computed(() => {
-  const id = agentDetail.value?.id ?? agentId.value
-  chatStore.preferences // 依赖以保持响应性
-  return chatStore.getMemoryActive(id as string, accountId.value as string, enableMemory.value)
-})
+// 记忆恒随 agent 配置开启（工具栏记忆开关已隐藏：不常用且默认即开，
+// 不再读 store 用户偏好——否则历史上手动关过的 agent 会静默保持关闭且无入口恢复）
+const memoryActive = computed(() => enableMemory.value)
 const planActive = computed(() => {
   const id = agentDetail.value?.id ?? agentId.value
   chatStore.preferences
@@ -90,11 +87,6 @@ const sidebarCollapsed = computed({
     chatStore.setSidebarCollapsed(id as string, accountId.value as string, v)
   },
 })
-
-const handleMemoryChange = (v: boolean) => {
-  const id = agentDetail.value?.id ?? agentId.value
-  chatStore.setMemoryActive(id as string, accountId.value as string, v)
-}
 
 const handlePlanChange = (v: boolean) => {
   const id = agentDetail.value?.id ?? agentId.value
@@ -266,6 +258,18 @@ watch(currentSessionId, async (sid) => {
   confirmMode.value = normalizeMode(state?.confirmMode)
 }, { immediate: true })
 
+/**
+ * 有待确认的 HITL 操作（主流程或子智能体）：禁用模型/思考切换。
+ * 挂起中切覆盖再发新消息会触发 removeSession 重建、冲掉挂起现场（resume 链路不检测故 resume 本身安全），
+ * 处理完确认再切换即可
+ */
+const hasPendingConfirm = computed(() =>
+  Object.values(pendingConfirms.value).some((s) => s === 'pending') ||
+  Object.values(pendingSubConfirms.value).some((b) =>
+    Object.values(b.decisions).some((s) => s === 'pending')
+  )
+)
+
 /** 把当前所有待确认工具统一决策（一键授权→全批 / 拒绝授权→全拒；凑齐决策后 useChatStream 自动提交 resume） */
 const decideAllPending = (approved: boolean) => {
   Object.entries(pendingConfirms.value).forEach(([toolUseId, state]) => {
@@ -315,9 +319,67 @@ watch(pendingSubConfirms, (batches) => {
   }
 })
 
+// ========== 会话级对话模型（候选 >1 才展示切换按钮） ==========
+// 生效值 = Redis 覆盖 ?? agent 默认模型；切换写覆盖值，下一条消息生效（后端检测变化重建 agent）
+const modelOptions = computed(() => agentDetail.value?.modelOptions || [])
+const modelSwitchEnabled = computed(() => modelOptions.value.length > 1)
+const defaultModelId = computed(() => {
+  const def = modelOptions.value.find(o => o.isDefault)
+  return String(def?.id ?? agentDetail.value?.modelConfigId ?? '')
+})
+/** 会话覆盖的模型 id（null=用默认模型） */
+const sessionModelId = ref<string | null>(null)
+const activeModelId = computed(() => sessionModelId.value ?? defaultModelId.value)
+// 会话未创建时的本地暂存（复刻 pendingThinkingMode 模式）：创建后回放写入。
+// undefined=无暂存；null=暂存「清除覆盖」
+let pendingSessionModel: string | null | undefined = undefined
+
+// 双源触发：会话切换 + 切换入口就绪（agent 详情异步加载可能晚于会话 watch）
+watch([currentSessionId, modelSwitchEnabled], async ([sid]) => {
+  if (!sid) {
+    // 新会话用默认模型；刷新/直达加载中间态同样显示默认，稍后 GET 校正
+    sessionModelId.value = null
+    pendingSessionModel = undefined
+    return
+  }
+  if (pendingSessionModel !== undefined) {
+    const v = pendingSessionModel
+    pendingSessionModel = undefined
+    try {
+      await chatSessionApi.setSessionModel(sid, v)
+      sessionModelId.value = v
+    } catch {
+      sessionModelId.value = null
+    }
+    return
+  }
+  if (!modelSwitchEnabled.value) return
+  const state = await fetchSessionState(sid)
+  sessionModelId.value = state?.modelConfigId != null ? String(state.modelConfigId) : null
+}, { immediate: true })
+
+const handleModelChange = (modelId: string) => {
+  // 选默认模型 = 清除覆盖（Redis 无 key 即默认，与后端语义一致）
+  const next = String(modelId) === defaultModelId.value ? null : String(modelId)
+  const sid = currentSessionId.value
+  if (!sid) {
+    sessionModelId.value = next
+    pendingSessionModel = next
+    return
+  }
+  chatSessionApi.setSessionModel(sid, next).then(() => {
+    sessionModelId.value = next
+  })
+}
+
 // ========== 会话级思考模式（仅 thinkingSwitchSupported 的模型展示按钮） ==========
 // 有效值 = Redis 覆盖 ?? 默认开；切换写覆盖值，下一条消息生效（后端检测变化重建 agent）
-const thinkingSupported = computed(() => agentDetail.value?.thinkingSwitchSupported === true)
+// 多候选模型时跟随「会话当前生效模型」的能力；无候选数据（旧 agent）回落 agent 级字段
+const thinkingSupported = computed(() => {
+  const opt = modelOptions.value.find(o => String(o.id) === String(activeModelId.value))
+  if (opt) return opt.thinkingSwitchSupported === true
+  return agentDetail.value?.thinkingSwitchSupported === true
+})
 const thinkingActive = ref(true)
 // 会话未创建时的本地暂存（复刻 pendingConfirmMode 模式）：创建后回放写入
 let pendingThinkingMode: boolean | null = null
@@ -1065,9 +1127,7 @@ watch(isRunning, (running) => {
       :uploaded-files="uploadedFiles"
       :isRunning="isRunning"
       :agent-id="agentId"
-      :memory-active="memoryActive"
       :plan-active="planActive"
-      :enable-memory="enableMemory"
       :enable-planning="enablePlanning"
       :allow-upload-file-type="allowFileType"
       :agent-has-result="agentHasResult"
@@ -1076,6 +1136,9 @@ watch(isRunning, (running) => {
       :confirm-mode="confirmMode"
       :thinking-supported="thinkingSupported"
       :thinking-active="thinkingActive"
+      :model-options="modelOptions"
+      :active-model-id="activeModelId"
+      :has-pending-confirm="hasPendingConfirm"
       :tts-enabled="ttsEnabled"
       :tts-broadcast-active="ttsBroadcastActive"
       :workspace-panel-open="workspacePanelOpen"
@@ -1090,11 +1153,11 @@ watch(isRunning, (running) => {
       @voice-press="handleVoicePress"
       @update:input-value="inputText = $event"
       @update:uploaded-files="uploadedFiles = $event"
-      @memory="handleMemoryChange"
       @plan="handlePlanChange"
       @toolProcess="handelToolProcess"
       @confirm-mode="handleConfirmModeChange"
       @thinking="handleThinkingChange"
+      @model="handleModelChange"
       @tts-broadcast="handleTtsBroadcastChange"
       @toolContent="handelToolContent"
       @sub-confirm="handleSubConfirm"

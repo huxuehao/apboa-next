@@ -140,6 +140,17 @@ export function setThinkingMode(sessionId: string, enabled: boolean) {
 }
 
 /**
+ * 设置会话对话模型覆盖（写 Redis 覆盖值，下一条消息生效——runtime 检测变化重建 agent）
+ * PUT /agent/chat/session/{id}/model
+ *
+ * @param modelConfigId 候选模型 id；null/不传 = 清除覆盖回落 agent 默认模型
+ */
+export function setSessionModel(sessionId: string, modelConfigId?: string | null) {
+  const query = modelConfigId != null ? `?modelConfigId=${modelConfigId}` : ''
+  return request.put<ApiResponse<boolean>>(`${BASE}/${sessionId}/model${query}`)
+}
+
+/**
  * 置顶会话
  * PUT /agent/chat/session/{id}/pin
  */

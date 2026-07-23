@@ -36,6 +36,7 @@ public class TableConst {
     public static final String AGENT_SKILL = "agent_skill_packages";
     public static final String AGENT_MCP = "agent_mcp_servers";
     public static final String AGENT_MCP_TOOL = "agent_mcp_tool";
+    public static final String AGENT_MODEL_CONFIG = "agent_model_configs";
     public static final String AGENT_KNOWLEDGE = "agent_knowledge_bases";
     public static final String AGENT_HOOKS = "agent_hooks";
     public static final String AGENT_STUDIO = "agent_studio";

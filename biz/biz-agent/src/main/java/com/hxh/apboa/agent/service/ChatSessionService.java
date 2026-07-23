@@ -166,5 +166,19 @@ public interface ChatSessionService extends IService<ChatSession> {
      * runtime 侧 ChatModelFactory 构建模型时读取，AguiRequestProcessor 检测变化重建 agent。
      */
     void setThinkingMode(Long sessionId, boolean enabled);
+
+    /**
+     * 查询会话对话模型覆盖值（Redis）。
+     *
+     * @return 候选 modelConfigId=会话覆盖；null=无覆盖（用 agent 默认模型）
+     */
+    Long getSessionModel(Long sessionId);
+
+    /**
+     * 设置会话对话模型覆盖（写 Redis，TTL 30 天滚动；null=清除覆盖回落默认模型）。
+     * 校验目标模型必须在该智能体候选集内且可用。
+     * runtime 侧 ChatModelFactory 构建模型时读取，AguiRequestProcessor 检测变化重建 agent。
+     */
+    void setSessionModel(Long sessionId, Long modelConfigId);
 }
 

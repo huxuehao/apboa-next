@@ -34,6 +34,9 @@ public class AgentContext {
     private Map<String, Object> params;
     private String tenantCode;
     private Long tenantId;
+    /** 本次构建实际选定的对话模型（消息级审计链起点：ChatModelFactory 写入，ReActAgentHelper 搬进 AgentMetadataStore） */
+    private Long activeModelConfigId;
+    private String activeModelLabel;
 
     /**
      * 初始化上下文（身份盖章，docs/identity-propagation-design.md §6.M1）。

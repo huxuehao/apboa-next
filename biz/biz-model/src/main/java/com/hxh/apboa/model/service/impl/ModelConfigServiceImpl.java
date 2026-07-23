@@ -109,8 +109,8 @@ public class ModelConfigServiceImpl extends ServiceImpl<ModelConfigMapper, Model
 
         String subSql = systemPromptId.stream().map(String::valueOf).collect(Collectors.joining(","));
 
-        // 聊天模型、语音识别或语音合成模型任一引用都算「被智能体使用」；OR 必须括号包住，后面还要 AND 租户过滤
-        String sql = String.format("SELECT * FROM %s WHERE (model_config_id IN (%s) OR asr_model_config_id IN (%s) OR tts_model_config_id IN (%s))", TableConst.AGENT, subSql, subSql, subSql);
+        // 聊天模型（默认绑定或额外候选）、语音识别或语音合成模型任一引用都算「被智能体使用」；OR 必须括号包住，后面还要 AND 租户过滤
+        String sql = String.format("SELECT * FROM %s WHERE (model_config_id IN (%s) OR asr_model_config_id IN (%s) OR tts_model_config_id IN (%s) OR id IN (SELECT agent_definition_id FROM %s WHERE model_config_id IN (%s)))", TableConst.AGENT, subSql, subSql, subSql, TableConst.AGENT_MODEL_CONFIG, subSql);
         // 添加租户过滤（JdbcTemplate 绕过 MyBatis-Plus 拦截器）
         if (TenantUtils.getCurrentTenantId() != null) {
             sql += " AND tenant_id = " + TenantUtils.getCurrentTenantId();

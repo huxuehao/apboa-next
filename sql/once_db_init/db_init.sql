@@ -125,6 +125,18 @@ CREATE TABLE `agent_hooks` (
   PRIMARY KEY (`id`)
 ) COMMENT='智能体与Hook关联表';
 
+DROP TABLE IF EXISTS `agent_model_configs`;
+CREATE TABLE `agent_model_configs` (
+  `id` bigint NOT NULL,
+  `agent_definition_id` bigint NOT NULL COMMENT '智能体定义ID',
+  `model_config_id` bigint NOT NULL COMMENT '额外候选模型ID（默认模型仍在 agent_definition.model_config_id）',
+  `model_params_override` text COMMENT '该候选模型的参数覆盖（结构同 agent_definition.model_params_override；NULL=跟随模型默认）',
+  `sort` int DEFAULT 0 COMMENT '展示排序',
+  `tenant_id` bigint NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_agent_model` (`agent_definition_id`,`model_config_id`)
+) COMMENT='智能体候选对话模型关联表';
+
 DROP TABLE IF EXISTS `agent_knowledge_bases`;
 CREATE TABLE `agent_knowledge_bases` (
   `id` bigint NOT NULL,
@@ -442,6 +454,8 @@ CREATE TABLE `model_config` (
   `category` varchar(20) NOT NULL DEFAULT 'LLM' COMMENT '模型用途: LLM=对话生成, ASR=语音识别, TTS=语音合成',
   `model_type` varchar(100) DEFAULT NULL COMMENT '模型类型（LLM 输入模态能力，仅 category=LLM 有意义）',
   `description` varchar(500) DEFAULT NULL COMMENT '模型描述',
+  `logo` varchar(100) DEFAULT NULL COMMENT '展示图标（antd 图标组件名；NULL=默认 DeploymentUnitOutlined）',
+  `logo_color` varchar(20) DEFAULT NULL COMMENT '展示图标颜色（hex；NULL=默认 #0F74FF）',
   `streaming` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否支持流式',
   `thinking` tinyint(1) DEFAULT NULL COMMENT '是否支持思考',
   `context_window` int DEFAULT 2048 COMMENT '上下文窗口大小',

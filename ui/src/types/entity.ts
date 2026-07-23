@@ -272,6 +272,10 @@ export interface ModelConfig extends BaseEntity {
   category?: ModelCategory
   modelType: ModelType[] | null
   description: string
+  /** 展示图标（antd 图标组件名；空=默认 DeploymentUnitOutlined） */
+  logo?: string | null
+  /** 展示图标颜色（hex；空=默认 #0F74FF） */
+  logoColor?: string | null
   streaming: boolean
   thinking: boolean
   contextWindow: number

@@ -120,6 +120,7 @@ public class ChatSessionController {
         vo.setConfirmMode(chatSessionService.getConfirmMode(sessionId).name());
         Boolean override = chatSessionService.getThinkingMode(sessionId);
         vo.setThinkingMode(override == null || override);
+        vo.setModelConfigId(chatSessionService.getSessionModel(sessionId));
         return R.data(vo);
     }
 
@@ -168,6 +169,19 @@ public class ChatSessionController {
     public R<Boolean> setThinkingMode(@PathVariable("sessionId") Long sessionId,
                                       @RequestParam("enabled") boolean enabled) {
         chatSessionService.setThinkingMode(sessionId, enabled);
+        return R.data(true);
+    }
+
+    /**
+     * 设置会话对话模型覆盖（写 Redis 覆盖值，下一条消息生效——runtime 检测变化重建 agent；
+     * 不传 modelConfigId = 清除覆盖回落 agent 默认模型。目标须在该智能体候选集内且可用）
+     */
+    @SkAccess
+    @ChatKeyAccess
+    @PutMapping("/{sessionId}/model")
+    public R<Boolean> setSessionModel(@PathVariable("sessionId") Long sessionId,
+                                      @RequestParam(value = "modelConfigId", required = false) Long modelConfigId) {
+        chatSessionService.setSessionModel(sessionId, modelConfigId);
         return R.data(true);
     }
 

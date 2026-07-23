@@ -15,6 +15,7 @@ import TtsVoiceSelect from './TtsVoiceSelect.vue'
 import ParamSlider from './ParamSlider.vue'
 import ParamLabel from './ParamLabel.vue'
 import { DEFAULT_TTS_VOICE } from '@/constants/ttsVoices'
+import { MODEL_ICON_MAP, MODEL_ICON_GROUPS, DEFAULT_MODEL_ICON, DEFAULT_MODEL_ICON_COLOR, MODEL_ICON_COLORS, resolveModelIcon } from '@/constants/modelIcons'
 
 /**
  * Props定义
@@ -37,6 +38,24 @@ const emit = defineEmits<{
 const formRef = ref()
 const loading = ref<boolean>(false)
 
+/** 图标选择器（策展分组见 modelIcons.ts MODEL_ICON_GROUPS，存组件名字符串 + hex 颜色） */
+const logoPickerOpen = ref(false)
+const logoSearchKeyword = ref('')
+/** 搜索命中（限策展集，名称包含匹配大小写不敏感；空关键字走分组视图不用本值） */
+const filteredLogoIcons = computed(() => {
+  const kw = logoSearchKeyword.value.trim().toLowerCase()
+  if (!kw) return []
+  return MODEL_ICON_GROUPS
+    .flatMap(g => g.icons)
+    .filter(name => name.toLowerCase().includes(kw))
+})
+function handleLogoPick(iconName: string) {
+  formData.value.logo = iconName
+}
+function handleLogoColorPick(color: string) {
+  formData.value.logoColor = color
+}
+
 const formData = ref<{
   used?: string[]
   category: ModelCategory
@@ -44,6 +63,8 @@ const formData = ref<{
   modelId: string
   modelType: ModelType[]
   description: string
+  logo: string
+  logoColor: string
   streaming: boolean
   thinking: boolean
   contextWindow: number
@@ -61,6 +82,8 @@ const formData = ref<{
   modelId: '',
   modelType: [ModelType.CHAT],
   description: '',
+  logo: '',
+  logoColor: '',
   streaming: true,
   thinking: false,
   contextWindow: 4096,
@@ -153,6 +176,8 @@ watch(
           // ASR 模型的 modelType 为 null，回填成空数组避免 [null]
           modelType: Array.isArray(props.data.modelType) ? props.data.modelType : (props.data.modelType ? [props.data.modelType] : []),
           description: props.data.description,
+          logo: props.data.logo || '',
+          logoColor: props.data.logoColor || '',
           streaming: props.data.streaming,
           thinking: props.data.thinking,
           contextWindow: props.data.contextWindow,
@@ -227,6 +252,8 @@ function resetForm() {
     modelId: '',
     modelType: [ModelType.CHAT],
     description: '',
+    logo: '',
+    logoColor: '',
     streaming: true,
     thinking: false,
     contextWindow: 4096,
@@ -272,6 +299,8 @@ async function handleSubmit() {
           modelId: formData.value.modelId,
           modelType: null,
           description: formData.value.description,
+          logo: formData.value.logo || null,
+          logoColor: formData.value.logoColor || null,
           ...(isTts.value ? { extendConfig: buildTtsExtendConfig() } : {})
         }
       : {
@@ -281,6 +310,8 @@ async function handleSubmit() {
           modelId: formData.value.modelId,
           modelType: formData.value.modelType,
           description: formData.value.description,
+          logo: formData.value.logo || null,
+          logoColor: formData.value.logoColor || null,
           streaming: formData.value.streaming,
           thinking: formData.value.thinking,
           contextWindow: formData.value.contextWindow,
@@ -463,6 +494,74 @@ function showVoiceProtocol() {
             :rows="2"
           />
         </AFormItem>
+
+        <AFormItem label="图标" name="logo">
+          <APopover v-model:open="logoPickerOpen" trigger="click" placement="bottomLeft">
+            <template #content>
+              <AInput
+                v-model:value="logoSearchKeyword"
+                placeholder="搜索图标名（如 rocket、cloud）"
+                allow-clear
+                size="small"
+                class="model-logo-search"
+              />
+              <div class="model-logo-picker-scroll">
+                <!-- 搜索态：跨分组平铺命中项 -->
+                <div v-if="logoSearchKeyword.trim()" class="model-logo-picker-grid">
+                  <button
+                    v-for="iconName in filteredLogoIcons"
+                    :key="iconName"
+                    type="button"
+                    class="model-logo-picker-item"
+                    :class="{ 'is-selected': (formData.logo || DEFAULT_MODEL_ICON) === iconName }"
+                    :title="iconName"
+                    :style="{ color: formData.logoColor || DEFAULT_MODEL_ICON_COLOR }"
+                    @click="handleLogoPick(iconName)"
+                  >
+                    <component :is="MODEL_ICON_MAP[iconName]" />
+                  </button>
+                  <div v-if="!filteredLogoIcons.length" class="model-logo-picker-empty">无匹配图标</div>
+                </div>
+                <!-- 浏览态：策展分组 -->
+                <template v-else>
+                  <div v-for="g in MODEL_ICON_GROUPS" :key="g.label" class="model-logo-picker-group">
+                    <div class="model-logo-picker-group-title">{{ g.label }}</div>
+                    <div class="model-logo-picker-grid">
+                      <button
+                        v-for="iconName in g.icons"
+                        :key="iconName"
+                        type="button"
+                        class="model-logo-picker-item"
+                        :class="{ 'is-selected': (formData.logo || DEFAULT_MODEL_ICON) === iconName }"
+                        :title="iconName"
+                        :style="{ color: formData.logoColor || DEFAULT_MODEL_ICON_COLOR }"
+                        @click="handleLogoPick(iconName)"
+                      >
+                        <component :is="MODEL_ICON_MAP[iconName]" />
+                      </button>
+                    </div>
+                  </div>
+                </template>
+              </div>
+              <div class="model-logo-color-row">
+                <button
+                  v-for="c in MODEL_ICON_COLORS"
+                  :key="c"
+                  type="button"
+                  class="model-logo-color-item"
+                  :class="{ 'is-selected': (formData.logoColor || DEFAULT_MODEL_ICON_COLOR) === c }"
+                  :style="{ backgroundColor: c }"
+                  :title="c"
+                  @click="handleLogoColorPick(c)"
+                />
+              </div>
+            </template>
+            <AButton class="model-logo-trigger">
+              <component :is="resolveModelIcon(formData.logo)" :style="{ color: formData.logoColor || DEFAULT_MODEL_ICON_COLOR }" />
+              <span class="model-logo-trigger-text">点击更换图标与颜色（对话页模型下拉展示）</span>
+            </AButton>
+          </APopover>
+        </AFormItem>
       </div>
 
       <div v-if="isLlm" class="form-section">
@@ -591,6 +690,108 @@ function showVoiceProtocol() {
 
   &:hover {
     color: var(--color-primary-hover);
+  }
+}
+
+/* 模型图标选择器 */
+.model-logo-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+
+  .model-logo-trigger-text {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+  }
+}
+</style>
+
+<style lang="scss">
+/* 图标网格挂 Popover（body 层），须全局样式 */
+.model-logo-search {
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+/* 滚动容器包住分组/搜索两种视图，网格自身不再滚动 */
+.model-logo-picker-scroll {
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.model-logo-picker-group + .model-logo-picker-group {
+  margin-top: 10px;
+}
+
+.model-logo-picker-group-title {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  margin-bottom: 6px;
+  position: sticky;
+  top: 0;
+  background: var(--color-bg-container, #fff);
+  z-index: 1;
+  padding: 2px 0;
+}
+
+.model-logo-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 36px);
+  gap: 6px;
+
+  .model-logo-picker-empty {
+    grid-column: 1 / -1;
+    padding: 16px 0;
+    text-align: center;
+    font-size: 12px;
+    color: var(--color-text-placeholder);
+  }
+
+  .model-logo-picker-item {
+    width: 36px;
+    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    border: 1px solid transparent;
+    border-radius: var(--border-radius-md);
+    background: transparent;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+
+    &:hover {
+      color: var(--color-primary);
+      background-color: var(--color-bg-light);
+    }
+
+    &.is-selected {
+      border-color: var(--color-primary);
+      background-color: var(--color-bg-light);
+    }
+  }
+}
+
+/* 图标颜色色板（图标网格下方一排） */
+.model-logo-color-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-border-light);
+
+  .model-logo-color-item {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer;
+    padding: 0;
+
+    &.is-selected {
+      border-color: var(--color-text-primary);
+      box-shadow: 0 0 0 2px #fff inset;
+    }
   }
 }
 </style>

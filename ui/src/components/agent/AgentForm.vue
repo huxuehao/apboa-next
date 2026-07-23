@@ -60,6 +60,8 @@ const formData = ref({
   },
   model: {
     modelConfigId: '',
+    models: [] as string[],
+    modelsParamsOverride: {} as Record<string, Record<string, unknown> | null>,
     asrModelConfigId: null as string | null,
     ttsModelConfigId: null as string | null,
     modelParamsOverride: null as Record<string, unknown> | null,
@@ -190,6 +192,8 @@ watch(
         loadAvatar(String(props.data.id))
         formData.value.model = {
           modelConfigId: props.data.modelConfigId,
+          models: (props.data.models || []).map(String),
+          modelsParamsOverride: (props.data.modelsParamsOverride || {}) as Record<string, Record<string, unknown> | null>,
           asrModelConfigId: props.data.asrModelConfigId || null,
           ttsModelConfigId: props.data.ttsModelConfigId || null,
           modelParamsOverride: props.data.modelParamsOverride || null,
@@ -255,6 +259,8 @@ function resetForm() {
     },
     model: {
       modelConfigId: '',
+      models: [],
+      modelsParamsOverride: {},
       asrModelConfigId: null,
       ttsModelConfigId: null,
       modelParamsOverride: null,
@@ -349,6 +355,8 @@ async function handleSubmit() {
       commonQuestions: formData.value.basic.commonQuestions || [],
       commonQuestionsPinned: formData.value.basic.commonQuestionsPinned !== false,
       modelConfigId: formData.value.model.modelConfigId,
+      models: formData.value.model.models || [],
+      modelsParamsOverride: formData.value.model.modelsParamsOverride || {},
       asrModelConfigId: formData.value.model.asrModelConfigId || null,
       ttsModelConfigId: formData.value.model.ttsModelConfigId || null,
       modelParamsOverride: formData.value.model.modelParamsOverride,
