@@ -3,6 +3,7 @@ import {
   AimOutlined,
   ClearOutlined,
   CompressOutlined,
+  DeleteOutlined,
   LockOutlined,
   NodeIndexOutlined,
   PlusCircleOutlined,
@@ -24,7 +25,7 @@ const props = defineProps<{
   hideLock?: boolean
 }>()
 
-const emit =defineEmits<{
+const emit = defineEmits<{
   addNode: []
   fit: []
   zoomIn: []
@@ -35,7 +36,20 @@ const emit =defineEmits<{
   redo: []
   layout: []
   clearSelection: []
+  clearAllNodes: []
 }>()
+
+function handleClearAllNodes() {
+  Modal.confirm({
+    title: '清空所有节点',
+    content: '此操作将清空画布上所有节点和连线，可通过撤销恢复。是否继续？',
+    okText: '确认清空',
+    cancelText: '取消',
+    onOk: () => {
+      emit('clearAllNodes')
+    }
+  })
+}
 
 const handleToggleLock = () => {
   if (props.locked) {
@@ -102,6 +116,11 @@ const handleToggleLock = () => {
       <ATooltip placement="right" title="清空选择">
         <AButton type="text" @click="$emit('clearSelection')">
           <template #icon><ClearOutlined /></template>
+        </AButton>
+      </ATooltip>
+      <ATooltip placement="right" title="清空所有节点">
+        <AButton type="text" :disabled="!hasNodes" @click="handleClearAllNodes">
+          <template #icon><DeleteOutlined /></template>
         </AButton>
       </ATooltip>
       <div class="toolbar-divider" />

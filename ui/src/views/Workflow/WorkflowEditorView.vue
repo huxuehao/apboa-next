@@ -953,6 +953,15 @@ function clearAllPanels() {
   versionModalOpen.value = false
 }
 
+/** 清空画布上所有节点和连线 */
+function clearAllNodes() {
+  if (!nodes.value.length) return
+  snapshot()
+  nodes.value = []
+  edges.value = []
+  clearAllPanels()
+}
+
 /** 进入子流程编辑模式：保存父工作流快照，将 Loop 节点的 subNodes/subEdges 加载到画布 */
 async function enterSubWorkflow(nodeId: string) {
   const loopNode = nodes.value.find((n) => n.id === nodeId)
@@ -1149,6 +1158,7 @@ function computeParentUpstreamNodes(startNodeId: string): WorkflowFlowNode[] {
       @redo="redo"
       @layout="autoLayout"
       @clear-selection="clearAllPanels"
+      @clear-all-nodes="clearAllNodes"
     />
 
     <NodeLibraryPopover
