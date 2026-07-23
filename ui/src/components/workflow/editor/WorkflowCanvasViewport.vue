@@ -24,6 +24,7 @@ const emit = defineEmits<{
   paneClick: []
   showLibrary: [payload: { sourceNodeId: string; sourceHandle: string; x: number; y: number }]
   showLibraryFromEdge: [payload: { edgeId: string; x: number; y: number }]
+  deleteNodes: [nodeIds: string[]]
 }>()
 
 const flow = useVueFlow()
@@ -155,6 +156,11 @@ function deduplicateGuides(guides: AlignGuide[]): AlignGuide[] {
   })
 }
 
+function onNodeDragStart({ node }: { node: GraphNode }) {
+  // if (props.readonly) return
+  // emit('selectNode', node.id)
+}
+
 function onNodeDrag({ node }: { node: GraphNode }) {
   if (props.readonly) return
   const { guides, snapX, snapY } = computeAlignment(node)
@@ -183,13 +189,29 @@ function clearGuides() {
 }
 
 // 全局安全网：捕获阶段监听，确保在 VueFlow stopPropagation 之前拦截
+function onKeyDown(event: KeyboardEvent) {
+  if (event.key !== 'Backspace' && event.key !== 'Delete') return
+  if (props.readonly) return
+  // 只在画布区域有焦点时才响应，避免与输入框等控件冲突
+  const canvas = document.querySelector('.workflow-canvas-viewport')
+  if (!canvas || !canvas.contains(document.activeElement)) return
+  const tag = (document.activeElement as HTMLElement)?.tagName
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+  const selectedIds = (nodes.value as GraphNode[]).filter((n) => n.selected).map((n) => n.id)
+  if (!selectedIds.length) return
+  event.preventDefault()
+  emit('deleteNodes', selectedIds)
+}
+
 onMounted(() => {
+  window.addEventListener('keydown', onKeyDown, true)
   window.addEventListener('mouseup', clearGuides, true)
   window.addEventListener('pointerup', clearGuides, true)
   window.addEventListener('blur', clearGuides)
 })
 
 onUnmounted(() => {
+  window.removeEventListener('keydown', onKeyDown, true)
   window.removeEventListener('mouseup', clearGuides, true)
   window.removeEventListener('pointerup', clearGuides, true)
   window.removeEventListener('blur', clearGuides)
@@ -306,12 +328,12 @@ defineExpose({ addAtCenter, fitAll, zoomInCanvas, zoomOutCanvas, resetZoom, fitN
       :nodes-draggable="!readonly"
       :nodes-connectable="!readonly"
       :edges-updatable="!readonly"
-      :delete-key-code="['Backspace', 'Delete']"
       :default-edge-options="{ animated: false, type: 'workflow' }"
       @connect="onConnect"
       @node-click="onNodeClick"
       @node-context-menu="onNodeContextMenu"
       @pane-click="onPaneClick"
+      @node-drag-start="onNodeDragStart"
       @node-drag="onNodeDrag"
       @node-drag-stop="onNodeDragStop"
     >
