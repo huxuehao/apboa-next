@@ -5,7 +5,7 @@ import type {
   SkillPackage,
   ToolConfig,
 } from '@/types'
-import type { AgentDefinitionDTO, AgentDefinitionVO } from '@/types'
+import type { AgentDefinitionDTO, AgentDefinitionVO, AgentChatContextVO } from '@/types'
 
 /**
  * 分页查询
@@ -23,6 +23,14 @@ export function page(query: AgentDefinitionDTO) {
  */
 export function detail(id: string) {
   return request.get<ApiResponse<AgentDefinitionVO>>(`/api/agent/definition/${id}`)
+}
+
+/**
+ * 对话页面专用聚合详情（detail+avatar+allowFileType+enabledTools+enabledSkills 合一）
+ * GET /agent/definition/{id}/chat-context
+ */
+export function chatContext(id: string) {
+  return request.get<ApiResponse<AgentChatContextVO>>(`/api/agent/definition/${id}/chat-context`)
 }
 
 /**

@@ -4,6 +4,7 @@ import com.hxh.apboa.common.config.auth.PassAuth;
 import com.hxh.apboa.common.config.auth.RoleNeed;
 import com.hxh.apboa.common.enums.TenantRole;
 import com.hxh.apboa.common.r.R;
+import com.hxh.apboa.console.heartbeat.model.HeartbeatOverviewVO;
 import com.hxh.apboa.console.heartbeat.model.NodeStatusVO;
 import com.hxh.apboa.console.heartbeat.model.WebSocketNodeVO;
 import com.hxh.apboa.heartbeat.HeartbeatPayload;
@@ -51,6 +52,20 @@ public class HeartbeatController {
     @GetMapping("/nodes")
     public R<List<NodeStatusVO>> listNodes() {
         return R.data(nodeRegistry.getAllNodes());
+    }
+
+    /**
+     * 节点监控总览（执行节点 + WebSocket 节点合一，管理员权限，减少设置页轮询请求数）
+     *
+     * @return 总览
+     */
+    @RoleNeed({TenantRole.TENANT_ADMIN})
+    @GetMapping("/overview")
+    public R<HeartbeatOverviewVO> overview() {
+        HeartbeatOverviewVO vo = new HeartbeatOverviewVO();
+        vo.setNodes(nodeRegistry.getAllNodes());
+        vo.setWebsocketNodes(webSocketNodeRegistry.getAllNodes());
+        return R.data(vo);
     }
 
     /**

@@ -10,7 +10,7 @@ import type { NodeStatusVO, ServiceStatusInfo, WebSocketNodeVO } from '@/types'
 
 const nodes = ref<NodeStatusVO[]>([])
 const loading = ref(false)
-let nodeTimer: ReturnType<typeof setInterval> | null = null
+let overviewTimer: ReturnType<typeof setInterval> | null = null
 
 /** 当前激活的Tab */
 const activeTab = ref('node')
@@ -18,7 +18,6 @@ const activeTab = ref('node')
 /** 消息服务节点列表 */
 const wsNodes = ref<WebSocketNodeVO[]>([])
 const wsLoading = ref(false)
-let wsTimer: ReturnType<typeof setInterval> | null = null
 
 /** 服务类型中文映射 */
 const serviceLabelMap: Record<string, string> = {
@@ -37,24 +36,18 @@ function sortedServices(services: ServiceStatusInfo[]): ServiceStatusInfo[] {
     .filter((s): s is ServiceStatusInfo => !!s)
 }
 
-async function fetchNodes() {
-  try {
-    const res = await heartbeatApi.listNodes()
-    nodes.value = res.data.data || []
-  } catch {
-    // 统一由 request.ts 响应拦截器处理错误提示
-  }
-}
-
-/** 查询消息服务节点 */
-async function fetchWsNodes() {
+/** 节点监控总览（执行节点 + WebSocket 节点合一，替代两个独立轮询） */
+async function fetchOverview() {
+  loading.value = true
   wsLoading.value = true
   try {
-    const res = await heartbeatApi.listWebSocketNodes()
-    wsNodes.value = res.data.data || []
+    const res = await heartbeatApi.overview()
+    nodes.value = res.data.data?.nodes || []
+    wsNodes.value = res.data.data?.websocketNodes || []
   } catch {
     // 统一由 request.ts 响应拦截器处理错误提示
   } finally {
+    loading.value = false
     wsLoading.value = false
   }
 }
@@ -80,20 +73,14 @@ function getAvatarText(text: string) {
 
 
 onMounted(() => {
-  fetchNodes()
-  fetchWsNodes()
-  nodeTimer = setInterval(fetchNodes, 30000)
-  wsTimer = setInterval(fetchWsNodes, 30000)
+  fetchOverview()
+  overviewTimer = setInterval(fetchOverview, 30000)
 })
 
 onUnmounted(() => {
-  if (nodeTimer) {
-    clearInterval(nodeTimer)
-    nodeTimer = null
-  }
-  if (wsTimer) {
-    clearInterval(wsTimer)
-    wsTimer = null
+  if (overviewTimer) {
+    clearInterval(overviewTimer)
+    overviewTimer = null
   }
 })
 </script>

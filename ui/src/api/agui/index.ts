@@ -2,7 +2,7 @@
  * AGUI SSE 模块：工厂与统一导出
  */
 
-import { getAgentRunURL, getSSEHeaders, getRESTHeaders, getReconnectURL, getResumeURL, getPendingURL, getStatusURL, getStopURL, getActiveRunsURL, getSubagentResumeURL, getSubagentPendingURL } from './request'
+import { getAgentRunURL, getSSEHeaders, getRESTHeaders, getReconnectURL, getResumeURL, getPendingURL, getStatusURL, getStatusBatchURL, getStopURL, getActiveRunsURL, getSubagentResumeURL, getSubagentPendingURL } from './request'
 import { AgentClient } from './agent-client'
 import type { EventHandlers, ToolHandler } from './agent-client'
 import type { RunAgentInput } from '@/types'
@@ -55,6 +55,20 @@ export async function getStatus(threadId: string): Promise<boolean> {
   if (!resp.ok) throw new Error(`Status check failed: ${resp.status}`)
   const data = await resp.json()
   return data.running === true
+}
+
+/**
+ * 批量查询多个会话的运行状态（一次请求替代逐个轮询）
+ * @param threadIds 会话 ID 列表
+ * @returns threadId -> running 的映射
+ */
+export async function getStatusBatch(threadIds: string[]): Promise<Record<string, boolean>> {
+  if (threadIds.length === 0) return {}
+  const url = getStatusBatchURL(threadIds)
+  const headers = getRESTHeaders()
+  const resp = await fetch(url, { headers })
+  if (!resp.ok) throw new Error(`Batch status check failed: ${resp.status}`)
+  return await resp.json()
 }
 
 /**

@@ -5,7 +5,8 @@ import type {
   ChatMessageAppendDTO,
   ChatSessionQueryDTO,
   ChatSessionVO,
-  ChatMessageVO
+  ChatMessageVO,
+  ChatSessionStateVO
 } from '@/types'
 
 const BASE = '/api/agent/chat/session'
@@ -97,6 +98,14 @@ export function getSessionDetail(id: string) {
 
 /** 会话 HITL 授权模式：一键授权（自动允许）/ 逐步确认（人工决策）/ 拒绝授权（自动拒绝） */
 export type ConfirmMode = 'AUTO_APPROVE' | 'MANUAL' | 'AUTO_REJECT'
+
+/**
+ * 会话状态聚合查询（confirm-mode + thinking-mode 合一）
+ * GET /agent/chat/session/{sessionId}/state
+ */
+export function getSessionState(sessionId: string) {
+  return request.get<ApiResponse<ChatSessionStateVO>>(`${BASE}/${sessionId}/state`)
+}
 
 /**
  * 查询会话 HITL 授权模式（无记录=MANUAL 逐步确认）

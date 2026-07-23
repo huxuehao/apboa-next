@@ -15,10 +15,10 @@ import ChatSidebar from '@/components/chat/ChatSidebar.vue'
 import ChatMain from '@/components/chat/ChatMain.vue'
 import RenameModal from '@/components/chat/RenameModal.vue'
 import WorkspacePanel from '@/components/workspace/WorkspacePanel.vue'
-import type { DisplayMessage, ChatMessageVO, UploadedFileItem, ChatSessionVO } from '@/types'
+import type { DisplayMessage, ChatMessageVO, UploadedFileItem, ChatSessionVO, ChatSessionStateVO } from '@/types'
 import * as chatSessionApi from '@/api/chatSession'
 import type { ConfirmMode } from '@/api/chatSession'
-import { getActiveRuns, getStatus, getPending, getSubagentPending } from '@/api/agui'
+import { getActiveRuns, getStatusBatch, getPending, getSubagentPending } from '@/api/agui'
 import { LoadingOutlined } from '@ant-design/icons-vue'
 import {
   buildUserTextFromPayload,
@@ -204,6 +204,21 @@ let pendingConfirmMode: ConfirmMode | null = null
 const normalizeMode = (m: unknown): ConfirmMode =>
   m === 'AUTO_APPROVE' || m === 'AUTO_REJECT' ? m : 'MANUAL'
 
+/**
+ * 会话状态聚合请求缓存（按 sessionId）：confirm-mode watch 与 thinking-mode watch
+ * 都需要读同一份 /state 数据，命中同一 sid 时复用同一个 Promise，避免各发一次 GET
+ */
+let sessionStateCache: { sid: string; promise: Promise<ChatSessionStateVO | undefined> } | null = null
+const fetchSessionState = (sid: string) => {
+  if (sessionStateCache?.sid !== sid) {
+    sessionStateCache = {
+      sid,
+      promise: chatSessionApi.getSessionState(sid).then((res) => res.data?.data).catch(() => undefined)
+    }
+  }
+  return sessionStateCache.promise
+}
+
 // 加载中间态只可能发生在首次触发（刷新/URL 直达时 currentSessionId 短暂为 null）；
 // 运行期的置空（点开启新对话、删除当前会话）都是主动进入新对话——URL 里残留的旧
 // sessionId 不代表加载中，不得据其误判成 MANUAL（否则从旧会话点新对话默认变逐步确认）
@@ -234,12 +249,8 @@ watch(currentSessionId, async (sid) => {
     }
     return
   }
-  try {
-    const res = await chatSessionApi.getConfirmMode(sid)
-    confirmMode.value = normalizeMode(res.data?.data)
-  } catch {
-    confirmMode.value = 'MANUAL'
-  }
+  const state = await fetchSessionState(sid)
+  confirmMode.value = normalizeMode(state?.confirmMode)
 }, { immediate: true })
 
 /** 把当前所有待确认工具统一决策（一键授权→全批 / 拒绝授权→全拒；凑齐决策后 useChatStream 自动提交 resume） */
@@ -319,12 +330,8 @@ watch([currentSessionId, thinkingSupported], async ([sid]) => {
     return
   }
   if (!thinkingSupported.value) return
-  try {
-    const res = await chatSessionApi.getThinkingMode(sid)
-    thinkingActive.value = res.data?.data !== false
-  } catch {
-    thinkingActive.value = true
-  }
+  const state = await fetchSessionState(sid)
+  thinkingActive.value = state?.thinkingMode !== false
 }, { immediate: true })
 
 const handleThinkingChange = (v: boolean) => {
@@ -711,9 +718,6 @@ const handleSessionMenu = async (key: string, session: ChatSessionVO) => {
   }
   if (key === 'pin') {
     await pinSession(id)
-    if (currentSessionId.value === id) {
-      // 若当前会话被置顶，可能需要更新列表，已自动重新加载
-    }
     return
   }
   if (key === 'unpin') {
@@ -913,18 +917,17 @@ const startPolling = () => {
       stopPolling()
       return
     }
-    for (const tid of runningSessions.value) {
-      if (tid === currentSessionId.value) continue
-      try {
-        const running = await getStatus(tid)
-        if (!running) {
-          const next = new Set(runningSessions.value)
-          next.delete(tid)
-          runningSessions.value = next
-        }
-      } catch {
-        // 忽略网络错误
+    const tids = [...runningSessions.value].filter((tid) => tid !== currentSessionId.value)
+    if (tids.length === 0) return
+    try {
+      const statusMap = await getStatusBatch(tids)
+      const next = new Set(runningSessions.value)
+      for (const tid of tids) {
+        if (statusMap[tid] === false) next.delete(tid)
       }
+      runningSessions.value = next
+    } catch {
+      // 忽略网络错误
     }
   }, 5000)
 }

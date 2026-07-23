@@ -1,9 +1,7 @@
 package com.hxh.apboa.runtime.endpoint;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.hxh.apboa.common.config.auth.ChatKeyAccess;
 import com.hxh.apboa.common.config.auth.RoleNeed;
-import com.hxh.apboa.common.config.auth.SkAccess;
 import com.hxh.apboa.common.dto.ToolDebugDTO;
 import com.hxh.apboa.common.entity.ToolConfig;
 import com.hxh.apboa.common.enums.TenantRole;
@@ -38,14 +36,18 @@ public class ToolEndPoint {
     private final ToolService toolService;
     private final ToolReflectionInvoker toolReflectionInvoker;
 
-    @SkAccess
-    @ChatKeyAccess
+    @RoleNeed({TenantRole.TENANT_ADMIN, TenantRole.TENANT_EDITOR})
     @PostMapping("/do/{toolName}/tool")
     public R<?> doTool(@PathVariable("toolName") String toolName , @RequestBody LinkedHashMap<String, Object> args) {
         ToolConfig toolConfig = toolService.getOne(new LambdaQueryWrapper<ToolConfig>().eq(ToolConfig::getToolId, toolName));
 
         if (toolConfig == null) {
             return R.data("工具调用失败");
+        }
+
+        // 纵深加固：与 debugTool 一致，禁用的工具不允许执行（防止绕过启用开关直接触发）
+        if (!Boolean.TRUE.equals(toolConfig.getEnabled())) {
+            throw new BusinessException("工具已禁用，无法执行");
         }
 
         return R.data(executeTool(toolConfig, args));

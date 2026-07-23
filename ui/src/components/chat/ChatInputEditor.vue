@@ -19,8 +19,7 @@ import {
   RESOURCE_CATEGORY_REGISTRY,
   findKindByTagName
 } from '@/composables/chat/useResourceCategories'
-import { enabledToolsOfAgent, enabledSkillsOfAgent } from "@/api/agent"
-import type {SkillPackage, ToolConfig} from "@/types";
+import { fetchAgentChatContext } from '@/composables/chat/useAgentChatContext'
 import { useSkillAliasMap } from '@/composables/chat/useSkillAliasMap'
 import { useToolNameMap } from '@/composables/chat/useToolNameMap'
 
@@ -68,32 +67,25 @@ const agentTools = ref<AgentToolItem[]>([])
 /** Agent 技能列表 */
 const agentSkills = ref<AgentSkillItem[]>([])
 
-watch(() => props.agentId, () => {
-  enabledToolsOfAgent(props.agentId).then((toolRes) => {
-    if (toolRes.data.data) {
-      agentTools.value = toolRes.data.data.map((item:ToolConfig) => {
-        return {
-          id: item.toolId,
-          name: item.name,
-          description: item.description
-        }
-      })
-      useToolNameMap().setFromTools(toolRes.data.data)
-    }
-  })
-  enabledSkillsOfAgent(props.agentId).then((skills) => {
-    if (skills.data.data) {
-      agentSkills.value = skills.data.data.map((item:SkillPackage) => {
-        return {
-          id: item.name,
-          name: item.name,
-          alias: item.alias,
-          description: item.description
-        }
-      })
-      useSkillAliasMap().setFromSkills(skills.data.data)
-    }
-  })
+watch(() => props.agentId, async () => {
+  const ctx = await fetchAgentChatContext(props.agentId)
+  if (ctx?.enabledTools) {
+    agentTools.value = ctx.enabledTools.map((item) => ({
+      id: item.toolId,
+      name: item.name,
+      description: item.description
+    }))
+    useToolNameMap().setFromTools(ctx.enabledTools)
+  }
+  if (ctx?.enabledSkills) {
+    agentSkills.value = ctx.enabledSkills.map((item) => ({
+      id: item.name,
+      name: item.name,
+      alias: item.alias,
+      description: item.description
+    }))
+    useSkillAliasMap().setFromSkills(ctx.enabledSkills)
+  }
 }, { immediate: true })
 
 

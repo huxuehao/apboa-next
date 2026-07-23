@@ -13,6 +13,7 @@ import com.hxh.apboa.common.r.R;
 import com.hxh.apboa.common.util.UserUtils;
 import com.hxh.apboa.common.vo.ChatMessageVO;
 import com.hxh.apboa.common.vo.ChatMessagePageVO;
+import com.hxh.apboa.common.vo.ChatSessionStateVO;
 import com.hxh.apboa.common.vo.ChatSessionVO;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import lombok.RequiredArgsConstructor;
@@ -106,6 +107,20 @@ public class ChatSessionController {
             @RequestParam(value = "beforeDepth", required = false) Integer beforeDepth,
             @RequestParam(value = "size", defaultValue = "50") int size) {
         return R.data(chatSessionService.getCurrentMessagesPaged(sessionId, beforeDepth, size));
+    }
+
+    /**
+     * 会话状态聚合查询（confirm-mode + thinking-mode 合一，减少会话切换时的请求数）
+     */
+    @SkAccess
+    @ChatKeyAccess
+    @GetMapping("/{sessionId}/state")
+    public R<ChatSessionStateVO> getState(@PathVariable("sessionId") Long sessionId) {
+        ChatSessionStateVO vo = new ChatSessionStateVO();
+        vo.setConfirmMode(chatSessionService.getConfirmMode(sessionId).name());
+        Boolean override = chatSessionService.getThinkingMode(sessionId);
+        vo.setThinkingMode(override == null || override);
+        return R.data(vo);
     }
 
     /**

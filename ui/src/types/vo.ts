@@ -23,7 +23,7 @@ import type {
   TenantRole,
   TenantJoinRequestStatus
 } from './enums'
-import type { AgentA2A, HookConfig, JobInfo } from '@/types/entity.ts'
+import type { AgentA2A, HookConfig, JobInfo, ToolConfig, SkillPackage } from '@/types/entity.ts'
 
 /**
  * 租户VO
@@ -169,6 +169,17 @@ export interface AgentDefinitionVO {
   studioConfigId: string | null
   codeExecutionConfigId: string | null
   longTermMemoryConfigId: string | null
+}
+
+/**
+ * 对话页面智能体聚合上下文VO：detail+avatar+allowFileType+enabledTools+enabledSkills 合一
+ */
+export interface AgentChatContextVO {
+  detail: AgentDefinitionVO
+  avatar: string | null
+  allowFileType: string[]
+  enabledTools: ToolConfig[]
+  enabledSkills: SkillPackage[]
 }
 
 /**
@@ -502,6 +513,14 @@ export interface ChatSessionVO {
 }
 
 /**
+ * 会话状态VO：confirm-mode + thinking-mode 聚合
+ */
+export interface ChatSessionStateVO {
+  confirmMode: 'AUTO_APPROVE' | 'MANUAL' | 'AUTO_REJECT'
+  thinkingMode: boolean
+}
+
+/**
  * 聊天消息VO
  */
 export interface ChatMessageVO {
@@ -671,4 +690,22 @@ export interface WebSocketNodeVO {
   lastUpdatedAt: string
   startedAt: string
   lastHeartbeat: string
+}
+
+/** 节点监控总览 VO：执行节点 + WebSocket 节点合一 */
+export interface HeartbeatOverviewVO {
+  nodes: NodeStatusVO[]
+  websocketNodes: WebSocketNodeVO[]
+}
+
+/**
+ * 对话显示名映射 VO：运行时内部标识 -> 中文显示名（对话渲染层专用，匿名会话可访问）
+ */
+export interface ChatDisplayNameVO {
+  /** agentCode(小写) -> 智能体名称 */
+  agents: Record<string, string>
+  /** toolId -> 工具名称 */
+  tools: Record<string, string>
+  /** MCP toolName -> 「MCP服务名 · 工具名」 */
+  mcpTools: Record<string, string>
 }

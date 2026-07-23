@@ -100,6 +100,18 @@ export function getActiveRunsURL(): string {
 }
 
 /**
+ * 获取批量运行状态查询 URL（一次查多个 threadId，替代逐个轮询）
+ * @param threadIds 会话 ID 列表
+ */
+export function getStatusBatchURL(threadIds: string[]): string {
+  const base = (import.meta.env.VITE_APP_BASE_API as string) || ''
+  const query = threadIds.map((id) => `threadIds=${encodeURIComponent(id)}`).join('&')
+  const path = `${DEFAULT_SSE_BASE}/status/batch?${query}`
+  if (base) return `${base}${path}`
+  return path
+}
+
+/**
  * 获取 HITL resume URL（提交逐工具确认决策，续接 SSE 事件流）
  * @param threadId 会话 ID
  */

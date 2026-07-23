@@ -1,5 +1,5 @@
 import request from '@/utils/request'
-import type { ApiResponse, NodeStatusVO, WebSocketNodeVO } from '@/types'
+import type { ApiResponse, HeartbeatOverviewVO, NodeStatusVO, WebSocketNodeVO } from '@/types'
 
 /**
  * 查询所有执行节点状态
@@ -15,4 +15,12 @@ export function listNodes() {
  */
 export function listWebSocketNodes() {
   return request.get<ApiResponse<WebSocketNodeVO[]>>('/api/heartbeat/websocket')
+}
+
+/**
+ * 节点监控总览（执行节点 + WebSocket 节点合一）
+ * GET /heartbeat/overview
+ */
+export function overview() {
+  return request.get<ApiResponse<HeartbeatOverviewVO>>('/api/heartbeat/overview')
 }

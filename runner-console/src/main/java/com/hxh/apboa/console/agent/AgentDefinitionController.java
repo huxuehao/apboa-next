@@ -13,6 +13,7 @@ import com.hxh.apboa.common.mp.support.MP;
 import com.hxh.apboa.common.mp.support.PageParams;
 import com.hxh.apboa.common.r.R;
 import com.hxh.apboa.common.util.BeanUtils;
+import com.hxh.apboa.common.vo.AgentChatContextVO;
 import com.hxh.apboa.common.vo.AgentDefinitionVO;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.hxh.apboa.studio.mapper.AgentStudioMapper;
@@ -81,6 +82,27 @@ public class AgentDefinitionController {
     @ChatKeyAccess
     @GetMapping("/{id}")
     public R<AgentDefinitionVO> detail(@PathVariable("id") Long id) {
+        return R.data(buildDetailVO(id));
+    }
+
+    /**
+     * 对话页面专用聚合详情（detail+avatar+allowFileType+enabledTools+enabledSkills 合一，
+     * 减少进入聊天页/切换智能体时的请求数；原五个独立接口不变，供管理端等其他场景使用）
+     */
+    @SkAccess
+    @ChatKeyAccess
+    @GetMapping("/{id}/chat-context")
+    public R<AgentChatContextVO> getChatContext(@PathVariable("id") Long id) {
+        AgentChatContextVO vo = new AgentChatContextVO();
+        vo.setDetail(buildDetailVO(id));
+        vo.setAvatar(agentDefinitionService.getAvatar(id));
+        vo.setAllowFileType(agentDefinitionService.allowFileType(id));
+        vo.setEnabledTools(agentDefinitionService.getEnabledToolsOfAgent(id));
+        vo.setEnabledSkills(agentDefinitionService.getEnabledSkillsOfAgent(id));
+        return R.data(vo);
+    }
+
+    private AgentDefinitionVO buildDetailVO(Long id) {
         AgentDefinitionVO vo = agentDefinitionService.agentDefinitionDetail(id);
         vo.setUsed(agentDefinitionService.usedWithAgent(List.of(id)));
         vo.setThinkingSwitchSupported(resolveThinkingSwitchSupported(vo.getModelConfigId()));
@@ -91,8 +113,7 @@ public class AgentDefinitionController {
         if (agent.size() == 1) {
             vo.setJobInfo(agent.getFirst());
         }
-
-        return R.data(vo);
+        return vo;
     }
 
     /**

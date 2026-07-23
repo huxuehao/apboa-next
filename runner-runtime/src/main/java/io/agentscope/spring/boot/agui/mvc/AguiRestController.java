@@ -20,6 +20,8 @@ import com.hxh.apboa.common.config.auth.ChatKeyAccess;
 import com.hxh.apboa.common.config.auth.SkAccess;
 import com.hxh.apboa.common.entity.ChatSession;
 import io.agentscope.core.agui.model.RunAgentInput;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.springframework.http.MediaType;
@@ -29,6 +31,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -189,6 +192,23 @@ public class AguiRestController {
     public ResponseEntity<Map<String, Boolean>> getStatus(@PathVariable("threadId") String threadId) {
         boolean running = aguiMvcController.getStatus(threadId);
         return ResponseEntity.ok(Map.of("running", running));
+    }
+
+    /**
+     * 批量运行状态查询端点（一次查多个 threadId，替代前端逐个轮询）。
+     *
+     * @param threadIds 会话 ID 列表
+     * @return threadId -> running 的映射
+     */
+    @SkAccess
+    @ChatKeyAccess
+    @GetMapping(value = "${agentscope.agui.path-prefix:/agui}/status/batch", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<Map<String, Boolean>> getStatusBatch(@RequestParam("threadIds") List<String> threadIds) {
+        Map<String, Boolean> result = new HashMap<>();
+        for (String threadId : threadIds) {
+            result.put(threadId, aguiMvcController.getStatus(threadId));
+        }
+        return ResponseEntity.ok(result);
     }
 
     /**

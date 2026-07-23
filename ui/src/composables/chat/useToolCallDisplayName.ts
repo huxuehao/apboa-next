@@ -1,8 +1,5 @@
 import { ref } from 'vue'
-import * as agentApi from '@/api/agent'
-import * as toolApi from '@/api/tool'
-import * as mcpApi from '@/api/mcp'
-import type { AgentDefinitionDTO, McpServerDTO, ToolDTO } from '@/types'
+import * as chatDisplayNameApi from '@/api/chatDisplayName'
 
 /**
  * 工具调用卡片显示名翻译层（模块级单例）
@@ -12,8 +9,8 @@ import type { AgentDefinitionDTO, McpServerDTO, ToolDTO } from '@/types'
  * - 普通工具：toolId（后端 toolkit.getTool(toolId) 的注册 key）
  * - MCP 工具：MCP 原始 toolName（LazyMcpAgentTool.getName() 即 schema 名，无前缀）
  *
- * 这里维护「全量智能体 + 全量工具 + 全量 MCP 工具」三张映射表做显示翻译
- * （数据量小，全量拉取可覆盖历史消息里已被移除的资源）：
+ * 显示名从 /agent/chat/display-name 一次性拉取（后端聚合好的「全量智能体 + 全量工具 + 全量 MCP 工具」
+ * 三张映射表，匿名对话 chatKey 亦可访问；全量是为了覆盖历史消息里已被移除的资源）：
  * 子智能体 → 智能体名称；工具 → 工具名称；MCP 工具 → 「MCP服务名 · 工具名」。
  * 仅翻译显示层，HITL 回传等数据流仍用原始 name。
  * 首个引用组件挂载时幂等加载；失败重置标志，下次组件创建时重试。
@@ -57,47 +54,11 @@ async function ensureLoaded(): Promise<void> {
   if (loaded) return
   loaded = true
   try {
-    const [agentRes, toolRes, mcpServerRes] = await Promise.all([
-      agentApi.page({ current: 1, size: 9999 } as unknown as AgentDefinitionDTO),
-      toolApi.page({ current: 1, size: 9999 } as unknown as ToolDTO),
-      mcpApi.page({ current: 1, size: 9999 } as unknown as McpServerDTO)
-    ])
-
-    const am: Record<string, string> = {}
-    for (const a of agentRes.data?.data?.records || []) {
-      const code = a.agentCode?.toLowerCase()
-      if (code && a.name && !(code in am)) {
-        am[code] = a.name
-      }
-    }
-    agentNameMap.value = am
-
-    const tm: Record<string, string> = {}
-    for (const t of toolRes.data?.data?.records || []) {
-      if (t.toolId && t.name && !(t.toolId in tm)) {
-        tm[t.toolId] = t.name
-      }
-    }
-    toolNameMap.value = tm
-
-    // MCP：按服务拉工具目录（查的是 DB 缓存目录，不要求服务在线），单个失败不影响整体
-    const servers = mcpServerRes.data?.data?.records || []
-    const toolLists = await Promise.all(
-      servers.map(s =>
-        mcpApi.listTools(String(s.id))
-          .then(r => ({ serverName: s.name, tools: r.data?.data || [] }))
-          .catch(() => ({ serverName: s.name, tools: [] }))
-      )
-    )
-    const mm: Record<string, string> = {}
-    for (const { serverName, tools } of toolLists) {
-      for (const t of tools) {
-        if (t.toolName && !(t.toolName in mm)) {
-          mm[t.toolName] = `${serverName} · ${t.toolName}`
-        }
-      }
-    }
-    mcpToolNameMap.value = mm
+    const res = await chatDisplayNameApi.get()
+    const data = res.data?.data
+    agentNameMap.value = data?.agents || {}
+    toolNameMap.value = data?.tools || {}
+    mcpToolNameMap.value = data?.mcpTools || {}
   } catch {
     // 加载失败允许下次重试，翻译层缺数据时自然回退原值
     loaded = false
