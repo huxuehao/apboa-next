@@ -183,7 +183,7 @@ async function removeWorkflow(record: Workflow) {
     okText: '删除',
     cancelText: '取消',
     onOk: async () => {
-      await workflowApi.workflowRemove([record.id!], 0)
+      await workflowApi.workflowRemove([record.id!], 1)
       message.success('删除成功')
       store.markListDirty()
       await refreshListFromServer()
