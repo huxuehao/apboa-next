@@ -882,7 +882,7 @@ CREATE TABLE `workflow_run` (
   `config` json DEFAULT NULL COMMENT 'Workflow definition used by run',
   `status` varchar(32) NOT NULL COMMENT 'Run status',
   `inputs` json DEFAULT NULL COMMENT 'Run inputs',
-  `outputs` json DEFAULT NULL COMMENT 'Run outputs',
+  `outputs` mediumtext DEFAULT NULL COMMENT 'Run outputs',
   `error` text DEFAULT NULL COMMENT 'Error message',
   `start_time` bigint DEFAULT NULL COMMENT 'Start timestamp',
   `end_time` bigint DEFAULT NULL COMMENT 'End timestamp',
