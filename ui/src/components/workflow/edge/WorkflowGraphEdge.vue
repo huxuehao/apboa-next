@@ -24,6 +24,12 @@ const edgePath = computed(() => getBezierPath(pathParams.value)[0])
 const labelX = computed(() => getBezierPath(pathParams.value)[1])
 const labelY = computed(() => getBezierPath(pathParams.value)[2])
 
+// 选中时描边改为蓝色，其余样式沿用 VueFlow 传入的 style
+const edgeStyle = computed(() => ({
+  ...(props.style as Record<string, unknown>),
+  ...(props.selected ? { stroke: '#1677ff' } : {}),
+}))
+
 function showAction() {
   if (props.locked) return
   if (hideTimer) {
@@ -60,7 +66,7 @@ onBeforeUnmount(() => {
     :path="edgePath"
     :marker-start="markerStart"
     :marker-end="markerEnd"
-    :style="style"
+    :style="edgeStyle"
     :interaction-width="interactionWidth"
   />
   <path
