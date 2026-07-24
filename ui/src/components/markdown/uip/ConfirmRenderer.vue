@@ -72,6 +72,8 @@ function handleCancel() {
   border-radius: 12px;
   padding: 18px 20px;
   background: #fafbfc;
+  /* 长文本兜底断行（继承到卡片内所有文本） */
+  overflow-wrap: break-word;
 }
 
 .uip-confirm-message {
@@ -81,6 +83,7 @@ function handleCancel() {
   display: flex;
   align-items: flex-start;
   gap: 10px;
+  word-break: break-word;
 }
 
 .uip-confirm-icon {

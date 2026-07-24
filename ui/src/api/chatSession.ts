@@ -5,7 +5,8 @@ import type {
   ChatMessageAppendDTO,
   ChatSessionQueryDTO,
   ChatSessionVO,
-  ChatMessageVO
+  ChatMessageVO,
+  ChatSessionStateVO
 } from '@/types'
 
 const BASE = '/api/agent/chat/session'
@@ -93,6 +94,60 @@ export function pageSessions(query?: ChatSessionQueryDTO) {
  */
 export function getSessionDetail(id: string) {
   return request.get<ApiResponse<ChatSessionVO>>(`${BASE}/${id}`)
+}
+
+/** 会话 HITL 授权模式：一键授权（自动允许）/ 逐步确认（人工决策）/ 拒绝授权（自动拒绝） */
+export type ConfirmMode = 'AUTO_APPROVE' | 'MANUAL' | 'AUTO_REJECT'
+
+/**
+ * 会话状态聚合查询（confirm-mode + thinking-mode 合一）
+ * GET /agent/chat/session/{sessionId}/state
+ */
+export function getSessionState(sessionId: string) {
+  return request.get<ApiResponse<ChatSessionStateVO>>(`${BASE}/${sessionId}/state`)
+}
+
+/**
+ * 查询会话 HITL 授权模式（无记录=MANUAL 逐步确认）
+ * GET /agent/chat/session/{sessionId}/confirm-mode
+ */
+export function getConfirmMode(sessionId: string) {
+  return request.get<ApiResponse<ConfirmMode>>(`${BASE}/${sessionId}/confirm-mode`)
+}
+
+/**
+ * 设置会话 HITL 授权模式
+ * PUT /agent/chat/session/{sessionId}/confirm-mode?mode=
+ */
+export function setConfirmMode(sessionId: string, mode: ConfirmMode) {
+  return request.put<ApiResponse<boolean>>(`${BASE}/${sessionId}/confirm-mode?mode=${mode}`)
+}
+
+/**
+ * 查询会话思考模式有效值（会话覆盖 ?? 默认开；仅 thinkingSwitchSupported 的模型有意义）
+ * GET /agent/chat/session/{sessionId}/thinking-mode
+ */
+export function getThinkingMode(sessionId: string) {
+  return request.get<ApiResponse<boolean>>(`${BASE}/${sessionId}/thinking-mode`)
+}
+
+/**
+ * 设置会话思考模式（下一条消息生效——后端检测变化重建 agent）
+ * PUT /agent/chat/session/{sessionId}/thinking-mode?enabled=
+ */
+export function setThinkingMode(sessionId: string, enabled: boolean) {
+  return request.put<ApiResponse<boolean>>(`${BASE}/${sessionId}/thinking-mode?enabled=${enabled}`)
+}
+
+/**
+ * 设置会话对话模型覆盖（写 Redis 覆盖值，下一条消息生效——runtime 检测变化重建 agent）
+ * PUT /agent/chat/session/{id}/model
+ *
+ * @param modelConfigId 候选模型 id；null/不传 = 清除覆盖回落 agent 默认模型
+ */
+export function setSessionModel(sessionId: string, modelConfigId?: string | null) {
+  const query = modelConfigId != null ? `?modelConfigId=${modelConfigId}` : ''
+  return request.put<ApiResponse<boolean>>(`${BASE}/${sessionId}/model${query}`)
 }
 
 /**

@@ -99,7 +99,7 @@ function handleOptionClick(value: 'CUSTOM' | 'WELLKNOWN' | 'NACOS') {
 
   &:hover {
     border-color: var(--color-primary);
-    
+
     .create-icon {
       color: var(--color-primary);
       transform: scale(1.1);

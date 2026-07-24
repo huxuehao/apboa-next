@@ -46,7 +46,8 @@ const docMenus = [
       <!-- 侧边栏 -->
       <aside class="doc-sidebar">
         <div class="doc-sidebar-header">
-          <img src="@/assets/logo/logo_3.png" alt="logo" width="120px">
+          <BookOutlined class="doc-sidebar-header-icon" />
+          <span class="doc-sidebar-header-title">Apboa Next 使用手册</span>
         </div>
         <nav class="doc-nav">
           <RouterLink

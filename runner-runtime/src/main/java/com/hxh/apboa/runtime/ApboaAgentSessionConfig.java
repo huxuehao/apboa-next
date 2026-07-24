@@ -1,6 +1,7 @@
 package com.hxh.apboa.runtime;
 
 import com.hxh.apboa.common.consts.TableConst;
+import com.hxh.apboa.runtime.tts.TtsBroadcastManager;
 import io.agentscope.core.agui.adapter.AguiAdapterConfig;
 import io.agentscope.core.agui.registry.AguiAgentRegistry;
 import io.agentscope.core.session.Session;
@@ -222,7 +223,8 @@ public class ApboaAgentSessionConfig {
             @Autowired(required = false) AguiAgentRegistry registry,
             @Autowired(required = false) ThreadSessionManager sessionManager,
             AguiProperties props,
-            Session session) {
+            Session session,
+            @Autowired TtsBroadcastManager ttsBroadcastManager) {
 
         if (registry == null) {
             log.warn("AguiAgentRegistry not found, skip AguiMvcController configuration");
@@ -241,6 +243,8 @@ public class ApboaAgentSessionConfig {
                 .jdbcTemplate(jdbcTemplate)
                 .sseTimeout(600000L)
                 .config(buildAguiAdapterConfig(props))
+                // Apboa 语音播报：AGUI 事件流分叉喂给 TTS 播报编排（旁路，不影响主流）
+                .ttsEventTap(ttsBroadcastManager::onAguiEvent)
                 .build();
     }
 

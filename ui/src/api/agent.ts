@@ -4,8 +4,9 @@ import type {
   PageResult,
   SkillPackage,
   ToolConfig,
+  Workflow,
 } from '@/types'
-import type { AgentDefinitionDTO, AgentDefinitionVO } from '@/types'
+import type { AgentDefinitionDTO, AgentDefinitionVO, AgentChatContextVO } from '@/types'
 
 /**
  * 分页查询
@@ -23,6 +24,14 @@ export function page(query: AgentDefinitionDTO) {
  */
 export function detail(id: string) {
   return request.get<ApiResponse<AgentDefinitionVO>>(`/api/agent/definition/${id}`)
+}
+
+/**
+ * 对话页面专用聚合详情（detail+avatar+allowFileType+enabledTools+enabledSkills 合一）
+ * GET /agent/definition/{id}/chat-context
+ */
+export function chatContext(id: string) {
+  return request.get<ApiResponse<AgentChatContextVO>>(`/api/agent/definition/${id}/chat-context`)
 }
 
 /**
@@ -73,6 +82,22 @@ export function allowFileType(id: string) {
   return request.get<ApiResponse<string[]>>(`/api/agent/definition/${id}/allow/file-type`)
 }
 
+/**
+ * 获取智能体头像（base64 data URL，未设置返回 null；独立于 VO 接口）
+ * GET /agent/definition/{id}/avatar
+ */
+export function getAvatar(id: string) {
+  return request.get<ApiResponse<string | null>>(`/api/agent/definition/${id}/avatar`)
+}
+
+/**
+ * 更新智能体头像（avatar 传空清除）
+ * PUT /agent/definition/{id}/avatar
+ */
+export function updateAvatar(id: string, avatar: string | null) {
+  return request.put<ApiResponse<boolean>>(`/api/agent/definition/${id}/avatar`, { avatar })
+}
+
 
 /**
  * 执行工具
@@ -99,5 +124,5 @@ export function enabledSkillsOfAgent(agentId: string) {
  * 获取Agent启用的工作流
  */
 export function enabledWorkflowsOfAgent(agentId: string) {
-  return request.get<ApiResponse<unknown[]>>(`/api/agent/definition/${agentId}/enabled/workflows`)
+  return request.get<ApiResponse<Workflow[]>>(`/api/agent/definition/${agentId}/enabled/workflows`)
 }

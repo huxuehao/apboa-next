@@ -26,7 +26,9 @@ import com.hxh.apboa.skill.imports.config.UploadImportConfig;
 import com.hxh.apboa.skill.service.SkillFileService;
 import com.hxh.apboa.skill.service.SkillPackageService;
 import com.hxh.apboa.skill.service.SkillToolService;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -58,7 +60,16 @@ public class SkillPackageController {
      */
     @GetMapping("/page")
     public R<IPage<SkillPackageVO>> page(PageParams pageParams, SkillPackageDTO query) {
-        IPage<SkillPackage> page = skillPackageService.page(MP.getPage(pageParams), MP.getQueryWrapper(query));
+        // 关键词按 name 或 alias 模糊匹配：内置技能包 name 为英文 slug、alias 为中文别名，
+        // 只按 name LIKE 会导致搜中文别名时搜不到内置技能。name 无 @QueryDefine，
+        // 通用 wrapper 不拼 name 条件，这里手动组 (name LIKE kw OR alias LIKE kw)。
+        QueryWrapper<SkillPackage> qw = MP.getQueryWrapper(query);
+        String keyword = query.getName();
+        if (keyword != null && !keyword.isBlank()) {
+            String kw = keyword.trim();
+            qw.and(w -> w.like("name", kw).or().like("alias", kw));
+        }
+        IPage<SkillPackage> page = skillPackageService.page(MP.getPage(pageParams), qw);
         IPage<SkillPackageVO> voPage = BeanUtils.copyPage(page, SkillPackageVO.class);
         // 填充每个技能关联的工具ID列表
         for (SkillPackageVO vo : voPage.getRecords()) {
@@ -118,6 +129,20 @@ public class SkillPackageController {
         // 更新技能与工具的关联
         skillToolService.saveSkillTool(entity.getId(), vo.getTools());
         return R.data(b);
+    }
+
+    /**
+     * 更新展示别名（仅改 alias，允许内置技能包；不影响 name/desc/content）
+     */
+    @PutMapping("/{id}/alias")
+    @RoleNeed({TenantRole.TENANT_ADMIN, TenantRole.TENANT_EDITOR})
+    public R<Boolean> updateAlias(@PathVariable("id") Long id, @RequestBody AliasRequest request) {
+        return R.data(skillPackageService.updateAlias(id, request.getAlias()));
+    }
+
+    @Data
+    public static class AliasRequest {
+        private String alias;
     }
 
     /**

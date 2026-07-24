@@ -16,7 +16,7 @@ import {
 import { getProviderLogo } from '@/utils/providerLogo'
 import modelAvatar from '@/assets/avatar/model.png'
 import type { ModelConfigVO } from '@/types'
-import { ModelConnectivityStatus } from '@/types'
+import { ModelCategory, ModelConnectivityStatus } from '@/types'
 import {
   createDeleteItem,
   createDivider,
@@ -51,6 +51,18 @@ const modelTypeLabels: Record<string, string> = {
   AUDIO: '音频',
   VIDEO: '视频'
 }
+
+/** 语音识别用途卡片：生成参数与模态标签无意义，改为显示用途标识 */
+const isAsrCard = computed(() => props.data.category === ModelCategory.ASR)
+
+/** 对话生成用途卡片：成本计价只对 LLM 生效（老数据无 category 视为 LLM） */
+const isLlmCard = computed(() => (props.data.category ?? ModelCategory.LLM) === ModelCategory.LLM)
+
+/** 是否已配价（两个单价都填了才算；成本中心据此计费） */
+const isPriced = computed(() => props.data.inputPrice != null && props.data.outputPrice != null)
+
+/** 价格标签文案：¥输入/输出（元/百万token） */
+const priceLabel = computed(() => `¥${props.data.inputPrice}/${props.data.outputPrice}`)
 
 /**
  * 格式化更新时间
@@ -197,30 +209,46 @@ const formattedTemperature = computed(() => {
       {{ data.description || '暂无描述' }}
     </div>
 
-    <!-- 参数精简行 -->
-    <div class="card-params flex items-center gap-sm text-xs text-placeholder">
+    <!-- 参数精简行（语音识别用途无生成参数） -->
+    <div v-if="!isAsrCard" class="card-params flex items-center gap-sm text-xs text-placeholder">
       <span>Context: {{ data.contextWindow }}</span>
       <span class="param-divider">|</span>
       <span>Tokens: {{ data.maxTokens }}</span>
       <span class="param-divider">|</span>
       <span>T: {{ formattedTemperature }}</span>
     </div>
+    <div v-else class="card-params flex items-center gap-sm text-xs text-placeholder">
+      <span>音频转文字，不参与对话生成</span>
+    </div>
 
     <div class="card-footer flex items-center justify-between">
-      <div class="card-tags flex items-center gap-xs">
-        <ATag :bordered="false">
-            {{ data.streaming ? '流式' : '非流式' }}
-        </ATag>
-        <ATag :bordered="false">
-            {{ data.thinking ? '思考' : '非思考' }}
-        </ATag>
-      </div>
-      <div class="card-tags flex items-center gap-xs">
-        <ATag v-for="t in (Array.isArray(data.modelType) ? data.modelType : [data.modelType])"
-              :key="t" color="default" class="tag" :bordered="false">
-          {{ modelTypeLabels[t] || t }}
-        </ATag>
-      </div>
+      <template v-if="!isAsrCard">
+        <div class="card-tags flex items-center gap-xs">
+          <ATag :bordered="false">
+              {{ data.streaming ? '流式' : '非流式' }}
+          </ATag>
+          <ATag :bordered="false">
+              {{ data.thinking ? '思考' : '非思考' }}
+          </ATag>
+          <ATooltip v-if="isLlmCard && isPriced" title="输入/输出单价（元/百万 token），成本中心按此计费">
+            <ATag :bordered="false" color="blue">{{ priceLabel }}</ATag>
+          </ATooltip>
+          <ATooltip v-else-if="isLlmCard" title="未配置单价：成本中心只记 token 不计成本，请在编辑弹窗「成本计价」中补配">
+            <ATag :bordered="false" color="orange">未配价</ATag>
+          </ATooltip>
+        </div>
+        <div class="card-tags flex items-center gap-xs">
+          <ATag v-for="t in (Array.isArray(data.modelType) ? data.modelType : (data.modelType ? [data.modelType] : []))"
+                :key="t" color="default" class="tag" :bordered="false">
+            {{ modelTypeLabels[t] || t }}
+          </ATag>
+        </div>
+      </template>
+      <template v-else>
+        <div class="card-tags flex items-center gap-xs">
+          <ATag color="blue" :bordered="false">语音识别</ATag>
+        </div>
+      </template>
     </div>
   </div>
 </template>

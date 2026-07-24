@@ -14,7 +14,7 @@ const props = defineProps<{
  */
 function extractUserText(content: string): string {
   // 去除富文本标签
-  const t = content.replace(/<\/?(?:workspace-file|agent-tool|agent-skill)>/g, '')
+  const t = content.replace(/<\/?(?:workspace-file|agent-tool|agent-skill|agent-mcp)>/g, '')
   // 去除文件前缀
   const idx = t.indexOf(FILE_SEP)
   if (idx === -1) return t.trim()

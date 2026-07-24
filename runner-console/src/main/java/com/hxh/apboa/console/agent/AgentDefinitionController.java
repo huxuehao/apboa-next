@@ -13,13 +13,18 @@ import com.hxh.apboa.common.mp.support.MP;
 import com.hxh.apboa.common.mp.support.PageParams;
 import com.hxh.apboa.common.r.R;
 import com.hxh.apboa.common.util.BeanUtils;
+import com.hxh.apboa.common.vo.AgentChatContextVO;
 import com.hxh.apboa.common.vo.AgentDefinitionVO;
+import com.hxh.apboa.common.vo.AgentModelOptionVO;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.hxh.apboa.studio.mapper.AgentStudioMapper;
 import com.hxh.apboa.longterm.mapper.AgentLongTermMemoryMapper;
+import com.hxh.apboa.common.wrapper.ModelWrapper;
+import com.hxh.apboa.model.service.ModelConfigService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -35,6 +40,7 @@ import java.util.stream.Collectors;
 public class AgentDefinitionController {
 
     private final AgentDefinitionService agentDefinitionService;
+    private final ModelConfigService modelConfigService;
     private final AgentStudioMapper agentStudioMapper;
     private final AgentLongTermMemoryMapper agentLongTermMemoryMapper;
     private final MessagePublisher messagePublisher;
@@ -77,21 +83,101 @@ public class AgentDefinitionController {
     @ChatKeyAccess
     @GetMapping("/{id}")
     public R<AgentDefinitionVO> detail(@PathVariable("id") Long id) {
-        AgentDefinitionVO vo = agentDefinitionService.agentDefinitionDetail(id);
-        vo.setUsed(agentDefinitionService.usedWithAgent(List.of(id)));
-
-        return R.data(vo);
+        return R.data(buildDetailVO(id));
     }
 
     /**
-     * 新增
+     * 对话页面专用聚合详情（detail+avatar+allowFileType+enabledTools+enabledSkills 合一，
+     * 减少进入聊天页/切换智能体时的请求数；原五个独立接口不变，供管理端等其他场景使用）
+     */
+    @SkAccess
+    @ChatKeyAccess
+    @GetMapping("/{id}/chat-context")
+    public R<AgentChatContextVO> getChatContext(@PathVariable("id") Long id) {
+        AgentChatContextVO vo = new AgentChatContextVO();
+        vo.setDetail(buildDetailVO(id));
+        vo.setAvatar(agentDefinitionService.getAvatar(id));
+        vo.setAllowFileType(agentDefinitionService.allowFileType(id));
+        vo.setEnabledTools(agentDefinitionService.getEnabledToolsOfAgent(id));
+        vo.setEnabledSkills(agentDefinitionService.getEnabledSkillsOfAgent(id));
+        vo.setEnabledMcp(agentDefinitionService.getEnabledMcpOfAgent(id));
+        vo.setEnabledSubAgents(agentDefinitionService.getEnabledSubAgentsOfAgent(id));
+        vo.setEnabledWorkflows(agentDefinitionService.getEnabledWorkflowsOfAgent(id));
+        return R.data(vo);
+    }
+
+    private AgentDefinitionVO buildDetailVO(Long id) {
+        AgentDefinitionVO vo = agentDefinitionService.agentDefinitionDetail(id);
+        vo.setUsed(agentDefinitionService.usedWithAgent(List.of(id)));
+        vo.setThinkingSwitchSupported(resolveThinkingSwitchSupported(vo.getModelConfigId()));
+        vo.setModelOptions(buildModelOptions(vo));
+        return vo;
+    }
+
+    /**
+     * 拼装候选模型选项（默认模型 + 额外候选，detail 已做存在性过滤），
+     * 供对话页模型切换下拉与 per-model 思考开关显隐。单个候选查询失败跳过不拖垮 detail。
+     */
+    private List<AgentModelOptionVO> buildModelOptions(AgentDefinitionVO vo) {
+        List<AgentModelOptionVO> options = new ArrayList<>();
+        List<Long> ids = new ArrayList<>();
+        if (vo.getModelConfigId() != null) {
+            ids.add(vo.getModelConfigId());
+        }
+        if (vo.getModels() != null) {
+            vo.getModels().stream().filter(id -> !ids.contains(id)).forEach(ids::add);
+        }
+        for (Long id : ids) {
+            try {
+                ModelWrapper wrapper = modelConfigService.getModelWrapperById(id);
+                if (wrapper == null || wrapper.getConfig() == null) {
+                    continue;
+                }
+                AgentModelOptionVO option = new AgentModelOptionVO();
+                option.setId(id);
+                option.setName(wrapper.getConfig().getName());
+                option.setDescription(wrapper.getConfig().getDescription());
+                option.setLogo(wrapper.getConfig().getLogo());
+                option.setLogoColor(wrapper.getConfig().getLogoColor());
+                option.setProviderType(wrapper.getProvider() != null && wrapper.getProvider().getType() != null
+                        ? wrapper.getProvider().getType().name() : null);
+                option.setIsDefault(id.equals(vo.getModelConfigId()));
+                option.setThinkingSwitchSupported(Boolean.TRUE.equals(wrapper.getConfig().getThinking()));
+                options.add(option);
+            } catch (Exception e) {
+                // 悬空/异常候选跳过，读取端收口
+            }
+        }
+        return options;
+    }
+
+    /**
+     * 当前模型是否支持会话级思考模式开关：由 model_config.thinking 通用判定
+     * （DASH_SCOPE 靠内置 enable_thinking，OPEN_AI 靠模型配的 thinkingParams，
+     * 均在 ChatModelFactory 合成点按 provider 翻译）。查询失败按不支持处理（按钮宁缺勿误）。
+     */
+    private Boolean resolveThinkingSwitchSupported(Long modelConfigId) {
+        if (modelConfigId == null) {
+            return false;
+        }
+        try {
+            ModelWrapper wrapper = modelConfigService.getModelWrapperById(modelConfigId);
+            return wrapper != null && wrapper.getConfig() != null
+                    && Boolean.TRUE.equals(wrapper.getConfig().getThinking());
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * 新增（返回回填了 id 的 VO，供前端串行保存头像等子资源）
      */
     @PostMapping
     @RoleNeed({TenantRole.TENANT_ADMIN, TenantRole.TENANT_EDITOR})
-    public R<Boolean> save(@RequestBody AgentDefinitionVO vo) {
+    public R<AgentDefinitionVO> save(@RequestBody AgentDefinitionVO vo) {
         agentDefinitionService.saveAgentDefinition(vo);
         messagePublisher.publishAfterCommit(RedisChannelTopic.AGENT_REREGISTER_CHANNEL, String.valueOf(vo.getId()));
-        return R.data(true);
+        return R.data(vo);
     }
 
     /**
@@ -101,6 +187,25 @@ public class AgentDefinitionController {
     @RoleNeed({TenantRole.TENANT_ADMIN, TenantRole.TENANT_EDITOR})
     public R<Boolean> update(@RequestBody AgentDefinitionVO vo) {
         return R.data(agentDefinitionService.updateAgentDefinition(vo));
+    }
+
+    /**
+     * 获取头像（独立于 VO：base64 不随列表/详情接口返回）
+     */
+    @SkAccess
+    @ChatKeyAccess
+    @GetMapping("/{id}/avatar")
+    public R<String> getAvatar(@PathVariable("id") Long id) {
+        return R.data(agentDefinitionService.getAvatar(id));
+    }
+
+    /**
+     * 更新头像（body: {"avatar": base64 data URL}，空值清除）
+     */
+    @PutMapping("/{id}/avatar")
+    @RoleNeed({TenantRole.TENANT_ADMIN, TenantRole.TENANT_EDITOR})
+    public R<Boolean> updateAvatar(@PathVariable("id") Long id, @RequestBody Map<String, String> body) {
+        return R.data(agentDefinitionService.updateAvatar(id, body.get("avatar")));
     }
 
     /**

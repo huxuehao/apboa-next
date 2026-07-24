@@ -20,6 +20,8 @@ import com.hxh.apboa.common.config.auth.ChatKeyAccess;
 import com.hxh.apboa.common.config.auth.SkAccess;
 import com.hxh.apboa.common.entity.ChatSession;
 import io.agentscope.core.agui.model.RunAgentInput;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.springframework.http.MediaType;
@@ -29,6 +31,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -142,6 +145,42 @@ public class AguiRestController {
     }
 
     /**
+     * HITL resume 端点（docs/hitl-confirmation-refactor.md §6.3）：提交逐工具确认决策，
+     * 后端用 AgentScope 官方「暂停-恢复」从暂停点续跑（全允许→agent 继续执行 pending；
+     * 含拒绝→喂入「用户已拒绝执行」后继续），并续接暂停前的 SSE 事件流。
+     *
+     * @param threadId 会话 ID（暂停态的 key）
+     * @param body 逐工具确认决策 + 是否开启记忆
+     * @return SseEmitter 流式续接恢复后的事件
+     */
+    @SkAccess
+    @ChatKeyAccess
+    @PostMapping(
+            value = "${agentscope.agui.path-prefix:/agui}/resume/{threadId}",
+            consumes = MediaType.APPLICATION_JSON_VALUE,
+            produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter resume(
+            @PathVariable("threadId") String threadId, @RequestBody ResumeRequest body) {
+        return aguiMvcController.handleResume(threadId, body.decisions(), body.memoryActive());
+    }
+
+    /**
+     * HITL 待确认列表端点：从持久 Session 的暂停态重建「待确认工具」，供前端刷新/重进会话时
+     * 重建确认 UI（暂停态会话已不在 active-runs、RunTracker 内存态跨重启会丢，故不能靠 reconnect 回放）。
+     *
+     * @param threadId 会话 ID
+     * @return { pending: [{toolUseId,name,input}] }；无暂停态则 pending 为空数组
+     */
+    @SkAccess
+    @ChatKeyAccess
+    @GetMapping(
+            value = "${agentscope.agui.path-prefix:/agui}/pending/{threadId}",
+            produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<Map<String, Object>> pending(@PathVariable("threadId") String threadId) {
+        return ResponseEntity.ok(Map.of("pending", aguiMvcController.getPendingConfirms(threadId)));
+    }
+
+    /**
      * 运行状态查询端点。
      *
      * @param threadId 会话 ID
@@ -153,6 +192,23 @@ public class AguiRestController {
     public ResponseEntity<Map<String, Boolean>> getStatus(@PathVariable("threadId") String threadId) {
         boolean running = aguiMvcController.getStatus(threadId);
         return ResponseEntity.ok(Map.of("running", running));
+    }
+
+    /**
+     * 批量运行状态查询端点（一次查多个 threadId，替代前端逐个轮询）。
+     *
+     * @param threadIds 会话 ID 列表
+     * @return threadId -> running 的映射
+     */
+    @SkAccess
+    @ChatKeyAccess
+    @GetMapping(value = "${agentscope.agui.path-prefix:/agui}/status/batch", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<Map<String, Boolean>> getStatusBatch(@RequestParam("threadIds") List<String> threadIds) {
+        Map<String, Boolean> result = new HashMap<>();
+        for (String threadId : threadIds) {
+            result.put(threadId, aguiMvcController.getStatus(threadId));
+        }
+        return ResponseEntity.ok(result);
     }
 
     /**

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, provide } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
-import { message } from 'ant-design-vue'
+import { message, Modal } from 'ant-design-vue'
 import { ArrowLeftOutlined } from '@ant-design/icons-vue'
 import { Graph, layout as dagreLayout } from '@dagrejs/dagre'
 import WorkflowCanvasViewport from '@/components/workflow/editor/WorkflowCanvasViewport.vue'
@@ -75,6 +75,7 @@ const publishModalOpen = ref(false)
 const publishing = ref(false)
 const leaveConfirmOpen = ref(false)
 const leavingAfterSave = ref(false)
+const routeLeaveConfirmed = ref(false)
 const runInput = ref('{\n  "params": [],\n  "variables": {}\n}')
 const canvasRef = ref<CanvasRef | null>(null)
 const resources = ref<WorkflowResourceMaps>({ caches: [], datasources: [], mqs: [], channels: [] })
@@ -182,17 +183,23 @@ onMounted(async () => {
     captureSavedDraft('idle')
   }
   window.addEventListener('pagehide', releaseWorkflowLockOnPageExit)
-  window.addEventListener('beforeunload', releaseWorkflowLockOnPageExit)
+  window.addEventListener('beforeunload', handleWorkflowBeforeUnload)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('pagehide', releaseWorkflowLockOnPageExit)
-  window.removeEventListener('beforeunload', releaseWorkflowLockOnPageExit)
+  window.removeEventListener('beforeunload', handleWorkflowBeforeUnload)
   releaseWorkflowLock()
 })
 
 onBeforeRouteLeave(async () => {
+  if (!routeLeaveConfirmed.value && (saving.value || saveState.value === 'dirty')) {
+    const confirmed = await confirmDiscardWorkflowChanges()
+    if (!confirmed) return false
+  }
+  routeLeaveConfirmed.value = false
   await releaseWorkflowLock()
+  return true
 })
 
 watch(draftSignature, (signature) => {
@@ -278,6 +285,29 @@ function releaseWorkflowLockOnPageExit() {
   }).catch(() => {})
 }
 
+function handleWorkflowBeforeUnload(e: BeforeUnloadEvent) {
+  if (saving.value || saveState.value === 'dirty') {
+    e.preventDefault()
+    e.returnValue = ''
+    return
+  }
+  releaseWorkflowLockOnPageExit()
+}
+
+function confirmDiscardWorkflowChanges(): Promise<boolean> {
+  return new Promise((resolve) => {
+    Modal.confirm({
+      title: '确认退出编辑器',
+      content: leaveConfirmMessage.value,
+      okText: '直接退出',
+      cancelText: '继续编辑',
+      okButtonProps: { danger: true },
+      onOk: () => resolve(true),
+      onCancel: () => resolve(false),
+    })
+  })
+}
+
 async function loadWorkflow(id: string) {
   const response = await workflowApi.workflowDetail(id)
   workflow.value = response.data.data.workflow || {}
@@ -327,7 +357,7 @@ function toFlowNode(node: WorkflowNodeDefinition): WorkflowFlowNode {
       label: node.name || schema?.title || node.type,
       description: schema?.description,
       status: 'IDLE',
-      config: { ...(schema?.defaultConfig || {}), ...(node.config || {}) },
+      config: { ...schema?.defaultConfig, ...node.config },
       inputConfigs: node.inputConfigs || schema?.inputConfigs || [],
       outputConfigs: node.outputConfigs || cloneDefaultOutputs(schema || getWorkflowNodeSchema('END')!, node.id),
       schema,
@@ -902,6 +932,7 @@ function goBack() {
 
 function leaveDirectly() {
   leaveConfirmOpen.value = false
+  routeLeaveConfirmed.value = true
   void leaveEditor()
 }
 
@@ -1005,7 +1036,7 @@ async function exitSubWorkflow() {
       return {
         ...n,
         config: {
-          ...(n.config || {}),
+          ...n.config,
           subNodes: subDef.nodes,
           subEdges: subDef.edges,
         },

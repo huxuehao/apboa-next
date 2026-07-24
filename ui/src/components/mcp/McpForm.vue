@@ -30,10 +30,12 @@ const formData = ref({
   used: [] as string[],
   name: '',
   description: '',
+  audience: '',
   protocol: McpProtocol.HTTP,
   mode: McpMode.SYNC,
   timeout: 30000,
-  runtimeFailThreshold: 3
+  runtimeFailThreshold: 3,
+  idleTimeoutMs: 300000
 })
 
 const httpConfig = ref({
@@ -83,10 +85,12 @@ function initForm() {
       used: props.data.used as string[] || [],
       name: props.data.name,
       description: props.data.description,
+      audience: props.data.audience ?? '',
       protocol: props.data.protocol,
       mode: props.data.mode,
       timeout: props.data.timeout,
-      runtimeFailThreshold: props.data.runtimeFailThreshold ?? 3
+      runtimeFailThreshold: props.data.runtimeFailThreshold ?? 3,
+      idleTimeoutMs: props.data.idleTimeoutMs ?? 300000
     }
     parseProtocolConfig(props.data.protocolConfig)
     return
@@ -96,10 +100,12 @@ function initForm() {
     used: [],
     name: '',
     description: '',
+    audience: '',
     protocol: props.initialProtocol || McpProtocol.HTTP,
     mode: McpMode.SYNC,
     timeout: 30000,
-    runtimeFailThreshold: 3
+    runtimeFailThreshold: 3,
+    idleTimeoutMs: 300000
   }
   resetProtocolConfig()
 }
@@ -197,10 +203,13 @@ async function handleSubmit() {
     } = {
       name: formData.value.name,
       description: formData.value.description,
+      // 空串 = 显式清空（关闭断言注入）；后端按"空串置 null、null 不修改"处理
+      audience: formData.value.audience.trim(),
       protocol: formData.value.protocol,
       mode: formData.value.mode,
       timeout: formData.value.timeout,
       runtimeFailThreshold: formData.value.runtimeFailThreshold,
+      idleTimeoutMs: formData.value.idleTimeoutMs,
       protocolConfig: buildProtocolConfig()
     }
 
@@ -274,6 +283,16 @@ function handleCancel() {
         <ATextarea v-model:value="formData.description" placeholder="请输入描述" :rows="3" />
       </AFormItem>
 
+      <AFormItem label="身份断言 audience">
+        <AInput
+          v-model:value="formData.audience"
+          placeholder="业务方验签的 aud 标识，如 mcp:order-system"
+        />
+        <div class="text-placeholder text-xs mt-xs">
+          配置后工具调用将注入平台签名的身份断言（_meta），业务方按 aud 验签做用户级权限；留空则不注入
+        </div>
+      </AFormItem>
+
       <AFormItem label="协议" name="protocol">
         <ASelect v-model:value="formData.protocol" :disabled="isEdit" placeholder="请选择协议">
           <ASelectOption v-for="opt in protocolOptions" :key="opt.value" :value="opt.value">
@@ -304,6 +323,19 @@ function handleCancel() {
         />
         <div class="text-placeholder text-xs mt-xs">
           设置为 0 表示关闭运行时自动降级；大于 0 时，连续出现该次数的连接或传输失败后会自动置为连接失败。
+        </div>
+      </AFormItem>
+
+      <AFormItem label="空闲连接回收(毫秒)">
+        <AInputNumber
+          v-model:value="formData.idleTimeoutMs"
+          :min="0"
+          :step="60000"
+          style="width: 100%"
+          placeholder="0 表示不回收"
+        />
+        <div class="text-placeholder text-xs mt-xs">
+          HTTP/SSE 连接空闲超过该时长将被主动关闭并在下次调用时重建（避免远端会话过期导致调用失败）；设置为 0 表示不回收；STDIO 协议不适用。建议不小于一分钟且不大于远端会话存活期。
         </div>
       </AFormItem>
 

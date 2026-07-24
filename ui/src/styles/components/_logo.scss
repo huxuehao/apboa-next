@@ -5,15 +5,25 @@
  */
 
 .app-logo {
+  min-width: 0;
+  overflow: hidden;
+
   .logo-icon {
     width: 32px;
     height: 32px;
+    flex-shrink: 0;
   }
 
   .project-name {
     font-size: 18px;
     font-weight: 600;
-    color: #262626;
+    color: var(--color-text-primary);
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  &.is-collapsed {
+    gap: 0;
   }
 }

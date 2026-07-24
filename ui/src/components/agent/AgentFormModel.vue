@@ -7,17 +7,26 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { RoutePaths } from '@/router/constants.ts'
 import SmartCodeEditor from '@/components/editor/SmartCodeEditor.vue'
-import ExtendConfigEditor, { type ExtendConfigData } from '@/components/model/ExtendConfigEditor.vue'
+import TtsVoiceSelect from '@/components/model/TtsVoiceSelect.vue'
+import ModelParamsOverrideForm from '@/components/model/ModelParamsOverrideForm.vue'
 import * as modelApi from '@/api/model'
 import * as promptApi from '@/api/prompt'
 import type { ModelProviderVO, ModelConfigVO, SystemPromptTemplateVO } from '@/types'
+import { ModelCategory } from '@/types'
 /**
  * Props定义
  */
 const props = defineProps<{
   modelValue: {
     modelConfigId: string
+    /** 额外候选对话模型（不含默认；对话页用户可切换） */
+    models: string[]
+    /** 各候选模型的参数覆盖（key=候选 id；空对象/缺省=跟随模型默认。默认模型的覆盖走 modelParamsOverride） */
+    modelsParamsOverride: Record<string, Record<string, unknown> | null>
+    asrModelConfigId: string | null
+    ttsModelConfigId: string | null
     modelParamsOverride: Record<string, unknown> | null
+    ttsParamsOverride: Record<string, unknown> | null
     systemPromptTemplateId: string
     followTemplate: boolean
     systemPrompt: string
@@ -41,8 +50,6 @@ const allPrompts = ref<SystemPromptTemplateVO[]>([])
 
 const selectedProviderId = ref<string>('')
 const selectedPromptCategory = ref<string>('')
-const showModelParamsOverride = ref(false)
-const modelParamsForm = ref<Record<string, unknown>>({})
 
 /**
  * 表单数据
@@ -52,30 +59,163 @@ const formData = computed({
   set: (val) => emit('update:modelValue', val)
 })
 
+/** 对话模型（历史写法是排除 ASR，新增 TTS 用途后改为白名单，避免语音模型混入对话下拉） */
+const llmModels = computed(() => allModels.value.filter(m => m.category === ModelCategory.LLM))
+
+/** 语音识别模型 */
+const asrModels = computed(() => allModels.value.filter(m => m.category === ModelCategory.ASR))
+
+/** 语音合成模型 */
+const ttsModels = computed(() => allModels.value.filter(m => m.category === ModelCategory.TTS))
+
 /**
- * 模型提供商选项
+ * 模型提供商选项（仅显示有对话模型的供应商；模型列表未返回前先显示全部避免闪空态）
  */
 const providerOptions = computed(() => {
-  return modelProviders.value.map(p => ({
+  const providers = allModels.value.length === 0
+    ? modelProviders.value
+    : modelProviders.value.filter(p => llmModels.value.some(m => String(m.providerId) === String(p.id)))
+  return providers.map(p => ({
     label: p.name,
     value: p.id
   }))
 })
 
 /**
- * 当前提供商的模型列表
+ * 当前提供商的对话模型列表
  */
 const currentModels = computed(() => {
   if (!selectedProviderId.value) {
-    const model = allModels.value.filter(p => p.id === formData.value.modelConfigId)[0] || null
+    const model = llmModels.value.filter(p => p.id === formData.value.modelConfigId)[0] || null
     if (model) {
       selectedProviderId.value = model.providerId
     } else {
-      selectedProviderId.value = allModels.value[0]?.providerId || ''
+      selectedProviderId.value = llmModels.value[0]?.providerId || ''
     }
     return []
   }
-  return allModels.value.filter(m => m.providerId === selectedProviderId.value)
+  return llmModels.value.filter(m => m.providerId === selectedProviderId.value)
+})
+
+/**
+ * 语音识别供应商选项：「不启用」+ 有 ASR 模型的供应商（交互与上方对话模型一致）
+ */
+const asrProviderOptions = computed(() => {
+  const opts = modelProviders.value
+    .filter(p => asrModels.value.some(m => String(m.providerId) === String(p.id)))
+    .map(p => ({ label: p.name, value: String(p.id) }))
+  return [{ label: '不启用', value: '' }, ...opts]
+})
+
+/** 语音识别选中的供应商（''=不启用，null=待初始化） */
+const asrSelectedProviderKey = ref<string | null>(null)
+
+/**
+ * 回显定位：模型列表与绑定值任一到达都重算——已绑定则选中绑定模型所在供应商分组
+ * （列表与父组件回填的先后不定，找到绑定即覆盖定位；未绑定仅做一次「不启用」初始化，
+ * 不能放在 currentAsrModels 里懒初始化：模板中它被 v-if 挡住，未初始化时永远不会被求值）
+ */
+watch(
+  [asrModels, () => formData.value.asrModelConfigId],
+  ([models, boundId]) => {
+    const bound = models.find(m => String(m.id) === String(boundId ?? ''))
+    if (bound) {
+      asrSelectedProviderKey.value = String(bound.providerId)
+    } else if (asrSelectedProviderKey.value === null && allModels.value.length > 0) {
+      asrSelectedProviderKey.value = ''
+    }
+  },
+  { immediate: true }
+)
+
+/**
+ * 当前供应商的语音识别模型列表
+ */
+const currentAsrModels = computed(() => {
+  if (!asrSelectedProviderKey.value) return []
+  return asrModels.value.filter(m => String(m.providerId) === asrSelectedProviderKey.value)
+})
+
+/**
+ * 语音识别供应商切换：选「不启用」时清空绑定
+ */
+function handleAsrProviderChange(value: string | number) {
+  if (value === '') {
+    formData.value.asrModelConfigId = null
+  }
+}
+
+/**
+ * 语音合成供应商选项：「不启用」+ 有 TTS 模型的供应商（交互与语音识别一致）
+ */
+const ttsProviderOptions = computed(() => {
+  const opts = modelProviders.value
+    .filter(p => ttsModels.value.some(m => String(m.providerId) === String(p.id)))
+    .map(p => ({ label: p.name, value: String(p.id) }))
+  return [{ label: '不启用', value: '' }, ...opts]
+})
+
+/** 语音合成选中的供应商（''=不启用，null=待初始化） */
+const ttsSelectedProviderKey = ref<string | null>(null)
+
+/**
+ * 回显定位（同 ASR：列表与绑定值任一到达都重算，未绑定仅做一次「不启用」初始化）
+ */
+watch(
+  [ttsModels, () => formData.value.ttsModelConfigId],
+  ([models, boundId]) => {
+    const bound = models.find(m => String(m.id) === String(boundId ?? ''))
+    if (bound) {
+      ttsSelectedProviderKey.value = String(bound.providerId)
+    } else if (ttsSelectedProviderKey.value === null && allModels.value.length > 0) {
+      ttsSelectedProviderKey.value = ''
+    }
+  },
+  { immediate: true }
+)
+
+/**
+ * 当前供应商的语音合成模型列表
+ */
+const currentTtsModels = computed(() => {
+  if (!ttsSelectedProviderKey.value) return []
+  return ttsModels.value.filter(m => String(m.providerId) === ttsSelectedProviderKey.value)
+})
+
+/**
+ * 语音合成供应商切换：选「不启用」时清空绑定
+ */
+function handleTtsProviderChange(value: string | number) {
+  if (value === '') {
+    formData.value.ttsModelConfigId = null
+  }
+}
+
+/** 选中 TTS 模型的提供商（据此显隐音色覆盖下拉，并区分固定列表 vs 动态拉取） */
+const selectedTtsProvider = computed(() => {
+  const id = formData.value.ttsModelConfigId
+  if (!id) return null
+  const model = ttsModels.value.find(m => String(m.id) === String(id))
+  if (!model) return null
+  return modelProviders.value.find(p => String(p.id) === String(model.providerId)) || null
+})
+const selectedTtsIsDashScope = computed(() => selectedTtsProvider.value?.type === 'DASH_SCOPE')
+const selectedTtsIsOpenAi = computed(() => selectedTtsProvider.value?.type === 'OPEN_AI')
+const selectedTtsBaseUrl = computed(() => selectedTtsProvider.value?.baseUrl || '')
+
+/**
+ * agent 级音色覆盖（写入 ttsParamsOverride.voice，扁平结构）。
+ * 空串=不覆盖（跟随模型默认音色），存 {}；否则存 { voice }。
+ */
+const ttsVoiceOverride = computed<string>({
+  get: () => {
+    const ov = formData.value.ttsParamsOverride
+    return ov && typeof ov.voice === 'string' ? ov.voice : ''
+  },
+  set: (v: string) => {
+    const voice = (v || '').trim()
+    formData.value = { ...formData.value, ttsParamsOverride: voice ? { voice } : {} }
+  }
 })
 
 /**
@@ -110,7 +250,7 @@ const currentPrompts = computed(() => {
  */
 const rules = {
   modelConfigId: [
-    { required: true, message: '请选择模型配置', trigger: 'blur' }
+    { required: true, message: '请选择对话生成模型', trigger: 'blur' }
   ],
   systemPromptTemplateId: [
     { required: true, message: '请选择系统提示词模板', trigger: 'blur' }
@@ -157,52 +297,51 @@ async function loadAllPrompts() {
 /**
  * 处理模型选择
  */
-async function handleModelChange(modelId: string) {
+function handleModelChange(modelId: string) {
   formData.value.modelConfigId = modelId
 
-  if (showModelParamsOverride.value) {
-    await loadModelParams(modelId)
+  // 新默认若在额外候选里则移除（默认模型天然是候选，避免关联表重复存）；
+  // 参数覆盖的重灌由 ModelParamsOverrideForm 监听 modelId 变化自理
+  if (formData.value.models?.some(id => String(id) === String(modelId))) {
+    formData.value.models = formData.value.models.filter(id => String(id) !== String(modelId))
   }
 }
 
-/**
- * 加载模型参数
- */
-async function loadModelParams(modelId: string) {
-  const response = await modelApi.configDetail(modelId)
-  const model = response.data.data
-
-  const ec = model.extendConfig as ExtendConfigData | null | undefined
-  const extendConfig = ec && typeof ec === 'object'
-    ? { headers: ec.headers || {}, queryParams: ec.queryParams || {}, bodyParams: ec.bodyParams || {}, fixedSystemMessage: ec.fixedSystemMessage ?? false }
-    : null
-
-  modelParamsForm.value = {
-    streaming: model.streaming,
-    temperature: model.temperature,
-    topP: model.topP,
-    topK: model.topK,
-    maxTokens: model.maxTokens,
-    repeatPenalty: model.repeatPenalty,
-    seed: model.seed,
-    extendConfig
-  }
-
-  formData.value.modelParamsOverride = { ...modelParamsForm.value }
+/** 目标模型的供应商类型（组件内 OPEN_AI 才显示固定系统消息项） */
+function providerTypeOf(modelId: string | null | undefined): string | null {
+  if (!modelId) return null
+  const model = allModels.value.find(m => String(m.id) === String(modelId))
+  if (!model) return null
+  const provider = modelProviders.value.find(p => String(p.id) === String(model.providerId))
+  return provider?.type ?? null
 }
 
-/**
- * 处理覆盖模型参数开关
- */
-function handleOverrideToggle(checked: boolean) {
-  showModelParamsOverride.value = checked
-  if (checked && formData.value.modelConfigId) {
-    loadModelParams(formData.value.modelConfigId)
-  } else {
-    formData.value.modelParamsOverride = {}
-    modelParamsForm.value = {}
-  }
+/** 候选模型显示名（参数覆盖块标题用） */
+function modelNameOf(modelId: string): string {
+  return allModels.value.find(m => String(m.id) === String(modelId))?.name || modelId
 }
+
+// 候选取消勾选时清掉它的参数覆盖（孤儿键不落库）
+watch(() => formData.value.models, (ids) => {
+  const map = formData.value.modelsParamsOverride
+  if (!map) return
+  const keep = new Set((ids || []).map(String))
+  Object.keys(map).forEach(k => {
+    if (!keep.has(k)) {
+      delete map[k]
+    }
+  })
+})
+
+/** 额外候选模型的分组选项（按供应商分组；默认模型置灰防重复勾选） */
+const candidateModelGroups = computed(() =>
+  modelProviders.value
+    .map(p => ({
+      label: p.name,
+      models: llmModels.value.filter(m => String(m.providerId) === String(p.id))
+    }))
+    .filter(g => g.models.length > 0)
+)
 
 /**
  * 处理提示词模板选择
@@ -225,36 +364,6 @@ function handleFollowTemplateToggle(checked: boolean) {
     handlePromptChange(formData.value.systemPromptTemplateId)
   }
 }
-
-/**
- * 是否显示固定系统消息配置（仅 OpenAI 供应商）
- */
-const showFixedSystemMessage = computed(() => {
-  if (!formData.value.modelConfigId) return false
-  const model = allModels.value.find(m => String(m.id) === String(formData.value.modelConfigId))
-  if (!model) return false
-  const provider = modelProviders.value.find(p => String(p.id) === String(model.providerId))
-  return provider?.type === 'OPEN_AI'
-})
-
-/**
- * 扩展配置（用于 v-model 绑定）
- */
-const extendConfigForm = computed({
-  get: () => (modelParamsForm.value.extendConfig as ExtendConfigData) || null,
-  set: (v: ExtendConfigData | null) => {
-    modelParamsForm.value = { ...modelParamsForm.value, extendConfig: v }
-  }
-})
-
-/**
- * 更新模型参数
- */
-watch(modelParamsForm, (newVal) => {
-  if (showModelParamsOverride.value) {
-    formData.value.modelParamsOverride = { ...newVal }
-  }
-}, { deep: true })
 
 /**
  * 验证表单
@@ -288,17 +397,6 @@ onMounted(() => {
     }
   }
 
-  if (formData.value.modelParamsOverride && Object.keys(formData.value.modelParamsOverride).length > 0) {
-    showModelParamsOverride.value = true
-    const override = formData.value.modelParamsOverride
-    const ec = override.extendConfig as ExtendConfigData | null | undefined
-    modelParamsForm.value = {
-      ...override,
-      extendConfig: ec && typeof ec === 'object'
-        ? { headers: ec.headers || {}, queryParams: ec.queryParams || {}, bodyParams: ec.bodyParams || {}, fixedSystemMessage: ec.fixedSystemMessage ?? false }
-        : null
-    }
-  }
 })
 
 defineExpose({
@@ -309,7 +407,7 @@ defineExpose({
 <template>
   <ApboaSpin :spinning="loading">
     <AForm ref="formRef" :model="formData" :rules="rules" layout="vertical">
-      <AFormItem label="模型配置" name="modelConfigId" required>
+      <AFormItem label="对话生成模型" name="modelConfigId" required>
         <template v-if="providerOptions?.length > 0">
           <div class="mb-md">
             <ASegmented
@@ -349,92 +447,124 @@ defineExpose({
         </template>
       </AFormItem>
 
-      <AFormItem label="覆盖模型参数" v-if="formData.modelConfigId">
-        <ASwitch
-          :checked="showModelParamsOverride"
-          @change="handleOverrideToggle"
-        />
+      <AFormItem name="models" v-if="llmModels.length > 1">
+        <template #label>
+          额外候选模型
+          <span class="text-placeholder text-xs" style="margin-left: 8px;">对话页可切换；默认模型始终是候选，无需重复勾选</span>
+        </template>
+        <ASelect
+          v-model:value="formData.models"
+          mode="multiple"
+          placeholder="不选 = 仅默认模型，对话页不出现切换入口"
+          allow-clear
+          style="width: 100%"
+        >
+          <ASelectOptGroup v-for="g in candidateModelGroups" :key="g.label" :label="g.label">
+            <ASelectOption
+              v-for="m in g.models"
+              :key="m.id"
+              :value="m.id"
+              :disabled="String(m.id) === String(formData.modelConfigId)"
+            >
+              {{ m.name }}
+            </ASelectOption>
+          </ASelectOptGroup>
+        </ASelect>
       </AFormItem>
 
-      <div v-if="formData.modelConfigId && showModelParamsOverride" class="params-override-section">
-        <ARow :gutter="16" :key="showModelParamsOverride">
-          <ACol :span="6">
-            <AFormItem label="Temperature">
-              <AInputNumber
-                v-model:value="modelParamsForm.temperature"
-                :min="0"
-                :max="2"
-                :step="0.1"
-                style="width: 100%"
-              />
-            </AFormItem>
-          </ACol>
-          <ACol :span="6">
-            <AFormItem label="Top P">
-              <AInputNumber
-                v-model:value="modelParamsForm.topP"
-                :min="0"
-                :max="1"
-                :step="0.1"
-                style="width: 100%"
-              />
-            </AFormItem>
-          </ACol>
-          <ACol :span="6">
-            <AFormItem label="Top K">
-              <AInputNumber
-                v-model:value="modelParamsForm.topK"
-                :min="0"
-                :max="100"
-                style="width: 100%"
-              />
-            </AFormItem>
-          </ACol>
-          <ACol :span="6">
-            <AFormItem label="Max Tokens">
-              <AInputNumber
-                v-model:value="modelParamsForm.maxTokens"
-                :min="1"
-                :max="1000000"
-                style="width: 100%"
-              />
-            </AFormItem>
-          </ACol>
-          <ACol :span="6">
-            <AFormItem label="Repeat Penalty">
-              <AInputNumber
-                v-model:value="modelParamsForm.repeatPenalty"
-                :min="0"
-                :max="2"
-                :step="0.1"
-                style="width: 100%"
-              />
-            </AFormItem>
-          </ACol>
-          <ACol :span="6">
-            <AFormItem label="随机种子 (Seed)" name="seed">
-              <AInputNumber
-                v-model:value="modelParamsForm.seed"
-                style="width: 100%"
-                placeholder="请输入随机种子，留空表示随机" />
-            </AFormItem>
-          </ACol>
-          <ACol :span="6">
-            <AFormItem label="Streaming">
-              <ASwitch v-model:checked="modelParamsForm.streaming" />
-            </AFormItem>
+      <ModelParamsOverrideForm
+        v-if="formData.modelConfigId"
+        v-model="formData.modelParamsOverride"
+        :model-id="formData.modelConfigId"
+        :provider-type="providerTypeOf(formData.modelConfigId)"
+        label="覆盖模型参数"
+      />
+
+      <template v-if="formData.models?.length">
+        <ModelParamsOverrideForm
+          v-for="mid in formData.models"
+          :key="mid"
+          v-model="formData.modelsParamsOverride[mid]"
+          :model-id="mid"
+          :provider-type="providerTypeOf(mid)"
+          :label="`覆盖参数 · ${modelNameOf(mid)}`"
+        />
+      </template>
+
+      <AFormItem label="语音识别模型">
+        <div class="mb-md">
+          <ASegmented
+            v-model:value="asrSelectedProviderKey"
+            :options="asrProviderOptions"
+            style="margin-bottom: 12px; background-color: var(--color-bg)"
+            @change="handleAsrProviderChange"
+          />
+        </div>
+        <ARadioGroup v-if="asrSelectedProviderKey" v-model:value="formData.asrModelConfigId" style="width: 100%">
+          <div class="model-grid" v-if="currentAsrModels?.length > 0">
+            <ARadio
+              v-for="model in currentAsrModels"
+              :key="model.id"
+              :value="model.id"
+              class="model-radio"
+            >
+              <div class="model-info">
+                <div class="model-name">{{ model.name }}</div>
+                <div class="model-desc text-placeholder text-xs">{{ model.description }}</div>
+              </div>
+            </ARadio>
+          </div>
+          <div v-else class="text-placeholder mt-xs">该供应商下暂无语音识别模型</div>
+        </ARadioGroup>
+        <div v-else class="text-placeholder text-xs mt-xs">
+          不启用语音输入；在模型配置中创建「语音识别」用途的模型后可在此绑定
+        </div>
+      </AFormItem>
+
+      <AFormItem label="语音合成模型">
+        <div class="mb-md">
+          <ASegmented
+            v-model:value="ttsSelectedProviderKey"
+            :options="ttsProviderOptions"
+            style="margin-bottom: 12px; background-color: var(--color-bg)"
+            @change="handleTtsProviderChange"
+          />
+        </div>
+        <ARadioGroup v-if="ttsSelectedProviderKey" v-model:value="formData.ttsModelConfigId" style="width: 100%">
+          <div class="model-grid" v-if="currentTtsModels?.length > 0">
+            <ARadio
+              v-for="model in currentTtsModels"
+              :key="model.id"
+              :value="model.id"
+              class="model-radio"
+            >
+              <div class="model-info">
+                <div class="model-name">{{ model.name }}</div>
+                <div class="model-desc text-placeholder text-xs">{{ model.description }}</div>
+              </div>
+            </ARadio>
+          </div>
+          <div v-else class="text-placeholder mt-xs">该供应商下暂无语音合成模型</div>
+        </ARadioGroup>
+        <div v-else class="text-placeholder text-xs mt-xs">
+          不启用语音播报；在模型配置中创建「语音合成」用途的模型后可在此绑定
+        </div>
+      </AFormItem>
+
+      <AFormItem v-if="selectedTtsIsDashScope || selectedTtsIsOpenAi" label="音色">
+        <ARow :gutter="16">
+          <ACol :span="8">
+            <TtsVoiceSelect
+              v-model="ttsVoiceOverride"
+              empty-option-label="跟随模型默认音色"
+              :remote-base-url="selectedTtsIsOpenAi ? selectedTtsBaseUrl : undefined"
+            />
           </ACol>
         </ARow>
-        <div class="extend-config-wrapper">
-          <AFormItem label="扩展配置">
-            <ExtendConfigEditor
-              v-model="extendConfigForm"
-              compact
-              :show-fixed-system-message="showFixedSystemMessage"
-            />
-          </AFormItem>
+        <div class="text-placeholder text-xs mt-xs">
+          仅覆盖该智能体的播报音色；选「跟随模型默认音色」则用所选语音合成模型的默认音色。
         </div>
-      </div>
+      </AFormItem>
 
       <AFormItem label="系统提示词模板" name="systemPromptTemplateId" required>
         <template v-if="promptCategoryOptions?.length > 0">
@@ -535,16 +665,4 @@ defineExpose({
   }
 }
 
-.params-override-section {
-  padding: var(--spacing-md);
-  background-color: var(--color-bg-light);
-  border-radius: var(--border-radius-md);
-  margin-bottom: var(--spacing-md);
-
-  .extend-config-wrapper {
-    margin-top: var(--spacing-md);
-    padding-top: var(--spacing-md);
-    border-top: 1px solid var(--color-border-light);
-  }
-}
 </style>

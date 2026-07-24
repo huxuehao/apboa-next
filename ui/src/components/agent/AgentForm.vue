@@ -12,7 +12,7 @@ import AgentFormModel from './AgentFormModel.vue'
 import AgentFormTools from './AgentFormTools.vue'
 import AgentFormKnowledge from './AgentFormKnowledge.vue'
 import AgentFormAdvanced from './AgentFormAdvanced.vue'
-import type { AgentDefinitionVO } from '@/types'
+import type { AgentDefinitionVO, CommonQuestion } from '@/types'
 import { ToolChoiceStrategy } from '@/types'
 import * as agentApi from '@/api/agent'
 import { useAccountStore } from '@/stores'
@@ -53,11 +53,19 @@ const formData = ref({
     name: '',
     agentCode: '',
     description: '',
-    tag: ''
+    tag: '',
+    avatar: null as string | null,
+    commonQuestions: [] as CommonQuestion[],
+    commonQuestionsPinned: true
   },
   model: {
     modelConfigId: '',
+    models: [] as string[],
+    modelsParamsOverride: {} as Record<string, Record<string, unknown> | null>,
+    asrModelConfigId: null as string | null,
+    ttsModelConfigId: null as string | null,
     modelParamsOverride: null as Record<string, unknown> | null,
+    ttsParamsOverride: null as Record<string, unknown> | null,
     systemPromptTemplateId: '',
     followTemplate: true,
     systemPrompt: ''
@@ -81,6 +89,7 @@ const formData = ref({
   advanced: {
     enablePlanning: false,
     maxIterations: 50,
+    monthlyBudget: null as number | null,
     maxSubtasks: 10,
     requirePlanConfirmation: false,
     enableMemory: true,
@@ -95,6 +104,38 @@ const formData = ref({
     longTermMemoryConfigId: null as string | null
   }
 })
+
+// ========== 头像（独立接口，随保存串行提交） ==========
+// 注意：声明在所有可能调用 loadAvatar 的 watch 之前，避免 TDZ ReferenceError
+
+/** 头像基线：与当前值一致时保存不发头像请求 */
+const avatarBaseline = ref<string | null>(null)
+
+/**
+ * 编辑模式：异步加载头像回填表单与基线
+ */
+function loadAvatar(id: string) {
+  avatarBaseline.value = null
+  agentApi.getAvatar(id).then(res => {
+    const v = res.data?.data || null
+    formData.value.basic.avatar = v
+    avatarBaseline.value = v
+  }).catch(() => {})
+}
+
+/**
+ * 头像相对基线有变更时提交（失败不影响主流程，单独提示）
+ */
+async function syncAvatarIfChanged(id: string) {
+  const current = formData.value.basic.avatar ?? null
+  if (current === avatarBaseline.value) return
+  try {
+    await agentApi.updateAvatar(id, current)
+    avatarBaseline.value = current
+  } catch {
+    message.warning('头像保存失败，可稍后在配置页重新上传')
+  }
+}
 
 /**
  * 步骤配置
@@ -144,11 +185,20 @@ watch(
           name: props.data.name,
           agentCode: props.data.agentCode,
           description: props.data.description,
-          tag: props.data.tag || ''
+          tag: props.data.tag || '',
+          avatar: null,
+          commonQuestions: props.data.commonQuestions || [],
+          commonQuestionsPinned: props.data.commonQuestionsPinned !== false
         }
+        loadAvatar(String(props.data.id))
         formData.value.model = {
           modelConfigId: props.data.modelConfigId,
+          models: (props.data.models || []).map(String),
+          modelsParamsOverride: (props.data.modelsParamsOverride || {}) as Record<string, Record<string, unknown> | null>,
+          asrModelConfigId: props.data.asrModelConfigId || null,
+          ttsModelConfigId: props.data.ttsModelConfigId || null,
           modelParamsOverride: props.data.modelParamsOverride || null,
+          ttsParamsOverride: props.data.ttsParamsOverride || null,
           systemPromptTemplateId: props.data.systemPromptTemplateId,
           followTemplate: props.data.followTemplate,
           systemPrompt: props.data.systemPrompt
@@ -172,6 +222,7 @@ watch(
         formData.value.advanced = {
           enablePlanning: props.data.enablePlanning,
           maxIterations: props.data.maxIterations || 50,
+          monthlyBudget: props.data.monthlyBudget ?? null,
           maxSubtasks: props.data.maxSubtasks || 10,
           requirePlanConfirmation: props.data.requirePlanConfirmation,
           enableMemory: props.data.enableMemory,
@@ -197,16 +248,25 @@ watch(
  */
 function resetForm() {
   currentStep.value = 0
+  avatarBaseline.value = null
   formData.value = {
     basic: {
       name: '',
       agentCode: '',
       description: '',
-      tag: ''
+      tag: '',
+      avatar: null as string | null,
+      commonQuestions: [] as CommonQuestion[],
+      commonQuestionsPinned: true
     },
     model: {
       modelConfigId: '',
+      models: [],
+      modelsParamsOverride: {},
+      asrModelConfigId: null,
+      ttsModelConfigId: null,
       modelParamsOverride: null,
+      ttsParamsOverride: null,
       systemPromptTemplateId: '',
       followTemplate: true,
       systemPrompt: ''
@@ -230,6 +290,7 @@ function resetForm() {
     advanced: {
       enablePlanning: false,
       maxIterations: 50,
+      monthlyBudget: null,
       maxSubtasks: 10,
       requirePlanConfirmation: false,
       enableMemory: true,
@@ -293,8 +354,16 @@ async function handleSubmit() {
       agentCode: formData.value.basic.agentCode,
       description: formData.value.basic.description,
       tag: formData.value.basic.tag || '',
+      // 始终传数组（清空时传 []），null 会被 updateById 的非空策略跳过导致清不掉旧配置
+      commonQuestions: formData.value.basic.commonQuestions || [],
+      commonQuestionsPinned: formData.value.basic.commonQuestionsPinned !== false,
       modelConfigId: formData.value.model.modelConfigId,
+      models: formData.value.model.models || [],
+      modelsParamsOverride: formData.value.model.modelsParamsOverride || {},
+      asrModelConfigId: formData.value.model.asrModelConfigId || null,
+      ttsModelConfigId: formData.value.model.ttsModelConfigId || null,
       modelParamsOverride: formData.value.model.modelParamsOverride,
+      ttsParamsOverride: formData.value.model.ttsParamsOverride,
       systemPromptTemplateId: formData.value.model.systemPromptTemplateId,
       followTemplate: formData.value.model.followTemplate,
       systemPrompt: formData.value.model.systemPrompt,
@@ -312,6 +381,7 @@ async function handleSubmit() {
       hook: formData.value.tools.hook,
       enablePlanning: formData.value.advanced.enablePlanning,
       maxIterations: formData.value.advanced.maxIterations,
+      monthlyBudget: formData.value.advanced.monthlyBudget,
       maxSubtasks: formData.value.advanced.maxSubtasks,
       requirePlanConfirmation: formData.value.advanced.requirePlanConfirmation && formData.value.advanced.enableMemory,
       showToolProcess: formData.value.advanced.showToolProcess,
@@ -333,9 +403,13 @@ async function handleSubmit() {
       vo.id = props.data.id
       vo.enabled = props.data.enabled
       await agentApi.update(vo as AgentDefinitionVO)
+      await syncAvatarIfChanged(String(props.data.id))
       message.success('更新成功')
     } else {
-      await agentApi.save(vo as AgentDefinitionVO)
+      const res = await agentApi.save(vo as AgentDefinitionVO)
+      // 新建后串行保存头像：save 返回回填了 id 的 VO
+      const newId = res.data?.data?.id
+      if (newId) await syncAvatarIfChanged(String(newId))
       message.success('创建成功')
     }
 

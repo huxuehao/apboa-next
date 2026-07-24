@@ -27,6 +27,8 @@ public class McpServerVO implements SerializableEnable {
     private Integer timeout;
     private JsonNode protocolConfig;
     private String description;
+    /** 身份断言 audience（空则该 MCP 不注入断言） */
+    private String audience;
     private HealthStatus healthStatus;
     private LocalDateTime lastHealthCheck;
     private McpActivationStatus activationStatus;
@@ -38,6 +40,7 @@ public class McpServerVO implements SerializableEnable {
     private Integer toolCount;
     private Integer availableToolCount;
     private Integer runtimeFailThreshold;
+    private Integer idleTimeoutMs;
     private Boolean needsSync;
     private Boolean enabled;
     private LocalDateTime createdAt;

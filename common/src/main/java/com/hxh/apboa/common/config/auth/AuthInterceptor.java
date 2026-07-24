@@ -159,13 +159,24 @@ public class AuthInterceptor implements HandlerInterceptor {
             return false;
         }
 
-        // 验证是否是APBOA-CHAT-KEY-TOKEN
-        if (!validateChatKeyAccess(claims, handlerMethod, response)) {
-            return false;
+        UserDetail userDetail = JsonUtils.parse(claims.getSubject(), UserDetail.class);
+
+        // chatKey 判定：只认签发时烙进 token 的 authChannel（此前依赖 30 天过期的
+        // chatkey: Redis 缓存判定，过期即失效；改烙印后无此问题。烙印前发出的
+        // 旧 chatKey token 会被当普通登录 token——按无外部接入方处理，不做兼容）
+        boolean isChatKeyToken = SysConst.CHANNEL_CHAT_KEY.equals(userDetail.getAuthChannel());
+        if (isChatKeyToken) {
+            if (!isChatKeyAccessAllowed(handlerMethod)) {
+                sendErrorResponse(response, UNAUTHORIZED_STATUS, UNAUTHORIZED_STATUS, "该接口不支持ChatKey访问");
+                return false;
+            }
+            request.setAttribute(SysConst.AUTH_CHANNEL, SysConst.CHANNEL_CHAT_KEY);
+        } else {
+            // 常规登录：渠道为网页（成本流水归因）
+            request.setAttribute(SysConst.AUTH_CHANNEL, SysConst.CHANNEL_WEB);
         }
 
         // 将用户信息存储到请求中供后续使用
-        UserDetail userDetail = JsonUtils.parse(claims.getSubject(), UserDetail.class);
         request.setAttribute(SysConst.USER_DETAIL, userDetail);
 
         // 设置租户上下文
@@ -176,34 +187,6 @@ public class AuthInterceptor implements HandlerInterceptor {
         // 检查接口权限
         if (!checkRoleNeed(handlerMethod, userDetail)) {
             sendErrorResponse(response, OK_STATUS, UNAUTHORIZED_STATUS, "无权进行此操作");
-            return false;
-        }
-
-        return true;
-    }
-
-    /**
-     * 验证ChatKey访问权限
-     *
-     * @param claims        JWT claims
-     * @param handlerMethod 处理方法
-     * @param response      HTTP响应
-     * @return 是否允许访问
-     */
-    private boolean validateChatKeyAccess(Claims claims, HandlerMethod handlerMethod, HttpServletResponse response) {
-        String id = claims.getId();
-        if (id == null) {
-            return true;
-        }
-
-        String agentCode = redisUtils.get(RedisKeyBuilder.globalKey("chatkey:" + id));
-        if (agentCode == null) {
-            return true;
-        }
-
-        // 是ChatKey token，检查接口是否允许ChatKey访问
-        if (!isChatKeyAccessAllowed(handlerMethod)) {
-            sendErrorResponse(response, UNAUTHORIZED_STATUS, UNAUTHORIZED_STATUS, "该接口不支持ChatKey访问");
             return false;
         }
 
@@ -246,6 +229,8 @@ public class AuthInterceptor implements HandlerInterceptor {
             // 将用户信息存储到请求中供后续使用
             UserDetail userDetail = JsonUtils.parse(claims.getSubject(), UserDetail.class);
             request.setAttribute(SysConst.USER_DETAIL, userDetail);
+            // API 密钥渠道标记（成本流水归因）
+            request.setAttribute(SysConst.AUTH_CHANNEL, SysConst.CHANNEL_SK_API);
 
             // 设置租户上下文
             if (userDetail.getTenantId() != null) {

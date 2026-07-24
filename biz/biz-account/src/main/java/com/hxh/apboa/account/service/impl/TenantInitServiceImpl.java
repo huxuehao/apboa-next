@@ -6,10 +6,12 @@ import com.hxh.apboa.account.service.TenantInitService;
 import com.hxh.apboa.common.entity.*;
 import com.hxh.apboa.common.enums.HookType;
 import com.hxh.apboa.common.enums.ScopeType;
+import com.hxh.apboa.common.enums.SkillType;
 import com.hxh.apboa.common.enums.ToolType;
 import com.hxh.apboa.common.util.TenantUtils;
 import com.hxh.apboa.hook.mapper.HookConfigMapper;
 import com.hxh.apboa.params.mapper.ParamsMapper;
+import com.hxh.apboa.skill.mapper.SkillPackageMapper;
 import com.hxh.apboa.tool.mapper.ToolMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -35,6 +37,7 @@ public class TenantInitServiceImpl implements TenantInitService {
     private final ParamsMapper paramsMapper;
     private final ToolMapper toolMapper;
     private final HookConfigMapper hookConfigMapper;
+    private final SkillPackageMapper skillPackageMapper;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -47,6 +50,7 @@ public class TenantInitServiceImpl implements TenantInitService {
             copyParams(newTenantId);
             copyToolConfigs(newTenantId);
             copyHookConfigs(newTenantId);
+            copySkillPackages(newTenantId);
 
             log.info("租户 {} 种子数据初始化完成", newTenantId);
         } finally {
@@ -123,5 +127,29 @@ public class TenantInitServiceImpl implements TenantInitService {
             hookConfigMapper.insert(copy);
         }
         log.info("复制了 {} 个 Hook Config", sourceList.size());
+    }
+
+    private void copySkillPackages(Long newTenantId) {
+        List<SkillPackage> sourceList = skillPackageMapper.selectList(
+                Wrappers.<SkillPackage>lambdaQuery()
+                        .eq(SkillPackage::getTenantId, DEFAULT_TENANT_ID)
+                        .eq(SkillPackage::getSkillType, SkillType.BUILTIN)
+                        .eq(SkillPackage::getScopeType, ScopeType.GLOBAL));
+        if (sourceList.isEmpty()) {
+            log.warn("未找到默认租户的全局内置技能包，跳过");
+            return;
+        }
+        for (SkillPackage src : sourceList) {
+            SkillPackage copy = new SkillPackage();
+            BeanUtils.copyProperties(src, copy);
+            copy.setId(IdWorker.getId());
+            copy.setTenantId(newTenantId);
+            copy.setCreatedAt(null);
+            copy.setUpdatedAt(null);
+            copy.setCreatedBy(null);
+            copy.setUpdatedBy(null);
+            skillPackageMapper.insert(copy);
+        }
+        log.info("复制了 {} 个内置技能包", sourceList.size());
     }
 }

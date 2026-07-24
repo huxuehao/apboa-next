@@ -55,6 +55,14 @@ public class AgentWorkflowServiceImpl extends ServiceImpl<AgentWorkflowMapper, A
     }
 
     @Override
+    public Boolean deleteByWorkflowIds(List<Long> workflowIds) {
+        if (workflowIds == null || workflowIds.isEmpty()) {
+            return true;
+        }
+        return lambdaUpdate().in(AgentWorkflow::getWorkflowId, workflowIds).remove();
+    }
+
+    @Override
     public Boolean saveAgentWorkflow(Long agentDefinitionId, List<Long> workflowIds) {
         deleteAgentWorkflow(List.of(agentDefinitionId));
         insertAgentWorkflow(agentDefinitionId, workflowIds);

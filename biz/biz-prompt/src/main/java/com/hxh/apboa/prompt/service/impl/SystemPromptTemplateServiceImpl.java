@@ -12,6 +12,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -52,10 +53,16 @@ public class SystemPromptTemplateServiceImpl extends ServiceImpl<SystemPromptTem
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public boolean deleteByIds(List<Long> ids) {
         // 删除前先获取关联的智能体ID，以便后续触发重新注册
         List<Long> agentIds = getAgentDefinitions(ids).stream().map(AgentDefinition::getId).toList();
         boolean result = removeByIds(ids);
+        // 置空 agent_definition 直连引用列,否则列值悬空,detail 拿已删 id 查详情报"不存在"
+        // (置空后 agent 回落自身 system_prompt 文本;ids 为 Long 列表,拼接无注入风险)
+        String idList = ids.stream().map(String::valueOf).collect(Collectors.joining(","));
+        jdbcTemplate.update("UPDATE " + TableConst.AGENT
+                + " SET system_prompt_template_id = NULL WHERE system_prompt_template_id IN (" + idList + ")");
         publishAgentReregister(agentIds);
         return result;
     }

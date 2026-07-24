@@ -21,6 +21,7 @@ import type {
   ModelConfigVO,
   ModelProviderVO,
   SkillPackageVO,
+  ToolChoiceStrategy,
   ToolVO,
 } from '@/types'
 import { McpToolExposureMode } from '@/types'
@@ -45,6 +46,10 @@ interface AgentModelParamsOverride {
 
 interface AgentNodeConfig {
   modelConfigId?: string
+  /** null/undefined 表示跟随模型配置。 */
+  streaming?: boolean
+  /** null/undefined 表示跟随模型配置。 */
+  thinking?: boolean
   modelParamsOverrideEnabled?: boolean
   modelParamsOverride?: AgentModelParamsOverride
   formatterType?: 'STRING' | 'VELOCITY'
@@ -53,6 +58,7 @@ interface AgentNodeConfig {
   skillPackageIds?: string[]
   toolIds?: string[]
   mcps?: AgentNodeMcpConfig[]
+  toolChoiceStrategy?: ToolChoiceStrategy
   maxIterations?: number
   structuredOutputEnabled?: boolean
   structuredOutput?: Record<string, unknown>
@@ -89,16 +95,40 @@ const formatterOptions = [
   { label: 'Velocity', value: 'VELOCITY' },
 ]
 
+const toolChoiceOptions = [
+  { label: '自动选择工具', value: 'AUTO' },
+  { label: '禁止调用工具', value: 'NONE' },
+]
+
 const mcpBindings = computed(() =>
   (Array.isArray(config.value.mcps) ? config.value.mcps : []).map((item) => ({ mcpServerId: String(item.mcpServerId) })),
 )
 
-const showFixedSystemMessage = computed(() => {
-  const model = allModels.value.find((item) => String(item.id) === String(config.value.modelConfigId || ''))
-  if (!model) return false
-  const provider = modelProviders.value.find((item) => String(item.id) === String(model.providerId))
-  return String(provider?.type || '') === 'OPEN_AI'
+const selectedModel = computed(() =>
+  allModels.value.find((item) => String(item.id) === String(config.value.modelConfigId || '')),
+)
+
+const selectedProviderType = computed(() => {
+  const providerId = selectedModel.value?.providerId
+  const provider = modelProviders.value.find((item) => String(item.id) === String(providerId || ''))
+  return String(provider?.type || '')
 })
+
+const showFixedSystemMessage = computed(() => selectedProviderType.value === 'OPEN_AI')
+
+const thinkingSwitchSupported = computed(() =>
+  selectedModel.value?.thinking === true
+  && ['DASH_SCOPE', 'OPEN_AI'].includes(selectedProviderType.value),
+)
+
+const streamingEnabled = computed(() =>
+  config.value.streaming ?? selectedModel.value?.streaming ?? false,
+)
+
+const thinkingEnabled = computed(() =>
+  thinkingSwitchSupported.value
+  && (config.value.thinking ?? selectedModel.value?.thinking ?? false),
+)
 
 const extendConfigForm = computed({
   get: () => (modelParamsForm.value.extendConfig as ExtendConfigData) || null,
@@ -213,7 +243,7 @@ async function handleOverrideToggle(checked: boolean) {
   }
 }
 
-function handleMcpBindingsChange(bindings: string | McpBinding[] | null) {
+function handleMcpBindingsChange(bindings: McpBinding[] | string | null) {
   const list = Array.isArray(bindings) ? bindings : []
   updateConfig('mcps', list.map((b) => ({
     mcpServerId: b.mcpServerId,
@@ -294,213 +324,246 @@ onMounted(async () => {
       <LoadingOutlined style="margin-right: 6px" />加载中
     </div>
     <AForm layout="vertical">
-      <PanelSection title="节点名称">
-        <NodeNameInput
-          :model-value="node.data.label"
-          @update:model-value="(value: any) => updateNode({ label: value })"
+        <PanelSection title="节点名称">
+          <NodeNameInput
+            :model-value="node.data.label"
+            @update:model-value="(value: any) => updateNode({ label: value })"
+          />
+        </PanelSection>
+
+        <InputBindingSection
+          :model-value="node.data.inputConfigs"
+          :nodes="nodes"
+          :edges="edges"
+          :current-node-id="node.id"
+          @update:model-value="(value: any) => updateNode({ inputConfigs: value })"
         />
-      </PanelSection>
 
-      <InputBindingSection
-        :model-value="node.data.inputConfigs"
-        :nodes="nodes"
-        :edges="edges"
-        :current-node-id="node.id"
-        @update:model-value="(value: any) => updateNode({ inputConfigs: value })"
-      />
+        <PanelSection title="模型">
+          <AFormItem label="模型配置" required>
+            <template v-if="allModels.length > 0">
+              <ModelConfigSelector
+                :model-value="String(config.modelConfigId || '')"
+                :providers="modelProviders"
+                :models="allModels"
+                @update:model-value="(value: string) => handleModelChange(value)"
+                @clear="handleModelClear"
+              />
+            </template>
+            <div v-else class="empty-action">
+              <AButton type="text">未配置模型</AButton>
+              <AButton type="link" :href="`/#/${RoutePaths.MODEL}`" target="_blank">去配置</AButton>
+              <AButton type="link" @click="loadModelProviders(); loadAllModels()">刷新</AButton>
+            </div>
+          </AFormItem>
 
-      <PanelSection title="模型">
-        <AFormItem label="模型配置" required>
-          <template v-if="allModels.length > 0">
-            <ModelConfigSelector
-              :model-value="String(config.modelConfigId || '')"
-              :providers="modelProviders"
-              :models="allModels"
-              @update:model-value="(value: string) => handleModelChange(value)"
-              @clear="handleModelClear"
+          <div class="switch-row">
+            <span class="switch-label">启用参数覆盖</span>
+            <ASwitch
+              :checked="Boolean(config.modelParamsOverrideEnabled)"
+              :disabled="!config.modelConfigId"
+              @update:checked="(value: any) => handleOverrideToggle(Boolean(value))"
             />
-          </template>
-          <div v-else class="empty-action">
-            <AButton type="text">未配置模型</AButton>
-            <AButton type="link" :href="`/#/${RoutePaths.MODEL}`" target="_blank">去配置</AButton>
-            <AButton type="link" @click="loadModelProviders(); loadAllModels()">刷新</AButton>
           </div>
-        </AFormItem>
 
-        <div class="switch-row">
-          <span class="switch-label">启用参数覆盖</span>
-          <ASwitch
-            :checked="Boolean(config.modelParamsOverrideEnabled)"
-            :disabled="!config.modelConfigId"
-            @update:checked="(value: any) => handleOverrideToggle(Boolean(value))"
-          />
-        </div>
-
-        <div v-if="config.modelParamsOverrideEnabled" class="params-grid">
-          <AFormItem label="Temperature">
-            <AInputNumber v-model:value="modelParamsForm.temperature" :min="0" :max="2" :step="0.1" />
-          </AFormItem>
-          <AFormItem label="Top P">
-            <AInputNumber v-model:value="modelParamsForm.topP" :min="0" :max="1" :step="0.1" />
-          </AFormItem>
-          <AFormItem label="Top K">
-            <AInputNumber v-model:value="modelParamsForm.topK" :min="0" :max="100" />
-          </AFormItem>
-          <AFormItem label="Max Tokens">
-            <AInputNumber v-model:value="modelParamsForm.maxTokens" :min="1" :max="1000000" />
-          </AFormItem>
-          <AFormItem label="Repeat Penalty">
-            <AInputNumber v-model:value="modelParamsForm.repeatPenalty" :min="0" :max="2" :step="0.1" />
-          </AFormItem>
-          <AFormItem label="Seed">
-            <AInput v-model:value="modelParamsForm.seed" placeholder="留空表示随机" />
-          </AFormItem>
-        </div>
-
-        <div v-if="config.modelParamsOverrideEnabled" class="extend-config">
-          <AFormItem label="扩展配置">
-            <ExtendConfigEditor
-              v-model="extendConfigForm"
-              compact
-              :show-fixed-system-message="showFixedSystemMessage"
+          <div class="switch-row">
+            <span class="switch-label">流式输出</span>
+            <ASwitch
+              :checked="streamingEnabled"
+              :disabled="!config.modelConfigId"
+              @update:checked="(value: any) => updateConfig('streaming', Boolean(value))"
             />
-          </AFormItem>
-        </div>
-      </PanelSection>
+          </div>
 
-      <PanelSection title="提示词">
-        <div class="config-row">
-          <span class="config-row-label">提示词模板</span>
-          <div class="formatter-selector">
-            <FormatterGuideModal />
+          <div class="switch-row">
+            <span class="switch-label">思考模式</span>
+            <ATooltip :title="config.modelConfigId && !thinkingSwitchSupported ? '当前模型未开启思考切换能力' : ''">
+              <span>
+                <ASwitch
+                  :checked="thinkingEnabled"
+                  :disabled="!config.modelConfigId || !thinkingSwitchSupported"
+                  @update:checked="(value: any) => updateConfig('thinking', Boolean(value))"
+                />
+              </span>
+            </ATooltip>
+          </div>
+
+          <div v-if="config.modelParamsOverrideEnabled" class="params-grid">
+            <AFormItem label="Temperature">
+              <AInputNumber v-model:value="modelParamsForm.temperature" :min="0" :max="2" :step="0.1" />
+            </AFormItem>
+            <AFormItem label="Top P">
+              <AInputNumber v-model:value="modelParamsForm.topP" :min="0" :max="1" :step="0.1" />
+            </AFormItem>
+            <AFormItem label="Top K">
+              <AInputNumber v-model:value="modelParamsForm.topK" :min="0" :max="100" />
+            </AFormItem>
+            <AFormItem label="Max Tokens">
+              <AInputNumber v-model:value="modelParamsForm.maxTokens" :min="1" :max="1000000" />
+            </AFormItem>
+            <AFormItem label="Repeat Penalty">
+              <AInputNumber v-model:value="modelParamsForm.repeatPenalty" :min="0" :max="2" :step="0.1" />
+            </AFormItem>
+            <AFormItem label="Seed">
+              <AInput v-model:value="modelParamsForm.seed" placeholder="留空表示随机" />
+            </AFormItem>
+          </div>
+
+          <div v-if="config.modelParamsOverrideEnabled" class="extend-config">
+            <AFormItem label="扩展配置">
+              <ExtendConfigEditor
+                v-model="extendConfigForm"
+                compact
+                :show-fixed-system-message="showFixedSystemMessage"
+              />
+            </AFormItem>
+          </div>
+        </PanelSection>
+
+        <PanelSection title="提示词">
+          <div class="config-row">
+            <span class="config-row-label">提示词模板</span>
+            <div class="formatter-selector">
+              <FormatterGuideModal />
+              <ASelect
+                :value="config.formatterType || 'STRING'"
+                :options="formatterOptions"
+                style="width: 130px"
+                @update:value="(value: any) => updateConfig('formatterType', value)"
+              />
+            </div>
+          </div>
+
+          <div class="editor-field">
+            <div class="editor-label required-field">
+              系统提示词
+            </div>
+            <ConfigCodeEditor
+              :model-value="String(config.systemPrompt || '')"
+              language="txt"
+              placeholder="输入系统提示词，可使用 ${input} 引用输入绑定"
+              :maximize-target="panelRoot"
+              @update:model-value="(value: string) => updateConfig('systemPrompt', value)"
+              @maximize-change="onEditorMaximizeChange"
+            />
+          </div>
+
+          <div class="editor-field">
+            <div class="editor-label required-field">
+              用户提示词
+            </div>
+            <ConfigCodeEditor
+              :model-value="String(config.userPrompt || '')"
+              language="txt"
+              placeholder="输入用户提示词，可使用 ${input} 引用输入绑定"
+              :maximize-target="panelRoot"
+              @update:model-value="(value: string) => updateConfig('userPrompt', value)"
+              @maximize-change="onEditorMaximizeChange"
+            />
+          </div>
+        </PanelSection>
+
+        <PanelSection title="能力选择">
+          <AFormItem label="技能包">
+            <template v-if="allSkills.length > 0">
+              <SkillSelect
+                :model-value="arrayConfig('skillPackageIds')"
+                :skills="allSkills"
+                :categories="skillCategories"
+                @update:model-value="(ids: string[]) => updateConfig('skillPackageIds', ids)"
+              />
+            </template>
+            <div v-else class="empty-action">
+              <AButton type="text">未配置技能包</AButton>
+              <AButton type="link" :href="`/#/${RoutePaths.SKILL}`" target="_blank">去配置</AButton>
+              <AButton type="link" @click="loadSkillCategories(); loadAllSkills()">刷新</AButton>
+            </div>
+          </AFormItem>
+
+          <AFormItem label="工具">
+            <template v-if="allTools.length > 0">
+              <ToolSelect
+                :model-value="arrayConfig('toolIds')"
+                :tools="allTools"
+                :categories="toolCategories"
+                @update:model-value="(ids: string | string[] | null) => updateConfig('toolIds', Array.isArray(ids) ? ids : ids ? [ids] : [])"
+              />
+            </template>
+            <div v-else class="empty-action">
+              <AButton type="text">未配置工具</AButton>
+              <AButton type="link" :href="`/#/${RoutePaths.TOOL}`" target="_blank">去配置</AButton>
+              <AButton type="link" @click="loadToolCategories(); loadAllTools()">刷新</AButton>
+            </div>
+          </AFormItem>
+
+          <AFormItem label="MCP">
+            <template v-if="allMcpServers.length > 0">
+              <McpSelect
+                :model-value="mcpBindings"
+                :servers="allMcpServers"
+                @update:model-value="handleMcpBindingsChange"
+              />
+            </template>
+            <div v-else class="empty-action">
+              <AButton type="text">未配置 MCP 服务</AButton>
+              <AButton type="link" :href="`/#/${RoutePaths.MCP}`" target="_blank">去配置</AButton>
+              <AButton type="link" @click="loadAllMcpServers()">刷新</AButton>
+            </div>
+          </AFormItem>
+
+          <AFormItem label="工具选择策略">
             <ASelect
-              :value="config.formatterType || 'STRING'"
-              :options="formatterOptions"
+              :value="config.toolChoiceStrategy || 'AUTO'"
+              :options="toolChoiceOptions"
+              @update:value="(value: any) => updateConfig('toolChoiceStrategy', value)"
+            />
+            <div v-if="config.toolChoiceStrategy === 'NONE'" class="text-placeholder text-xs mt-xs">
+              禁止调用时不会加载工具、MCP 或技能，实际最大迭代次数固定为 1。
+            </div>
+          </AFormItem>
+        </PanelSection>
+
+        <PanelSection title="执行与输出">
+          <div class="config-row">
+            <span class="config-row-label">最大迭代次数</span>
+            <AInputNumber
+              :value="Number(config.maxIterations ?? 5)"
+              :min="1"
               style="width: 130px"
-              @update:value="(value: any) => updateConfig('formatterType', value)"
+              @update:value="(value: any) => updateConfig('maxIterations', value)"
             />
           </div>
-        </div>
-
-        <div class="editor-field">
-          <div class="editor-label required-field">
-            系统提示词
-          </div>
-          <ConfigCodeEditor
-            :model-value="String(config.systemPrompt || '')"
-            language="txt"
-            placeholder="输入系统提示词，可使用 ${input} 引用输入绑定"
-            :maximize-target="panelRoot"
-            @update:model-value="(value: string) => updateConfig('systemPrompt', value)"
-            @maximize-change="onEditorMaximizeChange"
-          />
-        </div>
-
-        <div class="editor-field">
-          <div class="editor-label required-field">
-            用户提示词
-          </div>
-          <ConfigCodeEditor
-            :model-value="String(config.userPrompt || '')"
-            language="txt"
-            placeholder="输入用户提示词，可使用 ${input} 引用输入绑定"
-            :maximize-target="panelRoot"
-            @update:model-value="(value: string) => updateConfig('userPrompt', value)"
-            @maximize-change="onEditorMaximizeChange"
-          />
-        </div>
-      </PanelSection>
-
-      <PanelSection title="能力选择">
-        <AFormItem label="技能包">
-          <template v-if="allSkills.length > 0">
-            <SkillSelect
-              :model-value="arrayConfig('skillPackageIds')"
-              :skills="allSkills"
-              :categories="skillCategories"
-              @update:model-value="(ids: string[]) => updateConfig('skillPackageIds', ids)"
+          <div class="switch-row">
+            <span class="switch-label">结构化输出</span>
+            <ASwitch
+              :checked="Boolean(config.structuredOutputEnabled)"
+              @update:checked="(value: any) => handleStructuredOutputToggle(Boolean(value))"
             />
-          </template>
-          <div v-else class="empty-action">
-            <AButton type="text">未配置技能包</AButton>
-            <AButton type="link" :href="`/#/${RoutePaths.SKILL}`" target="_blank">去配置</AButton>
-            <AButton type="link" @click="loadSkillCategories(); loadAllSkills()">刷新</AButton>
           </div>
-        </AFormItem>
-
-        <AFormItem label="工具">
-          <template v-if="allTools.length > 0">
-            <ToolSelect
-              :model-value="arrayConfig('toolIds')"
-              :tools="allTools"
-              :categories="toolCategories"
-              @update:model-value="(ids: string | string[] | null) => updateConfig('toolIds', ids)"
+          <div v-if="config.structuredOutputEnabled" class="structured-editor">
+            <ConfigCodeEditor
+              :model-value="structuredOutputText"
+              language="json"
+              placeholder="{ &quot;type&quot;: &quot;object&quot;, &quot;properties&quot;: {} }"
+              height="220px"
+              :maximize-target="panelRoot"
+              @update:model-value="handleStructuredOutputChange"
+              @maximize-change="onEditorMaximizeChange"
             />
-          </template>
-          <div v-else class="empty-action">
-            <AButton type="text">未配置工具</AButton>
-            <AButton type="link" :href="`/#/${RoutePaths.TOOL}`" target="_blank">去配置</AButton>
-            <AButton type="link" @click="loadToolCategories(); loadAllTools()">刷新</AButton>
-          </div>
-        </AFormItem>
-
-        <AFormItem label="MCP">
-          <template v-if="allMcpServers.length > 0">
-            <McpSelect
-              :model-value="mcpBindings"
-              :servers="allMcpServers"
-              @update:model-value="handleMcpBindingsChange"
+            <AAlert
+              v-if="structuredOutputError"
+              class="json-error"
+              type="warning"
+              show-icon
+              :message="structuredOutputError"
             />
-          </template>
-          <div v-else class="empty-action">
-            <AButton type="text">未配置 MCP 服务</AButton>
-            <AButton type="link" :href="`/#/${RoutePaths.MCP}`" target="_blank">去配置</AButton>
-            <AButton type="link" @click="loadAllMcpServers()">刷新</AButton>
           </div>
-        </AFormItem>
-      </PanelSection>
+        </PanelSection>
 
-      <PanelSection title="执行与输出">
-        <div class="config-row">
-          <span class="config-row-label">最大迭代次数</span>
-          <AInputNumber
-            :value="Number(config.maxIterations ?? 5)"
-            :min="1"
-            style="width: 130px"
-            @update:value="(value: any) => updateConfig('maxIterations', value)"
-          />
-        </div>
-        <div class="switch-row">
-          <span class="switch-label">结构化输出</span>
-          <ASwitch
-            :checked="Boolean(config.structuredOutputEnabled)"
-            @update:checked="(value: any) => handleStructuredOutputToggle(Boolean(value))"
-          />
-        </div>
-        <div v-if="config.structuredOutputEnabled" class="structured-editor">
-          <ConfigCodeEditor
-            :model-value="structuredOutputText"
-            language="json"
-            placeholder="{ &quot;type&quot;: &quot;object&quot;, &quot;properties&quot;: {} }"
-            height="220px"
-            :maximize-target="panelRoot"
-            @update:model-value="handleStructuredOutputChange"
-            @maximize-change="onEditorMaximizeChange"
-          />
-          <AAlert
-            v-if="structuredOutputError"
-            class="json-error"
-            type="warning"
-            show-icon
-            :message="structuredOutputError"
-          />
-        </div>
-      </PanelSection>
-
-      <PanelSection title="输出说明">
-        <OutputDisplay :outputs="node.data.outputConfigs || []" />
-      </PanelSection>
-    </AForm>
+        <PanelSection title="输出说明">
+          <OutputDisplay :outputs="node.data.outputConfigs || []" />
+        </PanelSection>
+      </AForm>
   </div>
 </template>
 

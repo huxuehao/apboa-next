@@ -68,6 +68,11 @@ public class McpTool extends BaseTenantEntity {
     private Integer sort;
 
     /**
+     * 是否需要人工确认（HITL §6.6）。调用前由 IConfirmationHook 拦截暂停，等用户允许/拒绝。
+     */
+    private Boolean needConfirm;
+
+    /**
      * 首次发现时间
      */
     private LocalDateTime lastDiscoveredAt;

@@ -3,6 +3,7 @@ package com.hxh.apboa.workflowbiz.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.TextNode;
 import com.hxh.apboa.common.UserDetail;
 import com.hxh.apboa.common.entity.Workflow;
 import com.hxh.apboa.common.entity.WorkflowNodeExecution;
@@ -14,6 +15,7 @@ import com.hxh.apboa.common.enums.WorkflowRunStatus;
 import com.hxh.apboa.common.util.UserUtils;
 import com.hxh.apboa.node.base.NodeOutput;
 import com.hxh.apboa.node.base.context.NodeContext;
+import com.hxh.apboa.node.base.context.NodeExecutionListener;
 import com.hxh.apboa.node.base.request.ParamItem;
 import com.hxh.apboa.node.base.request.RequestParams;
 import com.hxh.apboa.workflow.run.RunWorkflow;
@@ -50,17 +52,24 @@ public class WorkflowRunServiceImpl extends ServiceImpl<WorkflowRunMapper, Workf
         if (workflow == null) {
             throw new RuntimeException("workflow not found");
         }
-        return doRun(workflow, request,  UserUtils.getUserDetail(), false);
+        return doRun(workflow, request,  UserUtils.getUserDetail(), false, NodeExecutionListener.noop());
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public WorkflowRunResult run(Long workflowId, WorkflowRunRequest request, UserDetail userDetail) {
+        return run(workflowId, request, userDetail, NodeExecutionListener.noop());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public WorkflowRunResult run(Long workflowId, WorkflowRunRequest request, UserDetail userDetail,
+                                 NodeExecutionListener executionListener) {
         Workflow workflow = workflowMapper.selectById(workflowId);
         if (workflow == null) {
             throw new RuntimeException("workflow not found");
         }
-        return doRun(workflow, request, userDetail, true);
+        return doRun(workflow, request, userDetail, true, executionListener);
     }
 
     @Override
@@ -70,17 +79,20 @@ public class WorkflowRunServiceImpl extends ServiceImpl<WorkflowRunMapper, Workf
                 .orderByAsc(WorkflowNodeExecution::getStartTime));
     }
 
-    private WorkflowRunResult doRun(Workflow workflow, WorkflowRunRequest request, UserDetail userDetail, boolean publishedOnly) {
+    private WorkflowRunResult doRun(Workflow workflow, WorkflowRunRequest request, UserDetail userDetail,
+                                    boolean publishedOnly, NodeExecutionListener executionListener) {
         WorkflowVersion publishedVersion = publishedOnly ? latestPublishedVersion(workflow.getId()) : null;
         Object config = publishedVersion == null ? workflow.getConfig() : publishedVersion.getConfig();
         if (config == null) {
             throw new RuntimeException("workflow config is empty");
         }
-        RunWorkflow runWorkflow = publishedOnly ? RunWorkflowCache.get(String.valueOf(workflow.getId())) : null;
+        RunWorkflow runWorkflow = publishedOnly
+                ? RunWorkflowCache.get(String.valueOf(workflow.getId()), publishedVersion.getVersion())
+                : null;
         if (runWorkflow == null) {
             runWorkflow = compiler.compile(String.valueOf(workflow.getId()), config);
             if (publishedOnly) {
-                RunWorkflowCache.set(runWorkflow);
+                RunWorkflowCache.set(publishedVersion.getVersion(), runWorkflow);
             }
         }
 
@@ -95,9 +107,19 @@ public class WorkflowRunServiceImpl extends ServiceImpl<WorkflowRunMapper, Workf
         save(run);
 
         NodeContext context = new NodeContext(String.valueOf(run.getId()));
+        context.setExecutionListener(executionListener);
         context.setRequestParams(toRequestParams(request));
         if (request != null && request.getVariables() != null) {
             request.getVariables().forEach(context.getVariables()::storeVariable);
+        }
+        // 工作流名下传（智能体节点成本流水的归属快照）：run 行在本事务内未提交，
+        // 节点执行期按 instanceId 反查 workflow_run 读不到，只能经变量上下文带入
+        context.getVariables().storeVariable("workflowId", String.valueOf(workflow.getId()));
+        context.getVariables().storeVariable("workflowName", workflow.getName());
+        // 触发渠道下传（同为记账快照；定时任务=SCHEDULED）。反查 quartz_job_records
+        // 同样存在时序问题（关联在 run 结束后才写），必须正向带入
+        if (request != null && request.getChannel() != null) {
+            context.getVariables().storeVariable("triggerChannel", request.getChannel());
         }
 
         if (userDetail != null) {
@@ -119,7 +141,7 @@ public class WorkflowRunServiceImpl extends ServiceImpl<WorkflowRunMapper, Workf
 
         List<WorkflowNodeExecution> executions = persistNodeExecutions(workflow, run, context);
         boolean nodeFailed = executions.stream().anyMatch(x -> x.getStatus() == NodeRunStatus.FAIL);
-        run.setOutputs(output);
+        run.setOutputs(toJsonSafeOutputs(output));
         run.setError(error);
         run.setEndTime(System.currentTimeMillis());
         run.setStatus(error == null && !nodeFailed ? WorkflowRunStatus.SUCCESS : WorkflowRunStatus.FAIL);
@@ -183,6 +205,16 @@ public class WorkflowRunServiceImpl extends ServiceImpl<WorkflowRunMapper, Workf
 
     private Long toMillis(Instant instant) {
         return instant == null ? null : instant.toEpochMilli();
+    }
+
+    /**
+     * workflow_run.outputs 是 JSON 列，而 END 节点文本模板（如 STRING 格式化器）会产出裸字符串；
+     * JsonUtils.toJsonStr 对 String 原样透传不做 JSON 编码，直接落库会因非法 JSON 报
+     * Data truncation 并回滚整个 run。字符串统一包装为 JSON 文本节点后再落库，
+     * 其余类型经 Jackson 序列化天然是合法 JSON。
+     */
+    private Object toJsonSafeOutputs(Object output) {
+        return output instanceof String s ? TextNode.valueOf(s) : output;
     }
 
     private String toJson(Object value) {

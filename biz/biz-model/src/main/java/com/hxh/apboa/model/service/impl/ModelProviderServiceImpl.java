@@ -15,6 +15,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -45,9 +46,28 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, M
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public boolean deleteByIds(List<Long> ids) {
         // 删除前先获取关联的智能体ID（两级：供应商→模型配置→智能体）
         List<Long> agentIds = getAgentIdsByProviderIds(ids);
+        // 级联删除其下模型配置并置空 agent 直连列:此前只删供应商,
+        // 留下 provider_id 悬空的 model_config(详情页查供应商报"不存在")。
+        // 不能注入 ModelConfigService(它依赖本 service,注入成环),用 mapper + jdbc 复刻其置空逻辑
+        List<Long> modelIds = modelConfigMapper.selectList(
+                        new QueryWrapper<ModelConfig>().lambda().in(ModelConfig::getProviderId, ids))
+                .stream()
+                .map(ModelConfig::getId)
+                .toList();
+        if (!modelIds.isEmpty()) {
+            String idList = modelIds.stream().map(String::valueOf).collect(Collectors.joining(","));
+            jdbcTemplate.update("UPDATE " + TableConst.AGENT
+                    + " SET model_config_id = NULL WHERE model_config_id IN (" + idList + ")");
+            jdbcTemplate.update("UPDATE " + TableConst.AGENT
+                    + " SET asr_model_config_id = NULL WHERE asr_model_config_id IN (" + idList + ")");
+            jdbcTemplate.update("UPDATE " + TableConst.AGENT
+                    + " SET tts_model_config_id = NULL WHERE tts_model_config_id IN (" + idList + ")");
+            modelConfigMapper.deleteByIds(modelIds);
+        }
         boolean result = removeByIds(ids);
         publishAgentReregister(agentIds);
         return result;

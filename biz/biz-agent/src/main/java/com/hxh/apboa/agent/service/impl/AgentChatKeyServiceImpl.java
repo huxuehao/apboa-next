@@ -77,6 +77,11 @@ public class AgentChatKeyServiceImpl extends ServiceImpl<AgentChatKeyMapper, Age
             AgentChatKey item = new AgentChatKey();
             item.setAgentCode(agentCode);
             item.setChatKey(newChatKey);
+            if (existingKey != null) {
+                // 嵌入身份密钥随记录删除重建继承——轮换 chatKey 不弄丢业务方手里的 embedSecret
+                item.setEmbedSecret(existingKey.getEmbedSecret());
+                item.setEmbedSecretPrev(existingKey.getEmbedSecretPrev());
+            }
             save(item);
 
             // 删除旧的 ChatKey -> AgentCode 的映射关系
@@ -144,6 +149,62 @@ public class AgentChatKeyServiceImpl extends ServiceImpl<AgentChatKeyMapper, Age
         }
 
         return agentDefinition.getId();
+    }
+
+    @Override
+    public String getEmbedSecret(Long agentId) {
+        AgentChatKey key = getByAgentId(agentId);
+        return key != null ? key.getEmbedSecret() : null;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public String rotateEmbedSecret(Long agentId) {
+        // chatKey 不存在时先生成（getChatKey 内部幂等）
+        getChatKey(agentId, false);
+
+        AgentChatKey key = getByAgentId(agentId);
+        if (key == null) {
+            throw new RuntimeException("chatKey 生成失败，无法配置嵌入身份密钥");
+        }
+
+        // 48 字节随机 → base64url（>256bit，满足 HMAC-SHA256 密钥强度）
+        byte[] randomBytes = new byte[48];
+        new java.security.SecureRandom().nextBytes(randomBytes);
+        String newSecret = Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
+
+        // 旧密钥转 prev 双活（轮换观察期新旧同时可验签）
+        lambdaUpdate()
+                .eq(AgentChatKey::getChatKey, key.getChatKey())
+                .set(AgentChatKey::getEmbedSecret, newSecret)
+                .set(AgentChatKey::getEmbedSecretPrev, key.getEmbedSecret())
+                .update();
+        return newSecret;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void disableEmbedSecret(Long agentId) {
+        AgentChatKey key = getByAgentId(agentId);
+        if (key == null) {
+            return;
+        }
+        // 双密钥一并置空（lambdaUpdate 显式 set null，绕过 MP updateById 的 NOT_NULL 策略）
+        lambdaUpdate()
+                .eq(AgentChatKey::getChatKey, key.getChatKey())
+                .set(AgentChatKey::getEmbedSecret, null)
+                .set(AgentChatKey::getEmbedSecretPrev, null)
+                .update();
+    }
+
+    private AgentChatKey getByAgentId(Long agentId) {
+        AgentDefinition agent = agentDefinitionService.getById(agentId);
+        if (agent == null) {
+            return null;
+        }
+        return getOne(
+                new LambdaQueryWrapper<AgentChatKey>().eq(AgentChatKey::getAgentCode, agent.getAgentCode()),
+                false);
     }
 
     /**

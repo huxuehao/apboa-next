@@ -6,7 +6,7 @@
 
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type {SkillPackageVO, SkillPackageDTO, SkillPackage} from '@/types'
+import type {SkillPackageVO, SkillPackageDTO, SkillPackage, SkillType} from '@/types'
 import * as skillApi from '@/api/skill'
 import { message } from 'ant-design-vue'
 
@@ -14,6 +14,7 @@ export const useSkillStore = defineStore('skill', () => {
   const list = ref<SkillPackageVO[]>([])
   const categories = ref<string[]>([])
   const selectedCategory = ref<string | null>(null)
+  const selectedSkillType = ref<SkillType | null>(null)
   const keyword = ref<string>('')
   const loading = ref<boolean>(false)
   const hasMore = ref<boolean>(true)
@@ -46,6 +47,7 @@ export const useSkillStore = defineStore('skill', () => {
         page,
         size: pageSize.value,
         category: selectedCategory.value || undefined,
+        skillType: selectedSkillType.value ?? undefined,
         name: keyword.value || undefined
       }
 
@@ -83,6 +85,15 @@ export const useSkillStore = defineStore('skill', () => {
    */
   function setCategory(category: string | null) {
     selectedCategory.value = category
+  }
+
+  /**
+   * 设置技能类型（仅更新状态，不触发加载）
+   *
+   * @param skillType 技能类型
+   */
+  function setSkillType(skillType: SkillType | null) {
+    selectedSkillType.value = skillType
   }
 
   /**
@@ -157,6 +168,7 @@ export const useSkillStore = defineStore('skill', () => {
     list,
     categories,
     selectedCategory,
+    selectedSkillType,
     keyword,
     loading,
     hasMore,
@@ -164,6 +176,7 @@ export const useSkillStore = defineStore('skill', () => {
     fetchPage,
     loadMore,
     setCategory,
+    setSkillType,
     setKeyword,
     resetAndFetch,
     resetPagination,

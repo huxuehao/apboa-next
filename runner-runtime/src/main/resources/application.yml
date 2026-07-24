@@ -12,3 +12,8 @@ spring:
     time-zone: Asia/Shanghai
     serialization:
       write-dates-as-timestamps: false
+
+# 同一轮由模型发起的独立工具默认并行执行；有严格顺序要求的部署可显式关闭
+apboa:
+  tool:
+    parallel: ${APBOA_TOOL_PARALLEL:true}

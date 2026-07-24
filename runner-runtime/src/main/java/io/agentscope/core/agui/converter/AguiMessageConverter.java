@@ -201,19 +201,31 @@ public class AguiMessageConverter {
                         blocks.add(block);
                     }
                 } else {
-                    // 非多模态文件（文档类型），追加提示信息让 AI 知道有附件可用
+                    // 非多模态文件（文档类型）：hint 只带实例数据（真实文件名映射），
+                    // 使用方法的机制说明在说明头统一给（见下），不逐条重复
                     Attach attach = attachService.getById(Long.valueOf(fileId));
                     if (attach != null) {
                         docHints.add(String.format(
-                                "[Attached file: %s (use load_file_text_content with \"%s.apboa\")]",
+                                "[Document: %s -> apboa_file_name: \"%s.apboa\"]",
                                 attach.getOriginalName(), fileId));
                     }
                 }
             });
 
-            // 将文档提示追加到 blocks 中（放在多模态 blocks 之后、用户文本之前）
-            for (String hint : docHints) {
-                blocks.add(TextBlock.builder().text(hint).build());
+            // 说明头 + 逐文件行（放在多模态 blocks 之后、用户文本之前）。
+            // .apboa 机制知识只随真实文档一起出现——系统提示词不再全局教学，
+            // 纯图片/纯文本会话中模型不知道该机制，杜绝凭空编造 .apboa 文件名的幻觉调用
+            if (!docHints.isEmpty()) {
+                blocks.add(TextBlock.builder().text(
+                        "[The document(s) listed below have been text-extracted into .apboa files."
+                        + " Read them with the load_file_text_content tool:"
+                        + " pass apboa_file_name EXACTLY as listed — never guess or invent names;"
+                        + " optional param ranges (e.g. \"1,100\") reads specific lines of large files."
+                        + " Images/audio/video in this message are NOT documents — view them directly.]")
+                        .build());
+                for (String hint : docHints) {
+                    blocks.add(TextBlock.builder().text(hint).build());
+                }
             }
 
             // 移除 message 中最后一条消息，并构建新的文本 ContentBlock

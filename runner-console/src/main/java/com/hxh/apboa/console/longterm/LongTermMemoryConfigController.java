@@ -61,7 +61,8 @@ public class LongTermMemoryConfigController {
     @DeleteMapping
     @RoleNeed({TenantRole.TENANT_ADMIN, TenantRole.TENANT_EDITOR})
     public R<Boolean> delete(@RequestBody List<Long> ids) {
-        return R.data(longTermMemoryConfigService.removeByIds(ids));
+        // deleteByIds 级联清理 agent_long_term_memory 关联,裸 removeByIds 会留悬空引用
+        return R.data(longTermMemoryConfigService.deleteByIds(ids));
     }
 
     /**

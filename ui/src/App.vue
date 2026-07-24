@@ -18,7 +18,9 @@ void (() => {
     :locale="zhCN"
     :theme="{
       token: {
-        fontFamily: 'AlimamaFangYuan, sans-serif',
+        fontFamily: `'Alibaba PuHuiTi 3.0', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+          'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif`,
+        fontSize: 16,
       }
      }">
     <RouterView />

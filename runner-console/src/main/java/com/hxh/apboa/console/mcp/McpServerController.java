@@ -5,6 +5,7 @@ import com.hxh.apboa.common.config.auth.RoleNeed;
 import com.hxh.apboa.common.dto.McpServerDTO;
 import com.hxh.apboa.common.dto.McpToolDebugDTO;
 import com.hxh.apboa.common.dto.McpToolEnabledDTO;
+import com.hxh.apboa.common.dto.McpToolNeedConfirmDTO;
 import com.hxh.apboa.common.entity.McpServer;
 import com.hxh.apboa.common.enums.TenantRole;
 import com.hxh.apboa.common.mp.support.MP;
@@ -116,6 +117,16 @@ public class McpServerController {
     public R<McpServerVO> updateToolGlobalEnabled(@PathVariable("id") Long id,
                                                   @RequestBody McpToolEnabledDTO dto) {
         return R.data(toVo(mcpServerService.updateToolGlobalEnabled(id, dto)));
+    }
+
+    /**
+     * 批量切换工具是否需要人工确认（HITL §6.6）
+     */
+    @PutMapping("/{id}/tools/global-need-confirm")
+    @RoleNeed({TenantRole.TENANT_ADMIN, TenantRole.TENANT_EDITOR})
+    public R<McpServerVO> updateToolNeedConfirm(@PathVariable("id") Long id,
+                                                @RequestBody McpToolNeedConfirmDTO dto) {
+        return R.data(toVo(mcpServerService.updateToolNeedConfirm(id, dto)));
     }
 
     /**

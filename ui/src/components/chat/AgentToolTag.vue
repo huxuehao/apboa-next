@@ -5,18 +5,25 @@
  *
  * @component
  */
+import { computed } from 'vue'
 import { ToolOutlined } from '@ant-design/icons-vue'
+import { useToolNameMap } from '@/composables/chat/useToolNameMap'
 
-defineProps<{
-  /** 工具名称（标签内容） */
+const props = defineProps<{
+  /** 工具编号 toolId（标签内容 = 值，发送给 agent 用） */
   content: string
 }>()
+
+const { nameMap } = useToolNameMap()
+
+/** 展示文本：按 toolId 映射回工具名称，未命中回退原值 */
+const display = computed(() => nameMap.value[props.content] || props.content)
 </script>
 
 <template>
   <span class="agent-tool-tag" :title="content">
     <ToolOutlined class="agent-tool-tag-icon" />
-    <span class="agent-tool-tag-name">{{ content }}</span>
+    <span class="agent-tool-tag-name">{{ display }}</span>
   </span>
 </template>
 

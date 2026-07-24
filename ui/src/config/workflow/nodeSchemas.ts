@@ -191,6 +191,7 @@ public class DataProcess implements IteratorExecutor {
       skillPackageIds: [],
       toolIds: [],
       mcps: [],
+      toolChoiceStrategy: 'AUTO',
       maxIterations: 5,
       structuredOutputEnabled: false,
       structuredOutput: {},

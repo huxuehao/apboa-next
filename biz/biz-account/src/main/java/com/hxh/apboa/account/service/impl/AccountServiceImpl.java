@@ -498,18 +498,20 @@ public class AccountServiceImpl extends ServiceImpl<AccountMapper, Account> impl
     }
 
     @Override
-    public LoginResponse chatKeyToken(String chatKey) {
+    public LoginResponse chatKeyToken(String chatKey, String userJwt) {
         if (FuncUtils.isEmpty(chatKey)) {
             return null;
         }
 
         // 使用JdbcTemplate绕过MyBatis-Plus租户自动过滤
         List<AgentChatKey> chatKeys = jdbcTemplate.query(
-                "SELECT agent_code, chat_key, tenant_id FROM agent_chat_key WHERE chat_key = ?",
+                "SELECT agent_code, chat_key, embed_secret, embed_secret_prev, tenant_id FROM agent_chat_key WHERE chat_key = ?",
                 (rs, rowNum) -> {
                     AgentChatKey ack = new AgentChatKey();
                     ack.setAgentCode(rs.getString("agent_code"));
                     ack.setChatKey(rs.getString("chat_key"));
+                    ack.setEmbedSecret(rs.getString("embed_secret"));
+                    ack.setEmbedSecretPrev(rs.getString("embed_secret_prev"));
                     ack.setTenantId(rs.getLong("tenant_id"));
                     return ack;
                 },
@@ -520,6 +522,12 @@ public class AccountServiceImpl extends ServiceImpl<AccountMapper, Account> impl
         if (agentChatKey == null) {
             return null;
         }
+
+        // 嵌入身份验证（docs/identity-propagation-design.md §6.M6）：带了 userJwt 就必须验过，
+        // 验不过拒绝——绝不静默降级为匿名（否则业务方以为带上了身份，实际权限判定拿到空）
+        Claims externalClaims = FuncUtils.isEmpty(userJwt)
+                ? null
+                : verifyEmbedUserJwt(agentChatKey, userJwt);
 
         // 设置租户
         boolean hasNotCurrentTenant = TenantUtils.getCurrentTenantId() == null;
@@ -541,13 +549,22 @@ public class AccountServiceImpl extends ServiceImpl<AccountMapper, Account> impl
                 return null;
             }
 
-            UserDetail userDetail = UserDetail.builder()
+            UserDetail.UserDetailBuilder userDetailBuilder = UserDetail.builder()
                     .id(IdWorker.getId())
                     .name(agent.getName())
                     .username(agent.getAgentCode())
                     .tenantId(tenant.getId())
                     .tenantCode(tenant.getCode())
-                    .build();
+                    // 渠道烙进 token：白名单判定与成本归因不再依赖易过期的 chatkey: 缓存
+                    .authChannel(SysConst.CHANNEL_CHAT_KEY);
+            if (externalClaims != null) {
+                // 烙进会话 token（UserDetail 即 subject JSON），后续每次请求自动带出
+                userDetailBuilder
+                        .externalSub(externalClaims.getSubject())
+                        .externalIss(chatKey)
+                        .externalName(externalClaims.get("name", String.class));
+            }
+            UserDetail userDetail = userDetailBuilder.build();
             long neverExpireTtl = 100L * 365 * 24 * 60 * 60 * 1000;
             String token = TokenUtils.createToken(chatKey, userDetail, neverExpireTtl);
 
@@ -566,6 +583,50 @@ public class AccountServiceImpl extends ServiceImpl<AccountMapper, Account> impl
                 TenantUtils.clear();
             }
         }
+    }
+
+    /**
+     * 验证业务方签发的嵌入用户凭证（Intercom Identity Verification 模式）。
+     *
+     * <p>userJwt 由业务方后端用该 chatKey 的 embedSecret HMAC-SHA256 签发
+     * （{sub: 业务方用户ID, name?: 显示名, exp: 建议 5 分钟}），只用于换 token 这一下。
+     * 新旧双密钥依次验（轮换双活）；未启用 embedSecret 却带 userJwt 视为配置错误拒绝。
+     *
+     * @return 验签通过的 claims
+     * @throws NotAuthException 未启用 / 签名无效 / 已过期
+     */
+    private Claims verifyEmbedUserJwt(AgentChatKey agentChatKey, String userJwt) {
+        if (FuncUtils.isEmpty(agentChatKey.getEmbedSecret())
+                && FuncUtils.isEmpty(agentChatKey.getEmbedSecretPrev())) {
+            throw new NotAuthException("该 chatKey 未启用嵌入身份验证（embedSecret 未配置）");
+        }
+
+        Exception lastFailure = null;
+        for (String secret : new String[]{agentChatKey.getEmbedSecret(), agentChatKey.getEmbedSecretPrev()}) {
+            if (FuncUtils.isEmpty(secret)) {
+                continue;
+            }
+            try {
+                // HMAC key = secret 字符串的 UTF-8 字节（业务方 JWT 库的默认约定，
+                // 接入文档同款示例）。不走 TokenUtils.generalKey——那是平台自有
+                // JWT_SECRET_KEY 的"secret 视为 Base64 编码字节"约定，两边派生
+                // 方式不一致会导致业务方按惯例签的 userJwt 永远验不过
+                return io.jsonwebtoken.Jwts.parser()
+                        .verifyWith(io.jsonwebtoken.security.Keys.hmacShaKeyFor(
+                                secret.getBytes(java.nio.charset.StandardCharsets.UTF_8)))
+                        .clockSkewSeconds(60)
+                        .build()
+                        .parseSignedClaims(userJwt)
+                        .getPayload();
+            } catch (io.jsonwebtoken.ExpiredJwtException e) {
+                // 过期与签名无效分开报：过期签名是对的，换把钥匙也救不回来
+                throw new NotAuthException("嵌入用户凭证已过期，请业务方重新签发");
+            } catch (Exception e) {
+                lastFailure = e;
+            }
+        }
+        throw new NotAuthException("嵌入用户凭证签名无效"
+                + (lastFailure != null ? "：" + lastFailure.getMessage() : ""));
     }
 
     /**

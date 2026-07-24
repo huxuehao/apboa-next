@@ -11,6 +11,8 @@ import io.agentscope.core.model.StructuredOutputReminder;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.math.BigDecimal;
+
 /**
  * 智能体定义
  *
@@ -41,15 +43,53 @@ public class AgentDefinition extends BaseTenantEntity {
     private String description;
 
     /**
+     * 智能体头像（base64 data URL）
+     */
+    private String avatar;
+
+    /**
+     * 常用问题列表
+     */
+    @TableField(typeHandler = JsonNodeTypeHandler.class)
+    private JsonNode commonQuestions;
+
+    /**
+     * 常用问题是否在对话中常驻显示
+     */
+    private Boolean commonQuestionsPinned;
+
+    /**
      * 基础模型配置ID
      */
     private Long modelConfigId;
+
+    /**
+     * 语音识别模型配置ID（NULL 表示该智能体不启用语音输入）
+     */
+    private Long asrModelConfigId;
+
+    /**
+     * 语音合成模型配置ID（NULL 表示该智能体不启用语音播报）
+     */
+    private Long ttsModelConfigId;
 
     /**
      * 模型参数覆盖
      */
     @TableField(typeHandler = JsonNodeTypeHandler.class)
     private JsonNode modelParamsOverride;
+
+    /**
+     * 语音合成(TTS)参数覆盖（agent 级，扁平 bodyParams，如 {"voice":"Cherry"}；覆盖模型层默认音色）
+     */
+    @TableField(typeHandler = JsonNodeTypeHandler.class)
+    private JsonNode ttsParamsOverride;
+
+    /**
+     * 语音识别(ASR)参数覆盖（agent 级，扁平 bodyParams；当前仅占位，provider 消费二期接入）
+     */
+    @TableField(typeHandler = JsonNodeTypeHandler.class)
+    private JsonNode asrParamsOverride;
 
     /**
      * 工具选择策略
@@ -90,6 +130,11 @@ public class AgentDefinition extends BaseTenantEntity {
      * React最大迭代次数
      */
     private Integer maxIterations;
+
+    /**
+     * 月度成本预算（元）；null=不限额，当月已计价成本达到即拒绝新对话
+     */
+    private BigDecimal monthlyBudget;
 
     /**
      * 是否启用计划

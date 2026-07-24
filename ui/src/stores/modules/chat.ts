@@ -18,6 +18,9 @@ export interface AgentPreference {
   planActive?: boolean
   toolProcessActive?: boolean
   sidebarCollapsed?: boolean
+  commonQuestionsCollapsed?: boolean
+  /** 移动端输入模式（keyboard=打字 / voice=按住说话）；存偏好防止欢迎态→对话态组件重建后模式回跳 */
+  voiceInputMode?: 'keyboard' | 'voice'
 }
 
 /** 偏好映射：key 为 `${agentId}_${accountId}` */
@@ -145,16 +148,74 @@ export const useChatStore = defineStore(
       preferences.value[key].sidebarCollapsed = value
     }
 
+    /**
+     * 获取对话中常驻常用问题的折叠状态（默认展开）
+     */
+    function getCommonQuestionsCollapsed(
+      agentId: string,
+      accountId: string | undefined
+    ): boolean {
+      if (!agentId) return false
+      const key = preferenceKey(agentId, accountId)
+      return preferences.value[key]?.commonQuestionsCollapsed ?? false
+    }
+
+    /**
+     * 设置对话中常驻常用问题的折叠状态
+     */
+    function setCommonQuestionsCollapsed(
+      agentId: string,
+      accountId: string | undefined,
+      value: boolean
+    ): void {
+      if (!agentId) return
+      const key = preferenceKey(agentId, accountId)
+      if (!preferences.value[key]) preferences.value[key] = {}
+      preferences.value[key].commonQuestionsCollapsed = value
+    }
+
+    /**
+     * 获取移动端输入模式。defaultMode 为未存过偏好时的默认值
+     * （移动端默认语音、桌面默认键盘）；用户手动切换过则始终跟随存值
+     */
+    function getVoiceInputMode(
+      agentId: string,
+      accountId: string | undefined,
+      defaultMode: 'keyboard' | 'voice' = 'keyboard'
+    ): 'keyboard' | 'voice' {
+      if (!agentId) return defaultMode
+      const key = preferenceKey(agentId, accountId)
+      return preferences.value[key]?.voiceInputMode ?? defaultMode
+    }
+
+    /**
+     * 设置移动端输入模式
+     */
+    function setVoiceInputMode(
+      agentId: string,
+      accountId: string | undefined,
+      value: 'keyboard' | 'voice'
+    ): void {
+      if (!agentId) return
+      const key = preferenceKey(agentId, accountId)
+      if (!preferences.value[key]) preferences.value[key] = {}
+      preferences.value[key].voiceInputMode = value
+    }
+
     return {
       preferences,
       getMemoryActive,
       setMemoryActive,
+      getVoiceInputMode,
+      setVoiceInputMode,
       getPlanActive,
       setPlanActive,
       getSidebarCollapsed,
       setSidebarCollapsed,
       getToolProcessActive,
-      setToolProcessActive
+      setToolProcessActive,
+      getCommonQuestionsCollapsed,
+      setCommonQuestionsCollapsed
     }
   },
   {

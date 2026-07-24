@@ -151,14 +151,55 @@ export function useSessions(agentId: import('vue').Ref<string>) {
     updateTitle(otherSessions.value)
   }
 
+  /**
+   * 置顶：本地乐观更新（从 otherSessions 移到 pinnedSessions 头部），失败回滚。
+   * 目标会话不在已加载的 otherSessions 中（分页未加载到）时回退全量重载。
+   */
   const pinSession = async (sessionId: string | number) => {
-    await chatSessionApi.pinSession(String(sessionId))
-    await resetAndReload()
+    const id = String(sessionId)
+    const idx = otherSessions.value.findIndex((s) => String(s.id) === id)
+    if (idx === -1) {
+      await chatSessionApi.pinSession(id)
+      await resetAndReload()
+      return
+    }
+    const session = otherSessions.value[idx]!
+    otherSessions.value.splice(idx, 1)
+    session.isPinned = true
+    pinnedSessions.value = [session, ...pinnedSessions.value]
+    try {
+      await chatSessionApi.pinSession(id)
+    } catch (e) {
+      pinnedSessions.value = pinnedSessions.value.filter((s) => String(s.id) !== id)
+      session.isPinned = false
+      otherSessions.value.splice(idx, 0, session)
+      throw e
+    }
   }
 
+  /**
+   * 取消置顶：本地乐观更新（从 pinnedSessions 移到 otherSessions 头部），失败回滚
+   */
   const unpinSession = async (sessionId: string | number) => {
-    await chatSessionApi.unpinSession(String(sessionId))
-    await resetAndReload()
+    const id = String(sessionId)
+    const idx = pinnedSessions.value.findIndex((s) => String(s.id) === id)
+    if (idx === -1) {
+      await chatSessionApi.unpinSession(id)
+      await resetAndReload()
+      return
+    }
+    const session = pinnedSessions.value[idx]!
+    pinnedSessions.value.splice(idx, 1)
+    session.isPinned = false
+    otherSessions.value = [session, ...otherSessions.value]
+    try {
+      await chatSessionApi.unpinSession(id)
+    } catch (e) {
+      otherSessions.value = otherSessions.value.filter((s) => String(s.id) !== id)
+      session.isPinned = true
+      pinnedSessions.value.splice(idx, 0, session)
+      throw e
+    }
   }
 
   const deleteSession = async (sessionId: string | number) => {

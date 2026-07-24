@@ -14,13 +14,19 @@ public final class AgentMetadataStore {
     private AgentMetadataStore() {}
 
     /**
-     * 设置 Agent 元数据
+     * 设置 Agent 元数据。
+     * value 为 null 时静默忽略：ConcurrentHashMap 不允许 null 值，且调用方（如 AguiRequestProcessor
+     * 从 AgentContext 取租户）在部分链路取不到值——runtime 重启后旧会话首条消息实测 tenantId 为 null，
+     * 直接 put 会 NPE 炸掉整个 run
      *
      * @param agentId Agent ID
      * @param key     元数据键
-     * @param value   元数据值
+     * @param value   元数据值（null 忽略）
      */
     public static void put(String agentId, String key, Object value) {
+        if (agentId == null || key == null || value == null) {
+            return;
+        }
         STORE.computeIfAbsent(agentId, k -> new ConcurrentHashMap<>()).put(key, value);
     }
 

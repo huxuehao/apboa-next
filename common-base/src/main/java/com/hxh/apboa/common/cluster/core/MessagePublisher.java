@@ -61,6 +61,25 @@ public class MessagePublisher {
     }
 
     /**
+     * 向指定频道发布二进制消息（音频帧等，直接走底层连接避免字符串序列化破坏字节；
+     * 高频流式载荷，失败即丢不重试——补发旧帧只会加重拥塞且流媒体丢帧可跳播）
+     *
+     * @param channel 频道名称
+     * @param payload 二进制消息体
+     */
+    public void publishBinary(String channel, byte[] payload) {
+        try {
+            byte[] channelBytes = channel.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            redisTemplate.execute((org.springframework.data.redis.core.RedisCallback<Void>) connection -> {
+                connection.commands().publish(channelBytes, payload);
+                return null;
+            });
+        } catch (Exception e) {
+            log.warn("发布Redis二进制消息失败 - channel: {}, error: {}", channel, e.getMessage());
+        }
+    }
+
+    /**
      * 事务提交后异步向指定频道发布消息（支持3次重试）
      * 若当前无活跃事务，则立即异步发布；否则注册为 afterCommit 回调，
      * 回调中提交到线程池异步执行，结合重试机制确保消息可靠送达。

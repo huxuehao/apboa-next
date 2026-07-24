@@ -1,10 +1,13 @@
 package com.hxh.apboa.engine.model.checkpiont;
 
 import com.hxh.apboa.common.entity.ModelConfig;
+import com.hxh.apboa.common.enums.ModelCategory;
 import com.hxh.apboa.common.r.R;
 import com.hxh.apboa.common.wrapper.ModelConfigWrapper;
 import com.hxh.apboa.common.wrapper.ModelWrapper;
+import com.hxh.apboa.engine.asr.AsrProviderHolder;
 import com.hxh.apboa.engine.model.ChatModelFactory;
+import com.hxh.apboa.engine.tts.TtsProviderHolder;
 import com.hxh.apboa.model.service.ModelConfigService;
 import io.agentscope.core.ReActAgent;
 import io.agentscope.core.message.Msg;
@@ -14,6 +17,9 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 
 /**
@@ -27,6 +33,8 @@ import java.time.LocalDateTime;
 public class CheckModelService {
     private final ModelConfigService modelConfigService;
     private final ChatModelFactory chatModelFactory;
+    private final AsrProviderHolder asrProviderHolder;
+    private final TtsProviderHolder ttsProviderHolder;
 
     @RequestMapping("/check/{modelId}")
     public R<CheckModelResult> checkModel(@PathVariable("modelId") Long modelId) {
@@ -40,6 +48,22 @@ public class CheckModelService {
             ModelConfigWrapper configWrapper = new ModelConfigWrapper();
             config.getConfig().fillModelConfigWrapper(configWrapper);
             config.getProvider().fillModelConfigWrapper(configWrapper);
+
+            // 语音识别用途：chat 探测无意义（DashScope 的 ASR 模型走 chat 端点必然报错），
+            // 改为发一段 0.3 秒静音 WAV 做真实转写探测，调用成功即连通（不关心识别内容）
+            if (config.getConfig().getCategory() == ModelCategory.ASR) {
+                asrProviderHolder.get(configWrapper.getProvider()).recognize(configWrapper, buildProbeWav());
+                updateConnectivityResult(modelId, "CONNECTED", null);
+                return R.data(new CheckModelResult(true, "连接成功"));
+            }
+
+            // 语音合成用途：同理 chat 探测无意义，改为真实合成一小段文本，
+            // 调用成功即连通（音频丢弃；bodyParams 音色参数走同一条装配链，检测通过=配置整体可用）
+            if (config.getConfig().getCategory() == ModelCategory.TTS) {
+                ttsProviderHolder.get(configWrapper.getProvider()).synthesize(configWrapper, "连接测试");
+                updateConnectivityResult(modelId, "CONNECTED", null);
+                return R.data(new CheckModelResult(true, "连接成功"));
+            }
 
             Model simpleModel = chatModelFactory.getSimpleModel(configWrapper);
 
@@ -65,6 +89,23 @@ public class CheckModelService {
             updateConnectivityResult(modelId, "FAILED", e.getMessage());
             return R.data(new CheckModelResult(false, e.getMessage()));
         }
+    }
+
+    /**
+     * 合成 0.3 秒 16kHz 16bit 单声道静音 WAV 作为 ASR 连通性探测音频
+     */
+    private byte[] buildProbeWav() {
+        int sampleRate = 16000;
+        int dataSize = sampleRate * 2 * 3 / 10;
+        ByteBuffer buffer = ByteBuffer.allocate(44 + dataSize).order(ByteOrder.LITTLE_ENDIAN);
+        buffer.put("RIFF".getBytes(StandardCharsets.US_ASCII)).putInt(36 + dataSize)
+                .put("WAVE".getBytes(StandardCharsets.US_ASCII))
+                .put("fmt ".getBytes(StandardCharsets.US_ASCII)).putInt(16)
+                .putShort((short) 1).putShort((short) 1)
+                .putInt(sampleRate).putInt(sampleRate * 2)
+                .putShort((short) 2).putShort((short) 16)
+                .put("data".getBytes(StandardCharsets.US_ASCII)).putInt(dataSize);
+        return buffer.array();
     }
 
     /**

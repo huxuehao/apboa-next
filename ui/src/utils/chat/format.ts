@@ -1,3 +1,6 @@
+import { RESOURCE_CATEGORY_REGISTRY } from '@/composables/chat/useResourceCategories'
+import type { WorkflowProcess } from '@/types'
+
 /**
  * 尝试将字符串格式化为 JSON（美化），失败则返回原文
  */
@@ -17,10 +20,21 @@ export function formatToolDisplay(text: string): string {
 }
 
 /**
- * 构建工具调用的 JSON 内容（用于保存到消息中）
+ * 构建工具调用的 JSON 内容（用于保存到消息中）。
+ * subSteps 为流式期间实时积累的子智能体过程（SUBAGENT_STEP 事件），随消息本地落定写入
+ * subProcess 字段——与后端落库的结构同构，前端流式结束即最终态，无需刷新或补拉
  */
 export function buildToolCallsContent(
-  toolCalls: Array<{ id: string; name: string; args: string; result?: string; elapsed?: number }>
+  toolCalls: Array<{
+    id: string
+    name: string
+    args: string
+    result?: string
+    elapsed?: number
+    confirmState?: 'approved' | 'rejected'
+    workflowProcess?: WorkflowProcess
+    subSteps?: Array<Record<string, unknown>>
+  }>
 ): string {
   if (toolCalls.length === 0) return ''
 
@@ -31,18 +45,156 @@ export function buildToolCallsContent(
     args: t.args ?? '',
     result: t.result ?? ''
   }
+  if (t.confirmState) {
+    toolContent.confirmState = t.confirmState
+  }
+  if (t.workflowProcess) {
+    toolContent.workflowProcess = t.workflowProcess
+  }
+  if (t.subSteps?.length) {
+    // 清理实时态字段（running/streaming 标记、subToolUseId 配对键、startTime 计时起点），只留展示契约字段
+    toolContent.subProcess = t.subSteps.map(
+      ({ running: _running, subToolUseId: _sid, startTime: _st, streaming: _streaming, ...rest }) => rest
+    )
+  }
 
   return JSON.stringify(toolContent)
 }
 
 /**
- * 根据用户输入生成会话标题（截取前50字符）
+ * 工具耗时格式化：<1s 用 ms（整数），≥1s 用 s（保留两位）。
+ * 兼容字符串输入（历史 TOOL 消息经保存链路后 totalTimes 为字符串，如 "2052"）
  */
-export function formatSessionTitle(input: string | null): string {
+export function formatElapsed(ms: number | string): string {
+  const n = Number(ms)
+  if (!Number.isFinite(n) || n < 0) return ''
+  if (n < 1000) return `${Math.round(n)}ms`
+  return `${(n / 1000).toFixed(2)}s`
+}
+
+/** 回复总耗时：< 1s 用 ms，否则 "X.XX 秒"（jm 风格，中文单位）。兼容字符串输入 */
+export function fmtDuration(ms: number | string | null | undefined): string {
+  if (ms == null) return ''
+  const n = Number(ms)
+  if (!Number.isFinite(n) || n < 0) return ''
+  if (n < 1000) return `${n} ms`
+  return `${(n / 1000).toFixed(2)} 秒`
+}
+
+/** token 数：千位分隔的完整数字（不简记） */
+export function fmtTokens(n: number | null | undefined): string {
+  if (!n && n !== 0) return ''
+  return new Intl.NumberFormat('en-US').format(n)
+}
+
+/**
+ * 生成速率：outputTokens / (durationMs / 1000)，2 位小数。
+ * outputTokens 缺失时 fallback totalTokens（数字偏大但保留参考值）
+ */
+export function fmtTokensPerSec(
+  outputTokens: number | null | undefined,
+  totalTokens: number | null | undefined,
+  ms: number | null | undefined,
+): string {
+  if (!ms || ms <= 0) return ''
+  const n = outputTokens || totalTokens
+  if (!n) return ''
+  return (n / (ms / 1000)).toFixed(2)
+}
+
+/** 本地时间 yyyy-MM-dd HH:mm:ss（跟后端 jackson 默认序列化一致，流式落定的消息前端先补时间） */
+export function localNowDateTime(): string {
+  const d = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
+
+/** 兼容 "2026-05-18 10:27:35" 跟 ISO "2026-05-18T10:27:35"，按本地时区解析 */
+export function parseTime(s: string | undefined | null): Date | null {
+  if (!s) return null
+  const d = new Date(String(s).replace(' ', 'T'))
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
+/** 完整时间字符串（用于 tooltip）"2026-05-18 19:34:01" */
+export function fmtFullTime(s: string | undefined | null): string {
+  if (!s) return ''
+  const d = parseTime(s)
+  if (!d) return String(s)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
+
+/**
+ * 相对时间："刚刚 / X 分钟前 / X 小时前 / 昨天 HH:mm / 周X HH:mm / 上周X HH:mm / MM-DD HH:mm / YYYY-MM-DD"。
+ *
+ * 核心：本周 / 上周用 ISO 周（周一开始）语义化区分，避免"今天周三看见'周五'分不清是本周五还是上周五"的歧义。
+ */
+export function fmtRelativeTime(s: string | undefined | null): string {
+  const d = parseTime(s)
+  if (!d) return ''
+  const now = new Date()
+  const diffMs = now.getTime() - d.getTime()
+  const diffSec = Math.floor(diffMs / 1000)
+  if (diffSec < 30) return '刚刚'
+  if (diffSec < 60) return `${diffSec} 秒前`
+  const diffMin = Math.floor(diffSec / 60)
+  if (diffMin < 60) return `${diffMin} 分钟前`
+  const diffHour = Math.floor(diffMin / 60)
+  if (diffHour < 24 && now.getDate() === d.getDate()) return `${diffHour} 小时前`
+
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const HHmm = `${pad(d.getHours())}:${pad(d.getMinutes())}`
+
+  // 昨天
+  const y = new Date(now)
+  y.setDate(y.getDate() - 1)
+  if (y.getFullYear() === d.getFullYear() && y.getMonth() === d.getMonth() && y.getDate() === d.getDate()) {
+    return `昨天 ${HHmm}`
+  }
+
+  // 本周一 00:00:00（ISO 周一开始：getDay() 0=周日..6=周六，daysSinceMonday = (getDay+6) % 7）
+  const todayMidnight = new Date(now)
+  todayMidnight.setHours(0, 0, 0, 0)
+  const thisMonday = new Date(todayMidnight)
+  thisMonday.setDate(thisMonday.getDate() - ((now.getDay() + 6) % 7))
+  const lastMonday = new Date(thisMonday)
+  lastMonday.setDate(lastMonday.getDate() - 7)
+
+  const dayShort = ['日', '一', '二', '三', '四', '五', '六']
+  if (d >= thisMonday) return `周${dayShort[d.getDay()]} ${HHmm}`
+  if (d >= lastMonday) return `上周${dayShort[d.getDay()]} ${HHmm}`
+
+  if (d.getFullYear() === now.getFullYear()) {
+    return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${HHmm}`
+  }
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+/** 全部可引用资源的标签名（从类目注册表动态生成——新增资源类型自动覆盖，不再手写白名单漏项） */
+const MENTION_TAG_NAMES = Object.values(RESOURCE_CATEGORY_REGISTRY).map((m) => m.tagName)
+/** 成对标签（捕获标签名与内容，内容可换显示名） */
+const MENTION_TAG_PAIR = new RegExp(`<(${MENTION_TAG_NAMES.join('|')})>([\\s\\S]*?)</\\1>`, 'g')
+/** 残缺标签壳兜底（未闭合/被截断的裸壳） */
+const MENTION_TAG_SHELL = new RegExp(`</?(?:${MENTION_TAG_NAMES.join('|')})>`, 'g')
+
+/**
+ * 根据用户输入生成会话标题（截取前50字符）。
+ * 引用资源标签先行清洗：成对标签把内容交给 resolveTagDisplay 换成显示名
+ * （如子智能体 agentCode → 智能体名称；未提供 resolver 时保留原内容），
+ * 残缺壳兜底剥除。
+ */
+export function formatSessionTitle(
+  input: string | null,
+  resolveTagDisplay?: (tagName: string, content: string) => string
+): string {
   let t = (input || '').trim()
   if (!t) return '新对话'
 
-  t = t.replace(/<\/?(?:workspace-file|agent-tool|agent-skill)>/g, '')
+  t = t.replace(MENTION_TAG_PAIR, (_, tagName: string, content: string) =>
+    resolveTagDisplay ? resolveTagDisplay(tagName, content) : content)
+  t = t.replace(MENTION_TAG_SHELL, '').trim()
+  if (!t) return '新对话'
 
   return t.length > 50 ? t.slice(0, 50) + '...' : t
 }

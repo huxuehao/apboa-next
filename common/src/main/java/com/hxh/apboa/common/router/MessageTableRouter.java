@@ -74,6 +74,25 @@ public class MessageTableRouter {
     }
 
     /**
+     * 从指定表按 ID 列表做轻量批查：content 只取前 150 字符（tool 消息的 subProcess
+     * 可能数百 KB，全文批查会拖垮明细页），含 path 供链路回溯，按 depth 升序
+     */
+    public List<ChatMessage> listBriefByIds(List<Integer> ids, String messageTable) {
+        if (ids == null || ids.isEmpty()) {
+            return Collections.emptyList();
+        }
+        String table = resolveTable(messageTable);
+        if (!tableExists(table)) {
+            log.warn("归档表 {} 不存在，无法轻量批查消息", table);
+            return Collections.emptyList();
+        }
+        String placeholders = String.join(",", Collections.nCopies(ids.size(), "?"));
+        String sql = "SELECT id, tenant_id, session_id, role, LEFT(content, 150) AS content, parent_id, path, depth, created_at FROM "
+                + table + " WHERE id IN (" + placeholders + ") ORDER BY depth ASC";
+        return jdbcTemplate.query(sql, this::mapRow, ids.toArray());
+    }
+
+    /**
      * 从指定表按 sessionId 删除所有消息
      */
     public int deleteBySessionId(Long sessionId, String messageTable) {

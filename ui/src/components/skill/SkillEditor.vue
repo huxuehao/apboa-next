@@ -4,7 +4,7 @@
  * 嵌入 SmartCodeEditor，提供保存状态管理和文件切换保护
  */
 import { ref, watch, computed } from 'vue'
-import { Modal, Button } from 'ant-design-vue'
+import { Button } from 'ant-design-vue'
 import {
   SaveOutlined,
   RollbackOutlined,
@@ -12,12 +12,14 @@ import {
   LoadingOutlined,
 } from '@ant-design/icons-vue'
 import SmartCodeEditor from '@/components/editor/SmartCodeEditor.vue'
+import MarkdownRenderer from '@/components/markdown/MarkdownRenderer.vue'
 import type { SkillFileTreeNode } from '@/types'
 import * as skillApi from '@/api/skill'
 
 const props = defineProps<{
   skillId: string
   file: SkillFileTreeNode | null
+  readonly?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -45,19 +47,25 @@ const breadcrumb = computed(() => {
   return props.file.path.split('/').join(' / ')
 })
 
+// 根据文件扩展名决定语法高亮语言
+const editorLanguage = computed(() => {
+  const name = props.file?.name || ''
+  if (name.endsWith('.md')) return 'markdown'
+  return 'txt'
+})
+
+const isMarkdown = computed(() => editorLanguage.value === 'markdown')
+
+// Markdown 视图模式：原文 / 分屏（原文+预览） / 预览；md 文件默认分屏
+const viewMode = ref<'source' | 'split' | 'preview'>('split')
+
 // 监听文件切换
 watch(
   () => props.file,
-  async (newFile, oldFile) => {
-    // 切换前检查未保存
-    if (oldFile && isDirty.value && props.file?.fileId) {
-      const confirmed = await showUnsavedConfirm()
-      if (!confirmed) {
-        return
-      }
-    }
-
+  async (newFile) => {
     clearSavedTimer()
+    // 文件切换重置视图模式（md 默认分屏）
+    viewMode.value = 'split'
 
     if (newFile && !newFile.directory) {
       await loadFileContent(newFile)
@@ -116,7 +124,7 @@ function handleContentChange(newContent: string) {
  * 保存文件
  */
 async function handleSave() {
-  if (!props.file || saveStatus.value === 'saving') return
+  if (props.readonly || !props.file || saveStatus.value === 'saving') return
 
   saveStatus.value = 'saving'
   try {
@@ -149,23 +157,6 @@ function handleRevert() {
   editorContent.value = originalContent.value
   saveStatus.value = 'saved'
   emit('dirty-change', false)
-}
-
-/**
- * 显示未保存确认弹窗
- */
-function showUnsavedConfirm(): Promise<boolean> {
-  return new Promise((resolve) => {
-    Modal.confirm({
-      title: '未保存的更改',
-      content: '当前文件有未保存的修改，是否放弃更改并切换文件？',
-      okText: '放弃更改',
-      cancelText: '继续编辑',
-      okButtonProps: { danger: true },
-      onOk: () => resolve(true),
-      onCancel: () => resolve(false),
-    })
-  })
 }
 
 function clearSavedTimer() {
@@ -203,8 +194,22 @@ function handleEditorSave() {
       <div class="editor-toolbar">
         <span class="breadcrumb">{{ breadcrumb }}</span>
         <div class="toolbar-actions">
+          <!-- Markdown 视图切换：原文 / 分屏 / 预览（仅 md 文件显示） -->
+          <ARadioGroup
+            v-if="isMarkdown"
+            v-model:value="viewMode"
+            size="small"
+            button-style="solid"
+            class="view-mode-switch"
+          >
+            <ARadioButton value="source">原文</ARadioButton>
+            <ARadioButton value="split">分屏</ARadioButton>
+            <ARadioButton value="preview">预览</ARadioButton>
+          </ARadioGroup>
+          <!-- 只读模式：仅提示，不可保存 -->
+          <span v-if="readonly" class="readonly-indicator">只读</span>
           <!-- 有变更时：放弃 + 保存 -->
-          <template v-if="isDirty">
+          <template v-else-if="isDirty">
             <Button type="text" size="small" @click="handleRevert">
               <template #icon><RollbackOutlined /></template>
               放弃更改
@@ -227,18 +232,28 @@ function handleEditorSave() {
         </div>
       </div>
 
-      <!-- 编辑器区域 -->
-      <div class="editor-body">
-        <SmartCodeEditor
-          style="border-radius: 0;"
-          :model-value="editorContent"
-          :show-toolbar="false"
-          language="txt"
-          theme="light"
-          height="calc(100vh - 60px)"
-          @update:model-value="handleContentChange"
-          @save="handleEditorSave"
-        />
+      <!-- 编辑器区域：原文 / 分屏（原文+预览实时联动） / 预览 -->
+      <div class="editor-body" :class="{ 'is-split': isMarkdown && viewMode === 'split' }">
+        <!-- 原文（v-show 保留编辑器实例：光标/滚动位置与未保存状态不丢） -->
+        <div v-show="!isMarkdown || viewMode !== 'preview'" class="pane pane-editor">
+          <SmartCodeEditor
+            style="border-radius: 0;"
+            :model-value="editorContent"
+            :show-toolbar="false"
+            :language="editorLanguage"
+            :readonly="readonly"
+            theme="light"
+            height="calc(100vh - 100px)"
+            @update:model-value="handleContentChange"
+            @save="handleEditorSave"
+          />
+        </div>
+        <!-- 预览（渲染 editorContent，含未保存修改，编辑即时联动）
+             chat-md-content：聊天正文同款排版/代码块/高亮样式的全局挂载类（markdown.scss），
+             并使 vep 图表、mermaid 等扩展渲染与聊天一致 -->
+        <div v-if="isMarkdown && viewMode !== 'source'" class="pane pane-preview chat-md-content">
+          <MarkdownRenderer :content="editorContent" />
+        </div>
       </div>
     </template>
 
@@ -311,5 +326,38 @@ function handleEditorSave() {
   flex: 1;
   overflow: hidden;
   background: #fff;
+}
+
+/* 分屏：原文 | 预览 左右各半 */
+.editor-body.is-split {
+  display: flex;
+}
+
+.editor-body.is-split .pane {
+  flex: 1;
+  width: 50%;
+  min-width: 0;
+}
+
+.pane-preview {
+  height: calc(100vh - 100px);
+  overflow-y: auto;
+  padding: 16px 24px;
+  background: #fff;
+  border-left: 1px solid #f0f0f0;
+}
+
+/* 技能预览的代码块只保留「复制」（全屏对预览场景冗余；按钮组 flex 排列，隐藏后复制自然占原全屏位置）。
+   CSS 隐藏而非改 code-handler：该 handler 与聊天正文共用，聊天里的全屏按钮保留 */
+.pane-preview :deep(.md-code-btn[title="全屏"]) {
+  display: none;
+}
+
+.readonly-indicator {
+  font-size: 13px;
+  color: #999;
+  padding: 1.5px 8px;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
 }
 </style>

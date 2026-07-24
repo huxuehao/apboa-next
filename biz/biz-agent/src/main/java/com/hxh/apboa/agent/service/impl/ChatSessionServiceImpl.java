@@ -3,8 +3,12 @@ package com.hxh.apboa.agent.service.impl;
 import com.hxh.apboa.agent.mapper.AgentScopeSessionMapper;
 import com.hxh.apboa.agent.mapper.ChatSessionMapper;
 import com.hxh.apboa.agent.service.AgentDefinitionService;
+import com.hxh.apboa.agent.service.AgentModelConfigService;
 import com.hxh.apboa.agent.service.ChatMessageService;
 import com.hxh.apboa.agent.service.ChatSessionService;
+import com.hxh.apboa.model.service.ModelConfigService;
+import com.hxh.apboa.common.consts.RedisChannelTopic;
+import com.hxh.apboa.common.enums.ConfirmMode;
 import com.hxh.apboa.common.consts.SysConst;
 import com.hxh.apboa.common.dto.ChatMessageAppendDTO;
 import com.hxh.apboa.common.dto.ChatSessionCreateDTO;
@@ -12,9 +16,11 @@ import com.hxh.apboa.common.dto.ChatSessionQueryDTO;
 import com.hxh.apboa.common.entity.AgentDefinition;
 import com.hxh.apboa.common.entity.ChatMessage;
 import com.hxh.apboa.common.entity.ChatSession;
+import com.hxh.apboa.common.entity.ModelConfig;
 import com.hxh.apboa.common.mp.support.PageParams;
 import com.hxh.apboa.common.util.BeanUtils;
 import com.hxh.apboa.common.util.FolderUtils;
+import com.hxh.apboa.common.util.RedisUtils;
 import com.hxh.apboa.common.util.UserUtils;
 import com.hxh.apboa.common.vo.ChatMessageVO;
 import com.hxh.apboa.common.vo.ChatMessagePageVO;
@@ -32,6 +38,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -43,11 +50,17 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ChatSessionServiceImpl extends ServiceImpl<ChatSessionMapper, ChatSession> implements ChatSessionService {
 
+    /** 一键授权开关 Redis TTL（天，写入时滚动刷新） */
+    private static final long AUTO_APPROVE_TTL_DAYS = 30;
+
     private final ChatMessageService chatMessageService;
     private final MessageTableRouter messageTableRouter;
     private final ThreadSessionManager sessionManager;
     private final AgentScopeSessionMapper agentScopeSessionMapper;
     private final AgentDefinitionService agentDefinitionService;
+    private final AgentModelConfigService agentModelConfigService;
+    private final ModelConfigService modelConfigService;
+    private final RedisUtils redisUtils;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -241,6 +254,7 @@ public class ChatSessionServiceImpl extends ServiceImpl<ChatSessionMapper, ChatS
     public IPage<ChatSessionVO> pageSessions(PageParams pageParams, ChatSessionQueryDTO query) {
         Long userId = query.getUserId() != null ? query.getUserId() : UserUtils.getId();
         LambdaQueryWrapper<ChatSession> wrapper = new LambdaQueryWrapper<ChatSession>()
+                .eq(query.getId() != null, ChatSession::getId, query.getId())
                 .eq(userId != null, ChatSession::getUserId, userId)
                 .eq(query.getAgentId() != null, ChatSession::getAgentId, query.getAgentId())
                 .eq(query.getIsPinned() != null, ChatSession::getIsPinned, query.getIsPinned())
@@ -388,6 +402,94 @@ public class ChatSessionServiceImpl extends ServiceImpl<ChatSessionMapper, ChatS
         // 删除工作空间目录（文件 + sessionId文件夹本身）
         String workspacePath = SysConst.getWorkspacePath() + "/" + session.getId();
         FolderUtils.deleteRecursively(workspacePath);
+    }
+
+    @Override
+    public ConfirmMode getConfirmMode(Long sessionId) {
+        return ConfirmMode.fromRedisValue(
+                redisUtils.get(RedisChannelTopic.CHAT_AUTO_APPROVE_KEY_PREFIX + sessionId));
+    }
+
+    @Override
+    public void setConfirmMode(Long sessionId, ConfirmMode mode) {
+        // 校验会话归属（MP 租户拦截器过滤，非本租户查不到），防越权改他人会话开关
+        ChatSession session = getById(sessionId);
+        if (session == null) {
+            throw new RuntimeException("会话不存在");
+        }
+        String key = RedisChannelTopic.CHAT_AUTO_APPROVE_KEY_PREFIX + sessionId;
+        if (mode == null || mode.getRedisValue() == null) {
+            // MANUAL：无记录即逐步确认
+            redisUtils.delete(key);
+        } else {
+            redisUtils.setEx(key, mode.getRedisValue(), AUTO_APPROVE_TTL_DAYS, TimeUnit.DAYS);
+        }
+    }
+
+    @Override
+    public Boolean getThinkingMode(Long sessionId) {
+        String value = redisUtils.get(RedisChannelTopic.CHAT_THINKING_KEY_PREFIX + sessionId);
+        if ("1".equals(value)) {
+            return true;
+        }
+        if ("0".equals(value)) {
+            return false;
+        }
+        return null;
+    }
+
+    @Override
+    public void setThinkingMode(Long sessionId, boolean enabled) {
+        // 校验会话归属（MP 租户拦截器过滤，非本租户查不到），防越权改他人会话开关
+        ChatSession session = getById(sessionId);
+        if (session == null) {
+            throw new RuntimeException("会话不存在");
+        }
+        redisUtils.setEx(RedisChannelTopic.CHAT_THINKING_KEY_PREFIX + sessionId,
+                enabled ? "1" : "0", AUTO_APPROVE_TTL_DAYS, TimeUnit.DAYS);
+    }
+
+    @Override
+    public Long getSessionModel(Long sessionId) {
+        String value = redisUtils.get(RedisChannelTopic.CHAT_MODEL_KEY_PREFIX + sessionId);
+        if (value == null || value.isEmpty()) {
+            return null;
+        }
+        try {
+            return Long.valueOf(value);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    @Override
+    public void setSessionModel(Long sessionId, Long modelConfigId) {
+        // 校验会话归属（MP 租户拦截器过滤，非本租户查不到），防越权改他人会话
+        ChatSession session = getById(sessionId);
+        if (session == null) {
+            throw new RuntimeException("会话不存在");
+        }
+        String key = RedisChannelTopic.CHAT_MODEL_KEY_PREFIX + sessionId;
+        // null = 清除覆盖，回落 agent 默认模型
+        if (modelConfigId == null) {
+            redisUtils.delete(key);
+            return;
+        }
+        AgentDefinition agent = agentDefinitionService.getById(session.getAgentId());
+        if (agent == null) {
+            throw new RuntimeException("智能体不存在");
+        }
+        // 覆盖目标必须在候选集内（默认模型 ∪ 关联表），防绕过前端指定任意模型
+        boolean candidate = modelConfigId.equals(agent.getModelConfigId())
+                || agentModelConfigService.getModelIds(agent.getId()).contains(modelConfigId);
+        if (!candidate) {
+            throw new RuntimeException("所选模型不在该智能体的候选列表中");
+        }
+        ModelConfig modelConfig = modelConfigService.getById(modelConfigId);
+        if (modelConfig == null || !modelConfig.getEnabled()) {
+            throw new RuntimeException("所选模型不存在或已禁用");
+        }
+        redisUtils.setEx(key, String.valueOf(modelConfigId), AUTO_APPROVE_TTL_DAYS, TimeUnit.DAYS);
     }
 
     private ChatSessionVO toSessionVO(ChatSession session) {

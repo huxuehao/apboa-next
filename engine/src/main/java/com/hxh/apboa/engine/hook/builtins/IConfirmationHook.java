@@ -1,12 +1,16 @@
 package com.hxh.apboa.engine.hook.builtins;
 
 import com.hxh.apboa.common.annotation.Scope;
+import com.hxh.apboa.common.enums.ConfirmMode;
 import com.hxh.apboa.common.enums.ScopeType;
+import com.hxh.apboa.engine.hitl.ConfirmModeResolver;
 import com.hxh.apboa.engine.hook.IAgentHook;
+import io.agentscope.core.agent.AgentBase;
 import io.agentscope.core.hook.HookEvent;
 import io.agentscope.core.hook.PostReasoningEvent;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.ToolUseBlock;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
@@ -24,9 +28,14 @@ import java.util.Map;
 @Slf4j
 @Component
 @Scope(ScopeType.GLOBAL)
+@RequiredArgsConstructor
 public class IConfirmationHook implements IAgentHook {
     // 需要确认的工具列表
     private static final List<String> NEED_CONFIRM_TOOLS = new ArrayList<>();
+
+    /** 需确认工具的参数字段元数据（toolName → fields，与上方清单同生命周期维护） */
+    private static final Map<String, List<Map<String, Object>>> CONFIRM_FIELDS =
+            new java.util.concurrent.ConcurrentHashMap<>();
 
     @Override
     public <T extends HookEvent> Mono<T> onEvent(T event) {
@@ -58,12 +67,31 @@ public class IConfirmationHook implements IAgentHook {
 
             // 如果有需要确认的工具
             if (!toolsNeedConfirm.isEmpty()) {
-                // 暂停 Agent 执行，等待用户确认
+                // 授权模式三态（stopAgent 前实时读 Redis 最新值，会话级，前端切换即写入）：
+                // AUTO_APPROVE 直接放行（避免白跑整套 暂停持久化→确认事件→前端确认→resume 循环）；
+                // MANUAL / AUTO_REJECT 都暂停——自动拒绝的差异化在暂停处理层
+                // （主 agent: AguiAgentAdapter 全拒续跑；子智能体: SubAgentTool 挂起前短路），
+                // Hook 层无法向 memory 注入工具拒绝结果，不在此实现拒绝
+                ConfirmMode mode = resolveMode(event);
+                if (mode == ConfirmMode.AUTO_APPROVE) {
+                    log.info("会话已开启一键授权，自动放行需确认工具: {}",
+                            toolsNeedConfirm.stream().map(t -> t.get("name")).toList());
+                    return Mono.just(event);
+                }
+                // 暂停 Agent 执行，等待用户确认（或由暂停处理层按 AUTO_REJECT 自动全拒）
                 postReasoning.stopAgent();
             }
         }
 
         return Mono.just(event);
+    }
+
+    /** 解析当前会话授权模式（主 agent 凭 threadId、子智能体回退 subParentThreadId，异常降级 MANUAL） */
+    private ConfirmMode resolveMode(HookEvent event) {
+        if (!(event.getAgent() instanceof AgentBase agentBase)) {
+            return ConfirmMode.MANUAL;
+        }
+        return ConfirmModeResolver.resolveByAgentId(agentBase.getAgentId());
     }
 
     @SuppressWarnings("unchecked")
@@ -84,8 +112,39 @@ public class IConfirmationHook implements IAgentHook {
         }
     }
 
+    /**
+     * 登记需确认工具并附带参数字段元数据（随 TOOL_CONFIRM_REQUIRED / pending 下发，
+     * 供确认 UI 渲染表单；元数据由 ConfirmFieldMetaBuilder 归一）。
+     * 与需确认清单同生命周期：工具注册时登记、removeNeedConfirmTool 时一并清理。
+     */
+    public static void setNeedConfirmTool(String toolName, List<Map<String, Object>> fields) {
+        setNeedConfirmTool(toolName);
+        if (fields != null && !fields.isEmpty()) {
+            CONFIRM_FIELDS.put(toolName, fields);
+        } else {
+            CONFIRM_FIELDS.remove(toolName);
+        }
+    }
+
     public static void removeNeedConfirmTool(String toolName) {
         NEED_CONFIRM_TOOLS.remove(toolName);
+        CONFIRM_FIELDS.remove(toolName);
+    }
+
+    /** 某需确认工具的参数字段元数据；未登记返回空列表（前端降级 JSON 展示）。 */
+    public static List<Map<String, Object>> getConfirmFields(String toolName) {
+        List<Map<String, Object>> fields = toolName == null ? null : CONFIRM_FIELDS.get(toolName);
+        return fields == null ? List.of() : fields;
+    }
+
+    /**
+     * 查询某工具是否登记为需确认。
+     *
+     * <p>HITL §6.2：AguiAgentAdapter 暂停时据此从本轮所有 pending 工具中精确过滤出需确认的，
+     * 避免把同轮被 stopAgent 连累的普通/MCP 工具也算进 TOOL_CONFIRM_REQUIRED（修 §2.2「MCP 确认假象」）。
+     */
+    public static boolean isNeedConfirm(String toolName) {
+        return NEED_CONFIRM_TOOLS.contains(toolName);
     }
 
     @Override

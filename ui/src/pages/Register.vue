@@ -199,12 +199,17 @@ onMounted(() => {
 </script>
 
 <template>
-  <AuthContainer>
-    <!-- 标题区 -->
+  <AuthContainer :show-back="true" back-to="/login">
     <div class="auth-card-header">
       <h2 class="auth-card-title">创建账号</h2>
     </div>
     <p class="auth-card-subtitle">注册 Apboa Next 智能体平台</p>
+
+    <!-- 步骤指示器 -->
+    <ASteps :current="currentStep" size="small" class="register-steps">
+      <AStep title="选择组织" />
+      <AStep title="填写信息" />
+    </ASteps>
 
     <AForm
       ref="formRef"

@@ -39,6 +39,12 @@ const jobName = ref('')
 
 // Agent 配置
 const agentUserPrompt = ref('')
+// 工具授权模式（AGENT 型）：执行中遇到需人工确认的工具时的自动决策
+const agentConfirmMode = ref<'AUTO_APPROVE' | 'AUTO_REJECT'>('AUTO_APPROVE')
+
+const confirmModeHint = computed(() => agentConfirmMode.value === 'AUTO_APPROVE'
+  ? '需人工确认的工具将被自动批准并真实执行（含写操作），视为创建者预授权'
+  : '需人工确认的工具将被自动拒绝，任务以只读方式运行，模型会如实说明未获授权')
 
 // 编辑模式下从DB加载的原始enabled值
 const editEnabled = ref(true)
@@ -138,18 +144,25 @@ async function loadJobData() {
       }
 
       if (job.type === 'AGENT') {
-        // 优先读新格式 userPrompt，兼容旧格式 inputs.userPrompt
+        // 正确格式为顶层 userPrompt（AgentJobWrapper 契约）；
+        // 兼容读取曾按 inputs 嵌套保存的存量任务
         agentUserPrompt.value = dataMap.userPrompt || dataMap.inputs?.userPrompt || ''
+        agentConfirmMode.value = dataMap.confirmMode === 'AUTO_REJECT' ? 'AUTO_REJECT' : 'AUTO_APPROVE'
       } else if (job.type === 'WORKFLOW') {
         // 加载工作流配置
         await loadWorkflowConfig(job.bizId)
-        // 恢复之前保存的参数值（优先读新格式 params，兼容旧格式 inputs）
+        // 恢复参数值：正确格式为顶层 params（AgentJobWrapper 契约）；
+        // 兼容读取曾按 inputs 嵌套保存的存量任务
         const savedParams = dataMap.params || dataMap.inputs
         if (savedParams) {
-          workflowParams.value = workflowParams.value.map(p => ({
-            ...p,
-            value: savedParams[p.name] ?? p.value
-          }))
+          workflowParams.value = workflowParams.value.map(p => {
+            let saved = savedParams[p.name]
+            // Array/Object 落库为真实结构，回填文本控件须转回 JSON 文本
+            if (saved !== undefined && saved !== null && typeof saved === 'object') {
+              saved = JSON.stringify(saved)
+            }
+            return { ...p, value: saved ?? p.value }
+          })
         }
         // 恢复之前保存的变量值
         if (dataMap.variables) {
@@ -204,7 +217,8 @@ async function handleSave() {
 
   saving.value = true
   try {
-    // 构建 dataMap
+    // 构建 dataMap：结构须与后端 AgentJobWrapper 对齐
+    // （jobName/bizName/type/bizId + AGENT: userPrompt / WORKFLOW: params+variables）
     const dataMap: Record<string, unknown> = {
       jobName: jobName.value,
       bizName: selectedTarget.value.name
@@ -212,17 +226,27 @@ async function handleSave() {
 
     if (targetType.value === 'AGENT') {
       dataMap.userPrompt = agentUserPrompt.value
+      dataMap.confirmMode = agentConfirmMode.value
     } else {
-      // Workflow: 保存参数值和变量值
       const params: Record<string, unknown> = {}
       workflowParams.value.forEach(p => {
-        params[p.name] = p.value
+        let value = p.value
+        // Array/Object 参数在输入控件里以 JSON 文本编辑，保存须还原为真实结构，
+        // 否则执行端开始节点拿到的是字符串、下游集合类节点必失败
+        if ((p.type === 'Array' || p.type === 'Object') && typeof value === 'string' && value.trim()) {
+          try {
+            value = JSON.parse(value)
+          } catch {
+            message.warning(`参数「${p.name}」不是合法 JSON，已按原文本保存`)
+          }
+        }
+        params[p.name] = value
       })
       dataMap.params = params
       dataMap.variables = workflowVariables.value
     }
     dataMap.bizId = selectedTarget.value.id
-    dataMap.type =  targetType.value
+    dataMap.type = targetType.value
 
     const jobClass = targetType.value === 'AGENT'
       ? 'com.hxh.apboa.scheduler.scheduler.AgentScheduler'
@@ -346,6 +370,22 @@ onMounted(() => {
                   show-count
                   :maxlength="2000"
                 />
+              </div>
+            </div>
+            <!-- 工具授权：无人值守执行遇到需人工确认的工具时的自动决策 -->
+            <div class="form-row">
+              <div class="form-label">工具授权</div>
+              <div class="form-control">
+                <ASegmented
+                  v-model:value="agentConfirmMode"
+                  :options="[
+                    { label: '一键授权', value: 'AUTO_APPROVE' },
+                    { label: '拒绝授权', value: 'AUTO_REJECT' }
+                  ]"
+                />
+                <ATypographyText type="secondary" style="display: block; margin-top: 6px; font-size: 12px">
+                  {{ confirmModeHint }}
+                </ATypographyText>
               </div>
             </div>
           </div>

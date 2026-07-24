@@ -39,6 +39,14 @@ export function update(entity: SkillPackage) {
 }
 
 /**
+ * 更新展示别名（仅改 alias，允许内置）
+ * PUT /skill/{id}/alias
+ */
+export function updateAlias(id: string, alias: string) {
+  return request.put<ApiResponse<boolean>>(`/api/skill/${id}/alias`, { alias })
+}
+
+/**
  * 删除
  * DELETE /skill
  */

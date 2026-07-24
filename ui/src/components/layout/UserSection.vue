@@ -19,9 +19,11 @@ import {
 } from '@ant-design/icons-vue'
 import { Modal } from 'ant-design-vue'
 import SettingsModal from '@/components/settings/SettingsModal.vue'
+import { useLayout } from '@/composables/useLayout'
 import type { TenantInfo } from '@/types'
 
 const router = useRouter()
+const { isMobile } = useLayout()
 const {
   logout,
   userInfo,
@@ -193,8 +195,9 @@ const openMarkdownDoc = () => {
       :footer="null"
       :destroyOnClose="true"
       :width="'100%'"
+      :closable="!isMobile"
     >
-      <SettingsModal />
+      <SettingsModal @close="settingsVisible = false" />
     </AModal>
   </div>
 </template>

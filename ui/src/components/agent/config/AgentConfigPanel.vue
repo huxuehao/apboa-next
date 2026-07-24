@@ -22,7 +22,6 @@ import AgentConfigArchitecture from './AgentConfigArchitecture.vue'
 import AgentConfigHistory from './AgentConfigHistory.vue'
 import AgentConfigApiDoc from './AgentConfigApiDoc.vue'
 import AgentConfigStatistics from './AgentConfigStatistics.vue'
-import AgentConfigSchedule from './AgentConfigSchedule.vue'
 
 const props = defineProps<{
   visible: boolean
@@ -61,7 +60,6 @@ const navItems = computed(() => {
 const activeKey = ref('edit')
 const editRef = ref<InstanceType<typeof AgentConfigEdit>>()
 const editA2aRef = ref<InstanceType<typeof AgentConfigEditA2a>>()
-const scheduleRef = ref<InstanceType<typeof AgentConfigSchedule>>()
 
 /**
  * 是否为A2A智能体
@@ -76,7 +74,7 @@ function checkUnsaved(): boolean {
     if (isA2aAgent.value && editA2aRef.value?.isDirty) return true
     if (!isA2aAgent.value && editRef.value?.isDirty) return true
   }
-  return !!(activeKey.value === 'schedule' && scheduleRef.value?.isDirty);
+  return false
 }
 
 /**

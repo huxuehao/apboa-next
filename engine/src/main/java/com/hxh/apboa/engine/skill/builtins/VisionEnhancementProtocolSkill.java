@@ -1,16 +1,38 @@
 package com.hxh.apboa.engine.skill.builtins;
 
+import com.hxh.apboa.common.annotation.Scope;
+import com.hxh.apboa.common.enums.ScopeType;
+import com.hxh.apboa.engine.skill.IBuiltinSkill;
 import io.agentscope.core.skill.AgentSkill;
+import org.springframework.stereotype.Component;
 
 /**
- * 描述：用户交互协议SKILL
+ * 描述：视觉增强协议SKILL（内置，全局）
  *
  * @author huxuehao
  **/
-public class VisionEnhancementProtocolSkill {
+@Component
+@Scope(ScopeType.GLOBAL)
+public class VisionEnhancementProtocolSkill implements IBuiltinSkill {
     private static final String SKILL_NAME = "vision_enhancement_protocol_rules";
 
-    public static AgentSkill getAgentSkill() {
+    @Override
+    public String getSysPrompt() {
+        return """
+                ===================================================
+                Core Principle
+                > **Only use** the `vision_enhancement_protocol_rules` feature for visual presentation **when** it can **significantly improve comprehension** compared to plain text.
+
+                Before responding, ask yourself:
+                > "Would presenting part of the content as cards or charts help the user understand the information faster and better?"
+
+                - If **yes** → Respond using the `vision_enhancement_protocol_rules`
+                - If **no** → Reply with plain text only
+                """;
+    }
+
+    @Override
+    public AgentSkill getAgentSkill() {
         return AgentSkill.builder()
                 .name(SKILL_NAME)
                 .description(

@@ -5,13 +5,17 @@ import com.hxh.apboa.agent.service.AgentCodeExecutionService;
 import com.hxh.apboa.agent.service.CodeExecutionConfigService;
 import com.hxh.apboa.common.entity.AgentDefinition;
 import com.hxh.apboa.common.entity.CodeExecutionConfig;
+import com.hxh.apboa.common.entity.SkillPackage;
 import com.hxh.apboa.common.util.FuncUtils;
 import com.hxh.apboa.common.util.JsonUtils;
 import com.hxh.apboa.common.wrapper.KnowledgeWrapper;
 import com.hxh.apboa.engine.agui.AgentContext;
 import com.hxh.apboa.engine.hook.HooksFactory;
 import com.hxh.apboa.engine.knowledge.KnowledgeFactory;
+import com.hxh.apboa.common.util.AgentMetadataStore;
 import com.hxh.apboa.engine.model.ChatModelFactory;
+import com.hxh.apboa.engine.model.SessionModelResolver;
+import com.hxh.apboa.engine.model.ThinkingModeResolver;
 import com.hxh.apboa.engine.prompt.AgentSysPromptFactory;
 import com.hxh.apboa.engine.skill.SkillBoxFactory;
 import com.hxh.apboa.engine.memory.LongTermMemoryFactory;
@@ -63,28 +67,62 @@ public class ReActAgentHelper {
      * @param definition agent 定义
      */
     public ReActAgent getReActAgent(AgentDefinition definition) {
-        // 构建reActAgent
-        return getReactAgentBuilder(definition).build();
+        return getReActAgent(definition, false);
+    }
+
+    /**
+     * 获取 ReActAgent
+     *
+     * @param definition  agent 定义
+     * @param asSubAgent 是否作为子智能体构建（ToolkitFactory.createTrackedSubAgent 传 true）。
+     *                   子智能体的 HITL 确认沿用主 agent 授权机制：主会话一键授权经
+     *                   IConfirmationHook 的 subParentThreadId 回退下行继承；逐步确认经
+     *                   SubAgentTool 挂起-唤醒冒泡到主会话界面（PendingSubConfirmRegistry）
+     */
+    public ReActAgent getReActAgent(AgentDefinition definition, boolean asSubAgent) {
+        ReActAgent agent = getReactAgentBuilder(definition, asSubAgent).build();
+        registerBuildMetadata(agent);
+        return agent;
+    }
+
+    /**
+     * 获取 ReActAgent.Builder（上游自动化调度经 IAgentFactory.getAgentBuilder 使用：
+     * 拿 Builder 定制后自行 build。build 后必须调 registerBuildMetadata 登记模型审计
+     * 元数据，否则 ChatLogHook 落 meta 缺 modelConfigId、成本流水不入账）
+     * @param definition  agent 定义
+     */
+    public ReActAgent.Builder getReactAgentBuilder(AgentDefinition definition) {
+        return getReactAgentBuilder(definition, false);
     }
 
     /**
      * 获取 ReActAgent.Builder
      * @param definition  agent 定义
+     * @param asSubAgent 是否作为子智能体构建
      */
-    public ReActAgent.Builder getReactAgentBuilder(AgentDefinition definition) {
+    public ReActAgent.Builder getReactAgentBuilder(AgentDefinition definition, boolean asSubAgent) {
         Model model = chatModelFactory.getModel(definition);
+        // 立即捕获本 agent 选定的模型标识：后续 getToolkit 构建子智能体时，子 agent 的
+        // getModel 会覆盖 AgentContext 的 activeModel（同一线程上下文），构建完再读就是
+        // 子模型——主消息的模型审计与成本流水都会记错（实测踩过）
+        Long capturedModelConfigId = AgentContext.getIfExists()
+                .map(AgentContext::getActiveModelConfigId).orElse(null);
+        String capturedModelLabel = AgentContext.getIfExists()
+                .map(AgentContext::getActiveModelLabel).orElse(null);
         Toolkit toolkit = toolkitFactory.getToolkit(definition);
         CodeExecutionConfig codeExecutionConfig = getCodeExecutionConfig(definition.getId());
+        // 勾选技能包查一次传两处：系统提示词注入与 SkillBox 注册共用同一份清单
+        List<SkillPackage> checkedSkillPackages = skillBoxFactory.getCheckedSkillPackages(definition.getId());
         ReActAgent.Builder builder = ReActAgent.builder()
                 .name(definition.getAgentCode())
                 .description(FuncUtils.isEmpty(definition.getDescription()) ? definition.getName() : definition.getDescription())
                 .maxIters(definition.getMaxIterations())
                 .model(model)
-                .sysPrompt(agentSysPromptFactory.getAgentSysPrompt(definition, codeExecutionConfig != null))
+                .sysPrompt(agentSysPromptFactory.getAgentSysPrompt(definition, codeExecutionConfig != null, checkedSkillPackages))
                 .toolkit(toolkit)
                 .skillBox(toolkit != null
-                        ? skillBoxFactory.getSkillBox(definition, toolkit, codeExecutionConfig)
-                        : skillBoxFactory.getSkillBox(definition, codeExecutionConfig));
+                        ? skillBoxFactory.getSkillBox(toolkit, codeExecutionConfig, checkedSkillPackages)
+                        : skillBoxFactory.getSkillBox(codeExecutionConfig, checkedSkillPackages));
 
         KnowledgeWrapper knowledgeWrapper = knowledgeFactory.getKnowledge(definition);
         if (knowledgeWrapper != null) {
@@ -135,13 +173,19 @@ public class ReActAgentHelper {
             } else {
                 builder.memory(new InMemoryMemory());
             }
-            // 启用会话持久化时，确保 Memory 可被 saveTo/loadFrom；若启用规划则同时持久化 PlanNotebook
-            builder.statePersistence(
-                    StatePersistence.builder()
-                            .memoryManaged(true)
-                            .planNotebookManaged(definition.getEnablePlanning() && isPlanActive)
-                            .build());
         }
+
+        // HITL（docs/hitl-confirmation-refactor.md §6.1）：无条件开启「待确认工具恢复」+ 状态持久化，
+        // 让工具暂停态可被 saveTo/loadFrom，且不依赖 memoryActive（修 §2.5 Bug3：不开记忆时确认也不能失效）。
+        // 暂停态恢复必须连 memory 一起持久化（V0 实测：仅 statefulTools 会因缺 user query 被模型拒绝），
+        // 故 memoryManaged 恒为 true；长期记忆「是否保留」交由 AguiRequestProcessor/resume 的 session 生命周期控制。
+        builder.enablePendingToolRecovery(true);
+        builder.statePersistence(
+                StatePersistence.builder()
+                        .memoryManaged(true)
+                        .statefulToolsManaged(true)
+                        .planNotebookManaged(definition.getEnablePlanning() && isPlanActive)
+                        .build());
 
         // 配置长期记忆
         LongTermMemory longTermMemory = longTermMemoryFactory.createLongTermMemory(definition);
@@ -179,7 +223,37 @@ public class ReActAgentHelper {
                 .build();
         builder.toolExecutionContext(context);
 
+        // 把构建期捕获的模型标识写回上下文：toolkit 阶段子智能体构建会覆盖 ctx 的
+        // activeModel（同线程），此处恢复为本 agent 选定值，供 registerBuildMetadata 读取
+        AgentContext.getIfExists().ifPresent(ctx -> {
+            ctx.setActiveModelConfigId(capturedModelConfigId);
+            ctx.setActiveModelLabel(capturedModelLabel);
+        });
+
         return builder;
+    }
+
+    /**
+     * build 后登记构建期元数据：会话级覆盖值（思考 "1"/"0"/"follow"、模型 modelConfigId/"follow"，
+     * 供 AguiRequestProcessor 每次 run 对比 Redis 当前值——变化则重建 agent）与消息级模型审计
+     * （ChatLogHook 落 meta / 成本流水 / Adapter 下发 RUN_META 按 agentId 读取）。
+     * getReActAgent 内部已调用；走 getReactAgentBuilder 自行 build 的链路（如定时任务
+     * AgentScheduler）必须补调，否则该 run 的消息 meta 缺模型标识、成本不入账。
+     */
+    public void registerBuildMetadata(ReActAgent agent) {
+        AgentContext.getIfExists().ifPresent(ctx -> {
+            String threadId = ctx.getThreadId();
+            if (threadId != null && !threadId.isEmpty()) {
+                AgentMetadataStore.put(agent.getAgentId(), "builtThinkingOverride",
+                        ThinkingModeResolver.overrideKey(ThinkingModeResolver.resolveOverride(threadId)));
+                AgentMetadataStore.put(agent.getAgentId(), "builtModelOverride",
+                        SessionModelResolver.overrideKey(SessionModelResolver.resolveOverride(threadId)));
+            }
+            // 消息级模型审计：本次构建实际选定的模型（ChatModelFactory 写入 ctx 后在
+            // getModel 处即捕获并于构建完成时写回 ctx，防 toolkit 阶段子智能体构建覆盖）
+            AgentMetadataStore.put(agent.getAgentId(), "activeModelConfigId", ctx.getActiveModelConfigId());
+            AgentMetadataStore.put(agent.getAgentId(), "activeModelLabel", ctx.getActiveModelLabel());
+        });
     }
 
     /**

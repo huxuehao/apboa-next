@@ -13,6 +13,7 @@ import type {
   CodeLanguage,
   AuthType,
   ModelProviderType,
+  ModelCategory,
   ModelType,
   HealthStatus,
   KbType,
@@ -94,6 +95,7 @@ export interface AgentDefinition extends BaseEntity {
   description: string
   modelConfigId: string
   modelParamsOverride: Record<string, any> | null
+  ttsParamsOverride: Record<string, any> | null
   toolChoiceStrategy: ToolChoiceStrategy
   specificToolName: string
   systemPromptTemplateId: string
@@ -221,6 +223,8 @@ export interface McpServer extends BaseEntity {
   timeout: number
   protocolConfig: Record<string, any> | null
   description: string
+  /** 身份断言 audience（空则该 MCP 不注入断言） */
+  audience?: string | null
   toolSchemas?: string | null
   healthStatus: HealthStatus
   lastHealthCheck: string
@@ -233,6 +237,7 @@ export interface McpServer extends BaseEntity {
   toolCount: number
   availableToolCount?: number
   runtimeFailThreshold?: number
+  idleTimeoutMs?: number
   activationRevision?: string | number | null
   configHash?: string | null
   needsSync: boolean
@@ -263,8 +268,14 @@ export interface ModelConfig extends BaseEntity {
   providerId: string
   name: string
   modelId: string
-  modelType: ModelType[]
+  /** 模型用途（LLM=对话生成 / ASR=语音识别） */
+  category?: ModelCategory
+  modelType: ModelType[] | null
   description: string
+  /** 展示图标（antd 图标组件名；空=默认 DeploymentUnitOutlined） */
+  logo?: string | null
+  /** 展示图标颜色（hex；空=默认 #0F74FF） */
+  logoColor?: string | null
   streaming: boolean
   thinking: boolean
   contextWindow: number
@@ -275,6 +286,10 @@ export interface ModelConfig extends BaseEntity {
   repeatPenalty: number
   seed: string
   extendConfig: Record<string, any> | null
+  /** 输入单价（元/百万token；null=未配价，0=免费/本地） */
+  inputPrice?: number | null
+  /** 输出单价（元/百万token；null=未配价，0=免费/本地） */
+  outputPrice?: number | null
 }
 
 /**
@@ -308,6 +323,7 @@ export interface SensitiveWordConfig extends BaseEntity {
  */
 export interface SkillPackage extends BaseEntity {
   name: string
+  alias?: string
   description: string
   skillContent: string
   category: string
@@ -386,6 +402,11 @@ export interface UploadedFileItem {
   size: string
   /** 是否正在上传中（上传完成后为 false 或 undefined） */
   uploading?: boolean
+  /**
+   * 图片附件的本地即时预览地址（objectURL，仅会话内存态）。
+   * 发送消息时必须剔除，不得序列化落库
+   */
+  localUrl?: string
 }
 
 /**

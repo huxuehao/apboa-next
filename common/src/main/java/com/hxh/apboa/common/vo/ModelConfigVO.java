@@ -2,9 +2,11 @@ package com.hxh.apboa.common.vo;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.hxh.apboa.common.config.SerializableEnable;
+import com.hxh.apboa.common.enums.ModelCategory;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -20,8 +22,13 @@ public class ModelConfigVO implements SerializableEnable {
     private Long providerId;
     private String name;
     private String modelId;
+    private ModelCategory category;
     private JsonNode modelType;
     private String description;
+    /** 展示图标（antd 图标组件名；null=前端用默认图标） */
+    private String logo;
+    /** 展示图标颜色（hex；null=前端用默认主题色） */
+    private String logoColor;
     private Boolean streaming;
     private Boolean thinking;
     private Integer contextWindow;
@@ -35,6 +42,10 @@ public class ModelConfigVO implements SerializableEnable {
     private String connectivityStatus;
     private String connectivityMessage;
     private LocalDateTime lastConnectivityCheck;
+    /** 输入单价（元/百万token；null=未配价，0=免费/本地） */
+    private BigDecimal inputPrice;
+    /** 输出单价（元/百万token；null=未配价，0=免费/本地） */
+    private BigDecimal outputPrice;
     private Boolean enabled;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

@@ -6,6 +6,7 @@
  */
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { storeToRefs } from 'pinia'
 import { useAccountStore } from '@/stores'
 import { RoutePaths } from '@/router/constants'
 import SideMenu from './SideMenu.vue'
@@ -19,15 +20,23 @@ import {
 } from '@ant-design/icons-vue'
 import { Modal } from 'ant-design-vue'
 import SettingsModal from '@/components/settings/SettingsModal.vue'
+import AppLogo from './AppLogo.vue'
+import { useLayout } from '@/composables/useLayout'
+
+defineOptions({ name: 'AppNavigationSidebar' })
+
+const props = withDefaults(defineProps<{
+  /** 移动端抽屉模式下始终展开，并隐藏折叠按钮 */
+  drawerMode?: boolean
+}>(), {
+  drawerMode: false,
+})
 
 const router = useRouter()
-const {
-  logout,
-  userInfo,
-  tenantRole,
-  currentTenant,
-  availableTenants
-} = useAccountStore()
+const { collapsed: persistedCollapsed, toggleCollapsed, isMobile } = useLayout()
+const accountStore = useAccountStore()
+const { userInfo, tenantRole, currentTenant, availableTenants } = storeToRefs(accountStore)
+const { logout } = accountStore
 
 /** 系统设置模态窗显示状态 */
 const settingsVisible = ref(false)
@@ -40,27 +49,22 @@ watch(settingsVisible, (val) => {
   if (!val) settingsTargetMenu.value = undefined
 })
 
-/** 侧边栏收缩状态 */
-const collapsed = ref(false)
-
-/** 切换收缩/展开 */
-function toggleCollapsed() {
-  collapsed.value = !collapsed.value
-}
+/** 抽屉模式固定展开；桌面折叠状态沿用 psh 的持久化设置 */
+const collapsed = computed(() => props.drawerMode ? false : persistedCollapsed.value)
 
 /**
  * 用户名首字母(用于头像)
  */
 const avatarText = computed(() => {
-  if (!userInfo?.nickname) return '?'
-  return userInfo.nickname.charAt(0).toUpperCase()
+  if (!userInfo.value?.nickname) return '?'
+  return userInfo.value.nickname.charAt(0).toUpperCase()
 })
 
 /**
  * 当前租户显示名称
  */
 const currentTenantName = computed(() => {
-  return currentTenant?.tenantName || currentTenant?.tenantCode || '未选择'
+  return currentTenant.value?.tenantName || currentTenant.value?.tenantCode || '未选择'
 })
 
 /**
@@ -94,8 +98,8 @@ const handleLogout = () => {
 }
 
 const roleName = computed(() => {
-  if (!tenantRole) return '普通用户'
-  switch (tenantRole) {
+  if (!tenantRole.value) return '普通用户'
+  switch (tenantRole.value) {
     case 'TENANT_OWNER':
       return '租户所有者'
     case 'TENANT_ADMIN':
@@ -112,16 +116,14 @@ const roleName = computed(() => {
   <div class="sidebar flex flex-col" :class="{ collapsed: collapsed }">
     <!-- 顶部Logo区域 -->
     <div class="sidebar-logo">
-      <img v-if="!collapsed" src="@/assets/logo/logo_3.png" alt="logo" width="125">
-      <img v-else src="@/assets/logo/logo_1.png" alt="logo" width="35">
-      <ATooltip v-if="!collapsed" :title="collapsed ? '展开菜单' : '收起菜单'" placement="right">
+      <AppLogo :collapsed="collapsed" />
+      <ATooltip v-if="!drawerMode && !collapsed" title="收起菜单" placement="right">
         <div class="collapse-btn" @click="toggleCollapsed">
-          <MenuFoldOutlined v-if="!collapsed" />
-          <MenuUnfoldOutlined v-else />
+          <MenuFoldOutlined />
         </div>
       </ATooltip>
     </div>
-    <div class="expand" v-if="collapsed">
+    <div class="expand" v-if="!drawerMode && collapsed">
       <ATooltip title="展开菜单" placement="right">
         <div class="expand-btn" @click="toggleCollapsed">
           <MenuUnfoldOutlined />
@@ -139,7 +141,7 @@ const roleName = computed(() => {
         <SwapOutlined class="tenant-icon" />
       </div>
     </div>
-    <div class="expand" v-if="collapsed">
+    <div class="expand" v-if="!drawerMode && collapsed">
       <ATooltip title="切换租户" placement="right">
         <div class="expand-btn" @click="openTenantDiscovery">
           <SwapOutlined />
@@ -194,8 +196,9 @@ const roleName = computed(() => {
       :footer="null"
       :destroyOnClose="true"
       :width="'100%'"
+      :closable="!isMobile"
     >
-      <SettingsModal :defaultMenu="settingsTargetMenu" />
+      <SettingsModal :defaultMenu="settingsTargetMenu" @close="settingsVisible = false" />
     </AModal>
   </div>
 </template>

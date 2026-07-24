@@ -2,6 +2,7 @@ package com.hxh.apboa.mcp.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.hxh.apboa.common.dto.McpToolEnabledDTO;
+import com.hxh.apboa.common.dto.McpToolNeedConfirmDTO;
 import com.hxh.apboa.common.entity.McpServer;
 import com.hxh.apboa.common.vo.McpToolVO;
 import java.util.List;
@@ -43,4 +44,6 @@ public interface McpServerService extends IService<McpServer> {
     List<McpToolVO> listTools(Long id);
 
     McpServer updateToolGlobalEnabled(Long id, McpToolEnabledDTO dto);
+
+    McpServer updateToolNeedConfirm(Long id, McpToolNeedConfirmDTO dto);
 }

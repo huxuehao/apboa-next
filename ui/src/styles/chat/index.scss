@@ -160,6 +160,12 @@ $small-mobile-breakpoint: 375px;
   flex-shrink: 0;
 }
 
+/* 智能体自定义头像（替换默认 logo 位） */
+.chat-sidebar-agent-avatar {
+  border-radius: var(--border-radius-md);
+  object-fit: cover;
+}
+
 .chat-sidebar-name {
   font-size: var(--font-size-lg);
   font-weight: 600;
@@ -392,6 +398,10 @@ $small-mobile-breakpoint: 375px;
   flex-shrink: 0;
   min-width: 0;
   position: relative;
+  /* 稳定高度：欢迎态标题为空串，h1 塌缩致 header 变矮，右上角绝对定位按钮组
+     (top:50% 居中) 顶部溢出被裁。取值贴合对话态整体高（padding 24 + 标题行高 ~27），
+     border-box 下含 padding，两态一致不跳动。移动端由下方 media query 覆盖为 48px */
+  min-height: 51px;
 
   /* 移动端适配：调整头部间距 */
   @media (max-width: $mobile-breakpoint) {
@@ -416,7 +426,9 @@ $small-mobile-breakpoint: 375px;
   /* 移动端适配：调整标题大小 */
   @media (max-width: $mobile-breakpoint) {
     font-size: var(--font-size-base);
-    max-width: calc(100% - 80px); /* 为菜单按钮留出空间 */
+    /* 两侧各留空间：左菜单按钮 80，右操作组（语音播报+工作空间最多 2 个）80。
+       固定按最大占用预留，不随实际按钮数动态变化——避免切换 agent 时标题宽度跳动 */
+    max-width: calc(100% - 160px);
   }
 }
 
@@ -467,10 +479,52 @@ $small-mobile-breakpoint: 375px;
 }
 
 .chat-message {
+  /* 纵向：气泡在上、footer（时间 + 复制按钮）在下；水平对齐由 align-items 控制 */
   display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   max-width: 100%;
   transition: background-color 0.3s ease;
   border-radius: var(--border-radius-md);
+}
+
+/* 消息 footer 行：相对时间 + 复制按钮（气泡外部下方，jm 风格） */
+.chat-msg-footer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap; /* 窄屏（移动端）元数据项挤不下时自动折行 */
+  gap: 2px;
+  row-gap: 2px;
+  min-height: 22px; /* 固定占位：复制按钮 hover 渐显时不引起布局跳动 */
+  padding: 2px var(--spacing-xs) 0;
+}
+
+.chat-msg-footer--assistant {
+  /* 对齐气泡内正文左缘（气泡水平 padding 同值） */
+  padding-left: var(--spacing-md);
+}
+
+.chat-msg-time {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-placeholder);
+  user-select: none;
+  cursor: default;
+}
+
+/* run 元数据项（耗时/轮次/token）：贴 footer 极简风格的图标+文字，悬停微加深提示可交互 */
+.chat-msg-meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-right: 8px;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-placeholder);
+  user-select: none;
+  cursor: default;
+
+  &:hover {
+    color: var(--color-text-secondary);
+  }
 }
 
 /* 导航器点击后的消息高亮闪烁 */
@@ -489,7 +543,7 @@ $small-mobile-breakpoint: 375px;
 }
 
 .chat-message-user {
-  justify-content: flex-end;
+  align-items: flex-end;
 }
 
 .chat-message-bubble {
@@ -624,14 +678,16 @@ $small-mobile-breakpoint: 375px;
 }
 
 .chat-main-input-wrap {
-  padding: 0 $chat-main-padding-h;
+  /* 桌面端底部留白（原由「AI 生成」声明行撑起，该行删除后补回） */
+  padding: 0 $chat-main-padding-h 16px;
   flex-shrink: 0;
   //border-top: 1px solid var(--color-border-extra-light);
 
-  /* 移动端适配：底部固定输入区域 */
+  /* 移动端适配：底部固定输入区域。
+     安全区避让由 .chat-page 统一处理（页面级已加 safe-area-bottom），
+     此处不再叠加——双层 padding 曾造成输入框下方约两倍 Home 条高度的空白 */
   @media (max-width: $mobile-breakpoint) {
     padding: 0 var(--spacing-sm);
-    padding-bottom: var(--safe-area-bottom);
     background-color: $chat-bg-main;
   }
 }
@@ -734,27 +790,51 @@ $small-mobile-breakpoint: 375px;
   }
 }
 
-.chat-welcome {
+/* 欢迎态外层：占满 header 之外的剩余高度，内容超高时整体可滚动 */
+.chat-welcome-container {
   flex: 1;
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.chat-welcome {
+  /* margin auto 垂直居中：无头像/常用问题的少内容态也真正居中；
+     内容超高时 margin 归零退化为顶部对齐可滚动（flex center 会裁掉顶部内容） */
+  margin: auto 0;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: 200px $chat-main-padding-h;
+  padding: var(--spacing-xl) $chat-main-padding-h;
   text-align: center;
   min-width: 0;
 
-  /* 移动端适配：调整欢迎页 */
+  /* 移动端适配：留白收紧；垂直居中与桌面端一致（margin auto），内容超高时自动退化为顶部对齐可滚动 */
   @media (max-width: $mobile-breakpoint) {
     padding: var(--spacing-xl) var(--spacing-md);
-    justify-content: flex-start;
-    padding-top: 20vh;
+    padding-top: 24px;
   }
 
   /* 小型手机适配 */
   @media (max-width: $small-mobile-breakpoint) {
     padding: var(--spacing-lg) var(--spacing-sm);
-    padding-top: 15vh;
+    padding-top: 16px;
+  }
+}
+
+/* 欢迎页智能体大头像（方形整图展示，轻圆角防生硬） */
+.chat-welcome-avatar {
+  width: 136px;
+  height: 136px;
+  border-radius: var(--border-radius-lg);
+  object-fit: cover;
+  margin-bottom: var(--spacing-md);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+
+  @media (max-width: $mobile-breakpoint) {
+    width: 112px;
+    height: 112px;
   }
 }
 
@@ -803,6 +883,101 @@ $small-mobile-breakpoint: 375px;
   }
 }
 
+.chat-welcome-questions {
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.chat-welcome-questions-label {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--spacing-sm);
+  text-align: left;
+}
+
+.chat-welcome-questions-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacing-sm);
+
+  /* 移动端：紧凑小卡（只留图标+标题）后双列依然放得下，收紧间距 */
+  @media (max-width: $mobile-breakpoint) {
+    gap: 8px;
+  }
+}
+
+.chat-welcome-question-card {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background-color: var(--color-bg-white);
+  border: 1px solid var(--color-border-base);
+  border-radius: var(--border-radius-lg);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  min-width: 0;
+  transition: all var(--transition-base);
+
+  &:hover {
+    border-color: var(--color-primary);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    transform: translateY(-1px);
+  }
+
+  .question-card-icon {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    font-size: 20px;
+    /* 与标题首行光学对齐 */
+    margin-top: 2px;
+  }
+
+  .question-card-content {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .question-card-title {
+    font-size: var(--font-size-base);
+    font-weight: 500;
+    color: var(--color-text-primary);
+    word-break: break-word;
+  }
+
+  .question-card-question {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-secondary);
+    line-height: 1.5;
+    word-break: break-word;
+  }
+
+  /* 移动端紧凑形态：隐藏 question 全文（点击仍发送完整内容），压缩内边距 */
+  @media (max-width: $mobile-breakpoint) {
+    padding: 10px 12px;
+    align-items: center;
+
+    .question-card-icon {
+      font-size: 18px;
+      margin-top: 0;
+    }
+
+    .question-card-title {
+      font-size: var(--font-size-sm);
+    }
+
+    .question-card-question {
+      display: none;
+    }
+  }
+}
+
 .chat-welcome-input {
   margin-top: var(--spacing-lg);
   width: 100%;
@@ -815,6 +990,82 @@ $small-mobile-breakpoint: 375px;
     max-width: 100%;
     margin-top: var(--spacing-md);
     padding: 0 var(--spacing-xs);
+  }
+}
+
+/* 对话中常驻的常用问题快捷入口（输入框上方） */
+.chat-pinned-questions {
+  margin-bottom: var(--spacing-xs);
+}
+
+.chat-pinned-questions-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: transparent;
+  padding: 2px 4px;
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  border-radius: var(--border-radius-sm);
+
+  &:hover {
+    color: var(--color-text-regular);
+  }
+}
+
+.chat-pinned-questions-caret {
+  font-size: 10px;
+  transition: transform var(--transition-base);
+
+  &.collapsed {
+    transform: rotate(-90deg);
+  }
+}
+
+.chat-pinned-questions-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+  margin-top: var(--spacing-xs);
+}
+
+.chat-pinned-question-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background-color: var(--color-bg-white);
+  border: 1px solid var(--color-border-base);
+  border-radius: var(--border-radius-md);
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-regular);
+  transition: all var(--transition-base);
+  max-width: 200px;
+
+  .chip-icon {
+    display: inline-flex;
+    align-items: center;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+
+  .chip-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &:hover:not(:disabled) {
+    border-color: var(--color-primary);
+    background-color: rgba($chat-primary, 0.04);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 }
 
@@ -973,6 +1224,142 @@ $small-mobile-breakpoint: 375px;
   border-radius: 50%;
 }
 
+/* 桌面端带文字的工具栏按钮：图标+功能描述横排成胶囊；移动端隐藏文字回纯图标圆钮。
+   双类提权：本文件被多组件 scoped 引入成多份拷贝，单类会被 .chat-toolbar-btn-icon 的定宽压制 */
+.chat-toolbar-btn-icon.chat-toolbar-btn-labeled {
+  width: auto;
+  padding: 0 12px;
+  gap: 5px;
+  border-radius: 16px;
+
+  .chat-toolbar-btn-label {
+    font-size: 12px;
+    white-space: nowrap;
+    max-width: 180px; /* 模型名过长截断 */
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  @media (max-width: $mobile-breakpoint) {
+    width: 36px;
+    padding: 0;
+    border-radius: 50%;
+
+    .chat-toolbar-btn-label {
+      display: none;
+    }
+  }
+}
+
+/* 模型切换按钮：灰底 + 图标/文字色跟随当前模型的 logoColor（inline style 注入，
+   默认主题蓝）。双类提权原因同上 */
+.chat-toolbar-btn.chat-toolbar-btn-model {
+  background-color: var(--color-bg-light);
+
+  &:hover {
+    background-color: rgba($chat-primary, 0.1);
+  }
+}
+
+/* HITL 授权模式下拉菜单（Dropdown overlay 挂 body，样式须走全局）：图标 + 标题/说明两行 */
+.confirm-mode-menu {
+  .confirm-mode-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 2px 0;
+  }
+
+  .confirm-mode-option-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    font-size: 14px;
+    flex-shrink: 0;
+
+    &.is-auto_approve {
+      color: #fa8c16;
+      background: rgba(250, 140, 22, 0.12);
+    }
+    &.is-manual {
+      color: #2f54eb;
+      background: rgba(47, 84, 235, 0.1);
+    }
+    &.is-auto_reject {
+      color: #f5222d;
+      background: rgba(245, 34, 45, 0.1);
+    }
+  }
+
+  .confirm-mode-option-text {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.4;
+  }
+
+  .confirm-mode-option-label {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-primary);
+    font-weight: 500;
+  }
+
+  .confirm-mode-option-desc {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-secondary);
+  }
+}
+
+/* 工具栏开关菜单（记忆/思考）：结构同授权模式菜单，菜单项自解释
+   （标题+行为说明+当前项选中），消除移动端对 hover tooltip 的信息依赖 */
+.toolbar-toggle-menu {
+  .toolbar-toggle-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 2px 0;
+  }
+
+  .toolbar-toggle-option-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    font-size: 14px;
+    flex-shrink: 0;
+
+    &.is-on {
+      color: #2f54eb;
+      background: rgba(47, 84, 235, 0.1);
+    }
+    &.is-off {
+      color: var(--color-text-secondary);
+      background: rgba(0, 0, 0, 0.05);
+    }
+  }
+
+  .toolbar-toggle-option-text {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.4;
+  }
+
+  .toolbar-toggle-option-label {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-primary);
+    font-weight: 500;
+  }
+
+  .toolbar-toggle-option-desc {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-secondary);
+  }
+}
+
 /* 移动端文件项样式 */
 .chat-input-file-item {
   flex-shrink: 0;
@@ -1110,11 +1497,19 @@ $small-mobile-breakpoint: 375px;
 }
 
 /* 工作空间入口按钮（始终可见，对称于左侧菜单按钮） */
-.chat-workspace-btn {
+/* 右上角操作组：语音播报 + 工作空间，flex 统一排布（间距留足移动端点击热区） */
+.chat-header-actions {
   position: absolute;
   right: var(--spacing-sm);
   top: 50%;
   transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 10;
+}
+
+.chat-header-action-btn {
   width: 36px;
   height: 36px;
   border-radius: 50%;
@@ -1125,8 +1520,8 @@ $small-mobile-breakpoint: 375px;
   align-items: center;
   justify-content: center;
   font-size: 16px;
+  color: var(--color-text-secondary);
   transition: color 0.2s ease, background-color 0.2s ease;
-  z-index: 10;
 
   &:hover {
     color: $chat-primary;
@@ -1229,7 +1624,7 @@ $small-mobile-breakpoint: 375px;
 }
 
 .chat-reasoning-title {
-  font-size: 12px;
+  font-size: 15px;
   color: #7B7E80;
   &:hover {
     color: #454748;
@@ -1253,9 +1648,28 @@ $small-mobile-breakpoint: 375px;
 
 .chat-reasoning-content {
   padding: 0 20px;
-  font-size: 11px;
+  font-size: var(--font-size-sm);
   color: #a7afbe;
   line-height: 1.7;
+
+  /* 思考内容按 markdown 渲染后的结构样式（全局 reset 关了 list-style，此处局部恢复；
+     不挂 chat-md-content，让元素继承本容器灰色小字的弱化视觉） */
+  ol {
+    list-style: decimal;
+    padding-left: 20px;
+    margin: 4px 0;
+  }
+  ul {
+    list-style: disc;
+    padding-left: 20px;
+    margin: 4px 0;
+  }
+  p {
+    margin: 4px 0;
+  }
+  code {
+    font-size: 0.92em;
+  }
   margin-top: 0;
   max-height: 0;
   overflow: hidden;
@@ -1264,8 +1678,9 @@ $small-mobile-breakpoint: 375px;
               padding-bottom 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 
   &.is-expanded {
-    max-height: 500px;
+    max-height: 60vh;
     padding: 5px 20px;
+    overflow-y: auto;
   }
 }
 
@@ -1295,11 +1710,23 @@ $small-mobile-breakpoint: 375px;
 }
 
 .chat-tool-header-title {
-  font-size: 12px;
-  color: #7B7E80;
-  &:hover {
-    color: #454748;
-  }
+  font-size: 15px;
+  color: var(--color-text-primary);
+}
+
+/* 标题行状态段：完成绿 / 失败红（等宽数字防耗时抖动） */
+.chat-tool-header-status {
+  font-size: 14px;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.chat-tool-status--ok {
+  color: var(--color-success);
+}
+
+.chat-tool-status--fail {
+  color: var(--color-danger);
 }
 
 .chat-tool-header-arrow {
@@ -1329,8 +1756,9 @@ $small-mobile-breakpoint: 375px;
               padding-bottom 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 
   &.is-expanded {
-    max-height: 500px;
+    max-height: 60vh;
     padding: 4px 0 4px 20px;
+    overflow-y: auto;
   }
 }
 
@@ -1358,11 +1786,57 @@ $small-mobile-breakpoint: 375px;
   flex-shrink: 0;
 }
 
+/* 工具详情小节：小节标签 + 复制按钮 + 代码块 */
+.chat-tool-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.chat-tool-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.chat-tool-section-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #9aa3af;
+  user-select: none;
+}
+
+.chat-tool-section-label--clickable {
+  cursor: pointer;
+  &:hover {
+    color: #4a4f57;
+  }
+}
+
+.chat-tool-section-arrow {
+  font-size: 9px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.chat-tool-section-copy {
+  font-size: 12px;
+  color: #a0a4ab;
+  cursor: pointer;
+  padding: 2px 4px;
+  &:hover {
+    color: #4a4f57;
+  }
+}
+
 .chat-tool-item-code {
   margin: 0;
   padding: 6px 8px;
   line-height: 1.6;
-  font-size: 11px;
+  /* pre 默认等宽字体视觉偏大，比思考过程正文(sm)降一档补偿 */
+  font-size: var(--font-size-xs);
   color: #a7afbe;
   background: #FAFAFB;
   border-radius: 4px;
@@ -1376,9 +1850,78 @@ $small-mobile-breakpoint: 375px;
 .chat-tool-raw {
   margin: 0;
   padding: 8px 10px;
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   line-height: 1.6;
   color: #555;
   white-space: pre-wrap;
   word-break: break-all;
+}
+
+/* 子智能体过程：分组小标题（下方各步为与请求参数/响应结果平级的小节） */
+.chat-tool-sub-group-title {
+  margin-top: 2px;
+  font-size: 11px;
+  color: #b8bcc4;
+  user-select: none;
+}
+
+/* 步骤类型标签：颜色区分思考/工具/回复/错误 */
+.chat-tool-sub-step-tag {
+  flex-shrink: 0;
+  padding: 0 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  line-height: 18px;
+  color: #7a828e;
+  background: rgba(0, 0, 0, 0.04);
+
+  &.is-thinking { color: #9254de; background: rgba(146, 84, 222, 0.08); }
+  &.is-tool, &.is-tool_use { color: #1677ff; background: rgba(22, 119, 255, 0.08); }
+  &.is-tool_result { color: #52c41a; background: rgba(82, 196, 26, 0.08); }
+  &.is-text { color: #fa8c16; background: rgba(250, 140, 22, 0.08); }
+  &.is-error { color: #f5222d; background: rgba(245, 34, 45, 0.08); }
+}
+
+.chat-tool-sub-step-name {
+  flex-shrink: 0;
+  color: #4a4f57;
+  font-weight: 500;
+}
+
+/* 子步骤状态耗时：与所在标题行字号一致（主卡片头的 14px 版本在这里偏大） */
+.chat-tool-sub-step-status {
+  font-size: 12px;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 执行中递增计时：等宽数字防抖动，中性色区别于完成/失败 */
+.chat-tool-sub-step-status--running {
+  color: #8a919c;
+}
+
+/* 子智能体 HITL 待授权：警示色提示等待人工决策 */
+.chat-tool-sub-step-status--confirm {
+  color: #faad14;
+}
+
+/* 子智能体 HITL 允许/禁止按钮区（header 为 space-between，自然靠右） */
+.chat-tool-sub-confirm-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* 工具步展开后的内嵌小节（请求参数/响应结果）：缩进体现层级 */
+.chat-tool-sub-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 14px;
+}
+
+/* 普通步（思考/回复）展开全文：比常规代码块放宽高度限制 */
+.chat-tool-sub-full {
+  max-height: 320px;
 }

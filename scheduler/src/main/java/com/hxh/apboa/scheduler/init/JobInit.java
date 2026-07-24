@@ -11,6 +11,7 @@ import com.hxh.apboa.scheduler.core.client.QuartzClient;
 import com.hxh.apboa.scheduler.core.config.QuartzConfig;
 import com.hxh.apboa.scheduler.core.config.QuartzConfigFactory;
 import com.hxh.apboa.scheduler.core.job.QuartzJob;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
@@ -23,6 +24,7 @@ import java.util.List;
  * @author huxuehao
  **/
 @Component
+@Slf4j
 public class JobInit implements SmartInitializingSingleton {
 
     private final QuartzClient quartzClient;
@@ -55,7 +57,11 @@ public class JobInit implements SmartInitializingSingleton {
             try {
                 quartzClient.create(buildConfig(jobInfo));
             } catch (ClassNotFoundException e) {
-                System.err.println(jobInfo.getJobClass() + "不存在");
+                log.error("定时任务初始化失败，执行类不存在: jobId={}, jobClass={}",
+                        jobInfo.getId(), jobInfo.getJobClass(), e);
+            } catch (RuntimeException e) {
+                log.error("定时任务初始化失败: jobId={}, jobClass={}",
+                        jobInfo.getId(), jobInfo.getJobClass(), e);
             }
         }
     }

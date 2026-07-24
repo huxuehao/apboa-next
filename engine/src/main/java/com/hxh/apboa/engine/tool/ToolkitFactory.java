@@ -6,9 +6,11 @@ import com.hxh.apboa.agent.service.AgentSubAgentService;
 import com.hxh.apboa.agent.service.CodeExecutionConfigService;
 import com.hxh.apboa.common.entity.*;
 import com.hxh.apboa.common.enums.ToolType;
+import com.hxh.apboa.common.util.AgentMetadataStore;
 import com.hxh.apboa.engine.agent.A2aAgentHelper;
 import com.hxh.apboa.engine.agent.ReActAgentHelper;
 import com.hxh.apboa.engine.agui.AgentContext;
+import com.hxh.apboa.engine.hitl.ConfirmFieldMetaBuilder;
 import com.hxh.apboa.engine.hook.builtins.IConfirmationHook;
 import com.hxh.apboa.engine.mcp.McpClientFactory;
 import com.hxh.apboa.engine.tool.dynamices.DynamicAgentTool;
@@ -19,6 +21,7 @@ import com.hxh.apboa.workflowbiz.core.WorkflowDefinitionCompiler;
 import com.hxh.apboa.workflowbiz.service.AgentWorkflowService;
 import com.hxh.apboa.workflowbiz.service.WorkflowRunService;
 import com.hxh.apboa.workflowbiz.service.WorkflowService;
+import io.agentscope.core.ReActAgent;
 import io.agentscope.core.tool.AgentTool;
 import io.agentscope.core.tool.Toolkit;
 import io.agentscope.core.tool.ToolkitConfig;
@@ -136,8 +139,6 @@ public class ToolkitFactory {
                         .executionConfig(customToolkitConfig.toExecutionConfig())
                         .build());
         if (!toolIds.isEmpty()) {
-            // 获取是否开启记忆
-            Boolean isMemoryActive = AgentContext.getIfExists().map(AgentContext::isMemoryActive).orElse(false);
             // 注册工具
             toolService.listByIds(toolIds)
                     .stream()
@@ -151,8 +152,11 @@ public class ToolkitFactory {
                             toolkit.registerTool(new DynamicAgentTool(toolConfig));
                         }
 
-                        if (toolConfig.getNeedConfirm() && isMemoryActive) {
-                            IConfirmationHook.setNeedConfirmTool(toolConfig.getToolId());
+                        // §6.4：确认是否生效只取决于工具自身 need_confirm，与 memoryActive 解耦
+                        // （修 §2.5 Bug3：不开记忆时 need_confirm 工具被移出清单导致裸跑的安全漏洞）
+                        if (Boolean.TRUE.equals(toolConfig.getNeedConfirm())) {
+                            IConfirmationHook.setNeedConfirmTool(toolConfig.getToolId(),
+                                    ConfirmFieldMetaBuilder.fromToolConfig(toolConfig));
                         } else {
                             IConfirmationHook.removeNeedConfirmTool(toolConfig.getToolId());
                         }
@@ -187,7 +191,8 @@ public class ToolkitFactory {
                         }
 
                         if (toolConfig.getNeedConfirm()) {
-                            IConfirmationHook.setNeedConfirmTool(toolConfig.getToolId());
+                            IConfirmationHook.setNeedConfirmTool(toolConfig.getToolId(),
+                                    ConfirmFieldMetaBuilder.fromToolConfig(toolConfig));
                         } else {
                             IConfirmationHook.removeNeedConfirmTool(toolConfig.getToolId());
                         }
@@ -235,7 +240,7 @@ public class ToolkitFactory {
                 switch (definition.getAgentType()) {
                     case CUSTOM:
                         toolkit.registration()
-                                .subAgent(() -> reActAgentHelper.getReActAgent(definition),
+                                .subAgent(() -> createTrackedSubAgent(definition),
                                         createSubAgentConfig(definition))
                                 .apply();
                         break;
@@ -262,5 +267,24 @@ public class ToolkitFactory {
                         definition.getDescription() : definition.getName())
                 .forwardEvents(true)
                 .build();
+    }
+
+    /**
+     * 创建子智能体并登记归属元数据。
+     * provide() 由 SubAgentTool 在主 run 的执行线程内同步调用，此时 AgentContext 已初始化
+     * （SubAgentTool 先 AgentContext.init 再 provide），可取到主会话 threadId；
+     * ChatLogHook 凭 subParentThreadId 识别子智能体事件、收集中间过程并挂到主会话的 tool 消息上
+     */
+    private ReActAgent createTrackedSubAgent(AgentDefinition definition) {
+        ReActAgent sub = reActAgentHelper.getReActAgent(definition, true);
+        AgentContext.getIfExists()
+                .map(AgentContext::getThreadId)
+                .ifPresent(parentThreadId -> {
+                    AgentMetadataStore.put(sub.getAgentId(), "subParentThreadId", parentThreadId);
+                    AgentMetadataStore.put(sub.getAgentId(), "subToolName", definition.getAgentCode().toLowerCase());
+                    // 成本流水记账主体：子智能体的库表 id（ChatLogHook 子调用结束时取用）
+                    AgentMetadataStore.put(sub.getAgentId(), "subAgentDbId", definition.getId());
+                });
+        return sub;
     }
 }

@@ -18,6 +18,14 @@ export const WS_MESSAGE_TYPES = {
   CLIENT: 'CLIENT',
   ACCOUNT_ROLE_CHANGE: 'ACCOUNT_ROLE_CHANGE',
   WORKSPACE_FILE_CHANGE: 'WORKSPACE_FILE_CHANGE',
+
+  /** 语音播报：订阅 / 退订 / 流控制事件（音频本体走二进制帧，事件名 TTS_AUDIO_FRAME） */
+  TTS_SUBSCRIBE: 'TTS_SUBSCRIBE',
+  TTS_UNSUBSCRIBE: 'TTS_UNSUBSCRIBE',
+  TTS_STREAM: 'TTS_STREAM',
 } as const;
+
+/** 二进制音频帧在 eventBus 上的事件名（非服务端消息类型，仅前端内部分发用） */
+export const TTS_AUDIO_FRAME_EVENT = 'TTS_AUDIO_FRAME';
 
 export type WSMessageType = typeof WS_MESSAGE_TYPES[keyof typeof WS_MESSAGE_TYPES];

@@ -2,7 +2,7 @@
  * AGUI SSE 模块：工厂与统一导出
  */
 
-import { getAgentRunURL, getSSEHeaders, getRESTHeaders, getReconnectURL, getStatusURL, getStopURL, getActiveRunsURL } from './request'
+import { getAgentRunURL, getSSEHeaders, getRESTHeaders, getReconnectURL, getResumeURL, getPendingURL, getStatusURL, getStatusBatchURL, getStopURL, getActiveRunsURL, getSubagentResumeURL, getSubagentPendingURL } from './request'
 import { AgentClient } from './agent-client'
 import type { EventHandlers, ToolHandler } from './agent-client'
 import type { RunAgentInput } from '@/types'
@@ -41,7 +41,7 @@ export function createAgentClient(
 
 export type { RunAgentInput }
 
-export { getReconnectURL, getStatusURL, getStopURL, getActiveRunsURL }
+export { getReconnectURL, getResumeURL, getPendingURL, getStatusURL, getStopURL, getActiveRunsURL }
 
 /**
  * 查询指定会话的运行状态
@@ -55,6 +55,20 @@ export async function getStatus(threadId: string): Promise<boolean> {
   if (!resp.ok) throw new Error(`Status check failed: ${resp.status}`)
   const data = await resp.json()
   return data.running === true
+}
+
+/**
+ * 批量查询多个会话的运行状态（一次请求替代逐个轮询）
+ * @param threadIds 会话 ID 列表
+ * @returns threadId -> running 的映射
+ */
+export async function getStatusBatch(threadIds: string[]): Promise<Record<string, boolean>> {
+  if (threadIds.length === 0) return {}
+  const url = getStatusBatchURL(threadIds)
+  const headers = getRESTHeaders()
+  const resp = await fetch(url, { headers })
+  if (!resp.ok) throw new Error(`Batch status check failed: ${resp.status}`)
+  return await resp.json()
 }
 
 /**
@@ -78,4 +92,61 @@ export async function getActiveRuns(): Promise<string[]> {
   const resp = await fetch(url, { headers })
   if (!resp.ok) throw new Error(`Active runs check failed: ${resp.status}`)
   return await resp.json()
+}
+
+/**
+ * HITL 刷新恢复：获取会话的待确认工具列表（从后端持久暂停态重建）
+ * @param threadId 会话 ID
+ * @returns 待确认工具 [{toolUseId,name,input}]；无暂停态返回空数组
+ */
+export async function getPending(
+  threadId: string
+): Promise<Array<{ toolUseId: string; name: string; input?: Record<string, unknown> }>> {
+  const url = getPendingURL(threadId)
+  const headers = getRESTHeaders()
+  const resp = await fetch(url, { headers })
+  if (!resp.ok) throw new Error(`Pending check failed: ${resp.status}`)
+  const data = await resp.json()
+  return data.pending ?? []
+}
+
+/** 子智能体挂起中确认请求（SUBAGENT_CONFIRM_REQUIRED 事件载荷 / subagent/pending 返回元素同构） */
+export interface SubPendingInfo {
+  subSessionId: string
+  parentThreadId?: string
+  parentToolCallId: string
+  subagentName: string
+  pending: Array<{ toolUseId: string; name: string; input?: Record<string, unknown>; fields?: import('@/types').ConfirmFieldMeta[] }>
+}
+
+/**
+ * 子智能体 HITL：提交确认决策，唤醒挂起等待的子智能体续跑（续跑事件沿原 SSE 流下发）
+ * @returns resumed=false 表示挂起已失效（超时按全拒绝处理，或已决策）
+ */
+export async function subagentResume(
+  subSessionId: string,
+  decisions: Array<{ toolUseId: string; name: string; approved: boolean; input?: Record<string, unknown> }>
+): Promise<{ resumed: boolean; error?: string }> {
+  const url = getSubagentResumeURL()
+  const headers = getRESTHeaders()
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ subSessionId, decisions })
+  })
+  if (!resp.ok) throw new Error(`Subagent resume failed: ${resp.status}`)
+  return await resp.json()
+}
+
+/**
+ * 子智能体 HITL 刷新恢复：查询主会话下所有挂起中的子确认请求
+ * @param threadId 主会话 ID
+ */
+export async function getSubagentPending(threadId: string): Promise<SubPendingInfo[]> {
+  const url = getSubagentPendingURL(threadId)
+  const headers = getRESTHeaders()
+  const resp = await fetch(url, { headers })
+  if (!resp.ok) throw new Error(`Subagent pending check failed: ${resp.status}`)
+  const data = await resp.json()
+  return data.pending ?? []
 }

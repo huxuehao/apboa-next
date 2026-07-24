@@ -10,6 +10,7 @@ import com.hxh.apboa.common.cluster.core.MessagePublisher;
 import com.hxh.apboa.common.consts.RedisChannelTopic;
 import com.hxh.apboa.common.consts.TableConst;
 import com.hxh.apboa.common.dto.McpToolEnabledDTO;
+import com.hxh.apboa.common.dto.McpToolNeedConfirmDTO;
 import com.hxh.apboa.common.entity.AgentDefinition;
 import com.hxh.apboa.common.entity.AgentMcpServer;
 import com.hxh.apboa.common.entity.McpServer;
@@ -26,6 +27,7 @@ import com.hxh.apboa.common.util.CryptoUtils;
 import com.hxh.apboa.common.util.TenantUtils;
 import com.hxh.apboa.common.vo.McpToolVO;
 import com.hxh.apboa.mcp.mapper.McpServerMapper;
+import com.hxh.apboa.mcp.schema.SchemaNumericSanitizer;
 import com.hxh.apboa.mcp.service.AgentMcpServerService;
 import com.hxh.apboa.mcp.service.AgentMcpToolService;
 import com.hxh.apboa.mcp.service.McpRuntimeDegradeService;
@@ -64,6 +66,7 @@ public class McpServerServiceImpl extends ServiceImpl<McpServerMapper, McpServer
     private final ToolSchemaRefresher toolSchemaRefresher;
     private final McpRuntimeDegradeService mcpRuntimeDegradeService;
     private final ObjectMapper objectMapper;
+    private final SchemaNumericSanitizer schemaNumericSanitizer;
 
     @Override
     public List<Object> usedWithAgent(List<Long> ids) {
@@ -135,6 +138,15 @@ public class McpServerServiceImpl extends ServiceImpl<McpServerMapper, McpServer
 
         updateById(entity);
 
+        // audience 支持显式置空：MP updateById 的 NOT_NULL 策略会忽略 null 字段，
+        // 导致"配置后无法撤销"。约定：空串 = 清空（关闭该 MCP 的断言注入），null = 不修改
+        if (entity.getAudience() != null && entity.getAudience().isBlank()) {
+            lambdaUpdate()
+                    .eq(McpServer::getId, entity.getId())
+                    .set(McpServer::getAudience, null)
+                    .update();
+        }
+
         McpServer updated = requireServer(entity.getId());
         boolean configChanged = !Objects.equals(oldConfigHash, mergedConfigHash);
         boolean shouldAutoActivate = current.getActivationStatus() == McpActivationStatus.ACTIVE
@@ -183,6 +195,21 @@ public class McpServerServiceImpl extends ServiceImpl<McpServerMapper, McpServer
         return requireServer(id);
     }
 
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public McpServer updateToolNeedConfirm(Long id, McpToolNeedConfirmDTO dto) {
+        McpServer server = requireServer(id);
+        ensureToolGovernanceWritable(server);
+        List<Long> toolIds = dto == null || dto.getToolIds() == null
+                ? List.of()
+                : new ArrayList<>(new LinkedHashSet<>(dto.getToolIds()));
+        if (!toolIds.isEmpty()) {
+            mcpToolService.updateNeedConfirm(id, toolIds, Boolean.TRUE.equals(dto.getNeedConfirm()));
+            publishAgentReregisterAfterCommit(agentMcpServerService.getAgentIds(List.of(id)));
+        }
+        return requireServer(id);
+    }
+
     private McpServer refreshServer(Long id, boolean markActivationTime) {
         McpServer current = requireServer(id);
         String configHash = buildConfigHash(
@@ -215,7 +242,7 @@ public class McpServerServiceImpl extends ServiceImpl<McpServerMapper, McpServer
 
         if (refreshResult.isSuccess()) {
             update.setActivationStatus(McpActivationStatus.ACTIVE);
-            update.setToolSchemas(refreshResult.getToolSchemas());
+            update.setToolSchemas(sanitizeToolSchemasJson(refreshResult.getToolSchemas()));
             update.setToolCount(refreshResult.getToolCount());
             update.setHealthStatus(HealthStatus.HEALTHY);
             update.setActivationRevision(nextRevision(current.getActivationRevision()));
@@ -276,6 +303,22 @@ public class McpServerServiceImpl extends ServiceImpl<McpServerMapper, McpServer
             throw new RuntimeException("MCP 服务不存在");
         }
         return server;
+    }
+
+    /**
+     * 缓存整包工具目录（mcp_server.tool_schemas）落库前也做数值清洗，与逐工具入库
+     * （syncServerTools）保持一致干净；清洗失败不阻断连接，逐工具那侧仍会兜底清洗。
+     */
+    private String sanitizeToolSchemasJson(String rawJson) {
+        if (rawJson == null || rawJson.isBlank()) {
+            return rawJson;
+        }
+        try {
+            return objectMapper.writeValueAsString(
+                    schemaNumericSanitizer.sanitize(objectMapper.readTree(rawJson)));
+        } catch (Exception e) {
+            return rawJson;
+        }
     }
 
     private List<McpSchema.Tool> parseToolSchemas(String toolSchemas) {

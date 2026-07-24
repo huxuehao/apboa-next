@@ -1,20 +1,43 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import MessageItem from './MessageItem.vue'
 import ToolCallItem from './ToolCallItem.vue'
-import type { DisplayMessage } from '@/types'
+import DayDivider from './DayDivider.vue'
+import type { ConfirmFieldMeta, DisplayMessage, WorkflowProcess } from '@/types'
 import type {FlatFileItem} from "@/composables/chat/useWorkspaceFiles.ts";
-import type { InteractionSubmitPayload } from '@/components/markdown/uip/types'
+import type { MarkdownInteractionSubmitPayload } from '@/components/markdown/types'
+import type { ToolProgressState } from '@/composables/chat/useChatStream'
 
-defineProps<{
+const props = defineProps<{
   messages: DisplayMessage[]
   agentHasResult?: boolean
-  toolCalls: Array<{ id: string; name: string; args: string; result?: string; elapsed?: number, needConfirm?: boolean }>
+  toolCalls: Array<{ id: string; name: string; args: string; result?: string; elapsed?: number, finished?: boolean, executionStarted?: boolean, needConfirm?: boolean, confirmFields?: ConfirmFieldMeta[], confirmSummary?: string, startTime?: number, progress?: ToolProgressState, workflowProcess?: WorkflowProcess, subSteps?: Array<Record<string, unknown>> }>
+  /** 会话 agent 是否绑定语音合成模型（透传给消息项的朗读按钮） */
+  ttsEnabled?: boolean
 }>()
+
+/**
+ * 日期分隔：createdAt 的日期（前 10 位）与上一条不同处标记 dividerDay。
+ * 无时间的消息（流式占位等）不参与比较，避免误插。
+ */
+const wrappedMessages = computed(() => {
+  let prevDay: string | null = null
+  return props.messages.map((msg) => {
+    const day = (msg.createdAt || '').slice(0, 10)
+    let dividerDay: string | null = null
+    if (day.length === 10 && day !== prevDay) {
+      dividerDay = day
+      prevDay = day
+    }
+    return { msg, dividerDay }
+  })
+})
 
 defineEmits<{
   (e: 'toolContent', value: any): void
+  (e: 'subConfirm', value: { subToolUseId: string; approved: boolean }): void
   (e: 'inputTagPreview', value: FlatFileItem): void
-  (e: 'interactionSubmit', payload: InteractionSubmitPayload): void
+  (e: 'interactionSubmit', payload: MarkdownInteractionSubmitPayload): void
   (e: 'uipRetry', uipCode: string): void
   (e: 'vepRetry', vepCode: string): void
 }>()
@@ -22,22 +45,25 @@ defineEmits<{
 
 <template>
   <div class="chat-main-messages">
-    <MessageItem
-      v-for="(msg, index) in messages"
-      @inputTagPreview="$emit('inputTagPreview', $event as FlatFileItem)"
-      @interaction-submit="$emit('interactionSubmit', $event)"
-      @uip-retry="$emit('uipRetry', $event)"
-      @vep-retry="$emit('vepRetry', $event)"
-      :id="msg.id"
-      :current-index="index"
-      :total-messages="messages.length"
-      :key="msg.id"
-      :role="msg.role"
-      :content="msg.content"
-      :created-at="msg.createdAt"
-      :agent-has-result="agentHasResult"
-      :is-streaming="msg.isStreaming"
-    />
+    <template v-for="(item, index) in wrappedMessages" :key="item.msg.id">
+      <DayDivider v-if="item.dividerDay" :day="item.dividerDay" />
+      <MessageItem
+        @inputTagPreview="$emit('inputTagPreview', $event as FlatFileItem)"
+        @interaction-submit="$emit('interactionSubmit', $event)"
+        @uip-retry="$emit('uipRetry', $event)"
+        @vep-retry="$emit('vepRetry', $event)"
+        :id="item.msg.id"
+        :current-index="index"
+        :total-messages="messages.length"
+        :role="item.msg.role"
+        :content="item.msg.content"
+        :created-at="item.msg.createdAt"
+        :meta="item.msg.meta"
+        :agent-has-result="agentHasResult"
+        :is-streaming="item.msg.isStreaming"
+        :tts-enabled="ttsEnabled"
+      />
+    </template>
     <TransitionGroup name="jelly">
       <ToolCallItem
         v-for="t in toolCalls"
@@ -47,9 +73,18 @@ defineEmits<{
         :args="t.args"
         :result="t.result"
         :elapsed="t.elapsed"
-        :loading="t.result == null"
+        :loading="t.result == null && !t.finished && t.executionStarted"
+        :finished="t.finished"
+        :queued="!t.finished && t.result == null && !t.executionStarted"
         :need-confirm="t.needConfirm"
+        :confirm-fields="t.confirmFields"
+        :confirm-summary="t.confirmSummary"
+        :start-time="t.startTime"
+        :progress="t.progress"
+        :workflow-process="t.workflowProcess"
+        :sub-steps="(t.subSteps as any)"
         @toolContent="(content: any) => $emit('toolContent', content)"
+        @sub-confirm="$emit('subConfirm', $event)"
       />
     </TransitionGroup>
   </div>

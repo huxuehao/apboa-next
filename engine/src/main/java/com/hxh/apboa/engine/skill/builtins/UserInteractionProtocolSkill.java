@@ -1,21 +1,45 @@
 package com.hxh.apboa.engine.skill.builtins;
 
+import com.hxh.apboa.common.annotation.Scope;
+import com.hxh.apboa.common.enums.ScopeType;
+import com.hxh.apboa.engine.skill.IBuiltinSkill;
 import io.agentscope.core.skill.AgentSkill;
+import org.springframework.stereotype.Component;
 
 /**
- * 描述：用户交互协议SKILL
+ * 描述：用户交互协议SKILL（内置，全局）
  *
  * @author huxuehao
  **/
-public class UserInteractionProtocolSkill {
+@Component
+@Scope(ScopeType.GLOBAL)
+public class UserInteractionProtocolSkill implements IBuiltinSkill {
     private static final String SKILL_NAME = "user_interaction_protocol_rules";
 
-    public static AgentSkill getAgentSkill() {
+    @Override
+    public String getSysPrompt() {
+        return """
+                ===================================================
+                Core Principle
+                > If you **cannot provide a reliable, responsible and practically valuable answer without additional information**, you must first try to obtain that information yourself using the tools and skills available to you. Only when the missing information is inherently user-specific and cannot be obtained by any available tool should you invoke `user_interaction_protocol_rules` to ask the user, before delivering any substantive response.
+
+                Before responding to a question, ask yourself:
+                > "Do I have sufficient information to give a reliable answer?"
+
+                - If **yes** → Answer directly.
+                - If **no, but the missing information can be obtained by an available tool or skill** (e.g. locating, searching the web, reading files, calling an API) → use that tool or skill first to gather the information, then answer.
+                - If **no, and the missing information is inherently user-specific and cannot be obtained by any available tool** → invoke `user_interaction_protocol_rules` to ask the user for more information.
+                """;
+    }
+
+    @Override
+    public AgentSkill getAgentSkill() {
         return AgentSkill.builder()
                 .name(SKILL_NAME)
                 .description(
                         "Used to build user interaction interfaces and collect user input. " +
                         "When necessary information is missing during task execution, or users need to fill out forms, select processing methods, confirm operations or supplement business parameters, use this protocol to generate APIP interactive messages. " +
+                        "Also use it AFTER completing an analysis or forming conclusions: present the candidate conclusions, directions or next-step options as a choice interaction and let the user decide before proceeding. " +
                         "It supports three types of interactive components: form, choice and confirm. This skill shall only be applied when user participation in decision-making or data input is required. " +
                         "Do NOT use this protocol for scenarios that require no user interaction, such as general Q&A, knowledge explanation, content creation, code generation, solution analysis and text processing. Simply reply with natural language instead."
                 )
@@ -291,8 +315,20 @@ public class UserInteractionProtocolSkill {
             ```
             
             # Choice
-            Used for quick selection scenarios.
-            
+            Used for quick selection and decision-making (ASK) scenarios.
+
+            ## When to Use (ASK Pattern)
+            Proactively ask the user to decide in the following situations:
+            - After completing an analysis: present the conclusions or candidate directions as options and let the user pick one before proceeding
+            - At key decision points where multiple viable approaches exist
+            - When a conclusion needs user approval before acting on it
+
+            ASK rules:
+            - Provide 2-6 options; each option SHOULD include a one-sentence `description` explaining its meaning or consequence
+            - Set `allowCustom: true` by default, so the user can always express an idea beyond the presets
+            - Use `multiple: false` when options are mutually exclusive directions; use `multiple: true` only when selections can be combined
+            - After the user responds, continue reasoning based on the selection (or the custom input)
+
             ## Basic Structure
             ```json
             {
@@ -329,7 +365,26 @@ public class UserInteractionProtocolSkill {
             - `value`: Data submitted by the component
             - `label`: Text displayed on the page
             - Frontend must use `value` as the unique identifier
-            
+
+            ## Complete Example (ASK after analysis)
+            ```uip
+            {
+              "content": "The sales data analysis is complete. I identified three viable directions. Which one should we proceed with?",
+              "interaction": {
+                "id": "analysis_decision",
+                "type": "choice",
+                "question": "Please choose the next direction",
+                "multiple": false,
+                "allowCustom": true,
+                "options": [
+                  { "value": "expand_a", "label": "Expand Product Line A", "description": "Highest growth (+32%), but requires additional inventory investment" },
+                  { "value": "optimize_b", "label": "Optimize pricing of Product Line B", "description": "Stable demand; price elasticity suggests ~8% revenue upside" },
+                  { "value": "phase_out_c", "label": "Phase out Product Line C", "description": "Declining for 6 consecutive months; frees up resources" }
+                ]
+              }
+            }
+            ```
+
             # Confirm
             Used for final confirmation scenarios.
             
@@ -365,6 +420,7 @@ public class UserInteractionProtocolSkill {
             8. Do not generate empty forms
             9. Do not generate empty options
             10. Do not generate empty `interaction` arrays
+            11. For decision-making scenarios (picking a direction, approving a conclusion, choosing among approaches), prefer `choice` over `form`, and set `allowCustom: true`
             
             Valid Example:
             ```json

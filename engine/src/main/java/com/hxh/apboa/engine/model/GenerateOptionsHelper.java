@@ -1,5 +1,6 @@
 package com.hxh.apboa.engine.model;
 
+import com.hxh.apboa.common.enums.ModelProviderType;
 import com.hxh.apboa.common.util.FuncUtils;
 import com.hxh.apboa.common.wrapper.ModelConfigWrapper;
 import io.agentscope.core.model.GenerateOptions;
@@ -37,7 +38,9 @@ public class GenerateOptionsHelper {
             default -> builder.toolChoice(new ToolChoice.Auto());
         }
 
-        if (config.getThinking()) {
+        // thinkingBudget 为百炼专属参数，仅 DASH_SCOPE 生效（Boolean.TRUE.equals 兼容 null）
+        if (config.getProvider() == ModelProviderType.DASH_SCOPE
+                && Boolean.TRUE.equals(config.getThinking())) {
             builder.thinkingBudget(THINKING_BUDGET);
         }
 

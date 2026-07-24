@@ -7,7 +7,8 @@
 import { ref, reactive } from 'vue'
 import type {
   ArchitectureData,
-  ArchitectureLoadingState
+  ArchitectureLoadingState,
+  ArchitectureWorkflow
 } from '../types'
 import type {
   AgentDefinitionVO,
@@ -30,6 +31,14 @@ import * as knowledgeApi from '@/api/knowledge'
 import * as modelApi from '@/api/model'
 import * as promptApi from '@/api/prompt'
 import * as sensitiveApi from '@/api/sensitive'
+import * as workflowApi from '@/api/workflow'
+
+type ModelLoadingKey = 'model' | 'asrModel' | 'ttsModel'
+type ModelDetailResult = {
+  config: ModelConfigVO | null
+  provider: ModelProviderVO | null
+  loadFailed: boolean
+}
 
 /**
  * 架构图数据获取Hook
@@ -44,7 +53,10 @@ export function useArchitectureData() {
     mcps: false,
     knowledgeBases: false,
     subAgents: false,
+    workflows: false,
     model: false,
+    asrModel: false,
+    ttsModel: false,
     prompt: false,
     sensitive: false
   })
@@ -57,8 +69,16 @@ export function useArchitectureData() {
     mcps: [],
     knowledgeBases: [],
     subAgents: [],
+    workflows: [],
     modelConfig: null,
     modelProvider: null,
+    modelLoadFailed: false,
+    asrModelConfig: null,
+    asrModelProvider: null,
+    asrModelLoadFailed: false,
+    ttsModelConfig: null,
+    ttsModelProvider: null,
+    ttsModelLoadFailed: false,
     promptTemplate: null,
     sensitiveConfig: null
   })
@@ -85,6 +105,83 @@ export function useArchitectureData() {
       return []
     } finally {
       loadingState.tools = false
+    }
+  }
+
+  /**
+   * 获取Agent绑定的工作流摘要。
+   * 正常绑定从轻量的enabled接口读取；已禁用/未发布的绑定再按ID补详情，避免静默丢失。
+   */
+  async function fetchWorkflows(agentId: string, ids: string[]): Promise<ArchitectureWorkflow[]> {
+    if (!ids || ids.length === 0) return []
+
+    loadingState.workflows = true
+    const boundIds = Array.from(new Set(ids.map(String)))
+
+    try {
+      let enabledRequestSucceeded = false
+      const enabledById = new Map<string, ArchitectureWorkflow>()
+
+      try {
+        const response = await agentApi.enabledWorkflowsOfAgent(agentId)
+        enabledRequestSucceeded = true
+        for (const workflow of response.data.data || []) {
+          if (!workflow.id) continue
+          const id = String(workflow.id)
+          enabledById.set(id, {
+            id,
+            name: workflow.name || `工作流 #${id}`,
+            remark: workflow.remark,
+            available: true,
+            enabled: true,
+            status: 'PUBLISHED'
+          })
+        }
+      } catch (error) {
+        console.error('获取Agent启用工作流失败，回退到逐项详情:', error)
+      }
+
+      const missingIds = boundIds.filter(id => !enabledById.has(id))
+      const detailById = new Map<string, ArchitectureWorkflow>()
+      const detailResults = await Promise.allSettled(
+        missingIds.map(id => workflowApi.workflowDetail(id))
+      )
+
+      detailResults.forEach((result, index) => {
+        const id = missingIds[index]
+        if (id === undefined) return
+        if (result.status === 'fulfilled' && result.value?.data?.data?.workflow) {
+          const workflow = result.value.data.data.workflow
+          detailById.set(id, {
+            id,
+            name: workflow.name || `工作流 #${id}`,
+            remark: workflow.remark,
+            available: enabledRequestSucceeded
+              ? false
+              : workflow.enabled === true && workflow.status === 'PUBLISHED',
+            enabled: workflow.enabled,
+            status: workflow.status
+          })
+        } else {
+          detailById.set(id, {
+            id,
+            name: `工作流 #${id}`,
+            remark: '配置详情读取失败',
+            available: false,
+            loadFailed: true
+          })
+        }
+      })
+
+      return boundIds.map(id => enabledById.get(id) || detailById.get(id) || {
+        id,
+        name: `工作流 #${id}`,
+        remark: '配置详情读取失败',
+        available: false,
+        loadFailed: true
+      })
+    } finally {
+      loadingState.workflows = false
     }
   }
 
@@ -216,9 +313,9 @@ export function useArchitectureData() {
   /**
    * 获取模型配置详情
    */
-  async function fetchModelConfig(id: string): Promise<{ config: ModelConfigVO | null; provider: ModelProviderVO | null }> {
-    if (!id) return { config: null, provider: null }
-    loadingState.model = true
+  async function fetchModelConfig(id: string, loadingKey: ModelLoadingKey): Promise<ModelDetailResult> {
+    if (!id) return { config: null, provider: null, loadFailed: false }
+    loadingState[loadingKey] = true
     try {
       const configRes = await modelApi.configDetail(id)
       const config = configRes.data.data
@@ -227,12 +324,12 @@ export function useArchitectureData() {
         const providerRes = await modelApi.providerDetail(config.providerId)
         provider = providerRes.data.data
       }
-      return { config, provider }
+      return { config, provider, loadFailed: false }
     } catch (error) {
       console.error('获取模型配置详情失败:', error)
-      return { config: null, provider: null }
+      return { config: null, provider: null, loadFailed: true }
     } finally {
-      loadingState.model = false
+      loadingState[loadingKey] = false
     }
   }
 
@@ -297,7 +394,10 @@ export function useArchitectureData() {
         mcps,
         knowledgeBases,
         subAgents,
+        workflows,
         modelData,
+        asrModelData,
+        ttsModelData,
         promptTemplate,
         sensitiveConfig
       ] = await Promise.all([
@@ -307,7 +407,14 @@ export function useArchitectureData() {
         fetchMcps(agent.mcp || []),
         fetchKnowledgeBases(agent.knowledgeBase || []),
         fetchSubAgents(agent.subAgent || []),
-        fetchModelConfig(agent.modelConfigId),
+        fetchWorkflows(agentId, agent.workflow || []),
+        fetchModelConfig(agent.modelConfigId, 'model'),
+        agent.asrModelConfigId
+          ? fetchModelConfig(agent.asrModelConfigId, 'asrModel')
+          : Promise.resolve({ config: null, provider: null, loadFailed: false }),
+        agent.ttsModelConfigId
+          ? fetchModelConfig(agent.ttsModelConfigId, 'ttsModel')
+          : Promise.resolve({ config: null, provider: null, loadFailed: false }),
         fetchPromptTemplate(agent.systemPromptTemplateId),
         agent.sensitiveFilterEnabled && agent.sensitiveWordConfigId
           ? fetchSensitiveConfig(agent.sensitiveWordConfigId)
@@ -321,8 +428,16 @@ export function useArchitectureData() {
       data.mcps = mcps
       data.knowledgeBases = knowledgeBases
       data.subAgents = subAgents
+      data.workflows = workflows
       data.modelConfig = modelData.config
       data.modelProvider = modelData.provider
+      data.modelLoadFailed = modelData.loadFailed
+      data.asrModelConfig = asrModelData.config
+      data.asrModelProvider = asrModelData.provider
+      data.asrModelLoadFailed = asrModelData.loadFailed
+      data.ttsModelConfig = ttsModelData.config
+      data.ttsModelProvider = ttsModelData.provider
+      data.ttsModelLoadFailed = ttsModelData.loadFailed
       data.promptTemplate = promptTemplate
       data.sensitiveConfig = sensitiveConfig
     } catch (error) {
@@ -343,8 +458,16 @@ export function useArchitectureData() {
     data.mcps = []
     data.knowledgeBases = []
     data.subAgents = []
+    data.workflows = []
     data.modelConfig = null
     data.modelProvider = null
+    data.modelLoadFailed = false
+    data.asrModelConfig = null
+    data.asrModelProvider = null
+    data.asrModelLoadFailed = false
+    data.ttsModelConfig = null
+    data.ttsModelProvider = null
+    data.ttsModelLoadFailed = false
     data.promptTemplate = null
     data.sensitiveConfig = null
   }

@@ -1,19 +1,24 @@
 <script setup lang="ts">
-import {ref, watch, onMounted} from 'vue'
+import {ref, watch, onMounted, onBeforeUnmount} from 'vue'
 import {
   MenuOutlined,
   FolderOutlined,
   FolderOpenOutlined,
-  LoadingOutlined
+  LoadingOutlined,
+  DownOutlined,
+  SoundFilled,
+  AudioMutedOutlined
 } from '@ant-design/icons-vue'
+import { message } from 'ant-design-vue'
+import { resolveCommonQuestionIcon } from '@/components/agent/commonQuestionIcons'
 import MessageList from './MessageList.vue'
 import MessageNavigator from './MessageNavigator.vue'
 import ChatInput from './ChatInput.vue'
 import Welcome from './Welcome.vue'
 import PlanPanel from './PlanPanel.vue'
-import type { DisplayMessage, UploadedFileItem, PlanInfo } from '@/types'
+import type { DisplayMessage, UploadedFileItem, PlanInfo, CommonQuestion } from '@/types'
 import type {FlatFileItem} from "@/composables/chat/useWorkspaceFiles.ts";
-import type { InteractionSubmitPayload } from '@/components/markdown/uip/types'
+import type { MarkdownInteractionSubmitPayload } from '@/components/markdown/types'
 import WorkspaceFilePreview from "@/components/workspace/WorkspaceFilePreview.vue";
 
 const props = defineProps<{
@@ -21,18 +26,37 @@ const props = defineProps<{
   messageSize: number
   welcomeHeadline: string
   welcomeDesc?: string
+  /** 欢迎页常用问题卡片 */
+  commonQuestions?: CommonQuestion[] | null
+  /** 常用问题是否在对话中常驻显示 */
+  commonQuestionsPinned?: boolean
+  /** 常驻常用问题是否折叠（偏好由父层持久化） */
+  commonQuestionsCollapsed?: boolean
+  /** 智能体自定义头像（base64 data URL） */
+  agentAvatar?: string | null
   messages: DisplayMessage[]
   toolCalls: any[]
   inputValue: string
   uploadedFiles?: UploadedFileItem[]
   isRunning: boolean
   agentId: string
-  memoryActive?: boolean
   planActive?: boolean
-  enableMemory?: boolean
   enablePlanning?: boolean
   toolProcessActive?: boolean
   showToolProcess?: boolean
+  confirmMode?: import('@/api/chatSession').ConfirmMode
+  thinkingSupported?: boolean
+  thinkingActive?: boolean
+  /** 候选模型选项（>1 才展示切换按钮） */
+  modelOptions?: import('@/types').AgentModelOptionVO[]
+  /** 会话当前生效模型 id */
+  activeModelId?: string
+  /** 有待确认的 HITL 操作：禁用模型/思考切换（防重建冲掉挂起现场） */
+  hasPendingConfirm?: boolean
+  /** 会话 agent 是否绑定语音合成模型 */
+  ttsEnabled?: boolean
+  /** 自动语音播报是否开启 */
+  ttsBroadcastActive?: boolean
   allowUploadFileType?: string[]
   agentHasResult?: boolean
   workspacePanelOpen?: boolean
@@ -45,6 +69,10 @@ const props = defineProps<{
   historyLoading?: boolean
   /** 当前计划信息 */
   currentPlan?: PlanInfo | null
+  /** 语音输入聚合状态 */
+  voiceState?: import('@/composables/chat/useVoiceInput').VoiceInputState
+  /** 嵌入模式（?embed=1）：隐藏会话列表相关外壳（打开会话列表的汉堡按钮等） */
+  embed?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -53,10 +81,16 @@ const emit = defineEmits<{
   (e: 'send'): void
   (e: 'scroll', event: Event): void
   (e: 'toolContent', value: any): void
+  (e: 'subConfirm', value: { subToolUseId: string; approved: boolean }): void
   (e: 'abort'): void
-  (e: 'memory', value: boolean): void
   (e: 'plan', value: boolean): void
   (e: 'toolProcess', value: boolean): void
+  (e: 'confirmMode', value: import('@/api/chatSession').ConfirmMode): void
+  (e: 'thinking', value: boolean): void
+  (e: 'model', value: string): void
+  (e: 'ttsBroadcast', value: boolean): void
+  (e: 'voiceToggle'): void
+  (e: 'voicePress', action: import('@/composables/chat/useVoiceInput').VoicePressAction): void
   (e: 'toggleSidebar'): void
   (e: 'toggleWorkspace'): void
   /** 触发加载更多历史消息 */
@@ -64,10 +98,21 @@ const emit = defineEmits<{
   (e: 'newSession'): void
   /** 计划面板销毁 */
   (e: 'planDestroyed'): void
-  (e: 'interactionSubmit', payload: InteractionSubmitPayload): void
+  (e: 'interactionSubmit', payload: MarkdownInteractionSubmitPayload): void
   (e: 'uipRetry', uipCode: string): void
   (e: 'vepRetry', vepCode: string): void
+  /** 点击欢迎页常用问题卡片 */
+  (e: 'quickQuestion', question: string): void
+  /** 切换常驻常用问题折叠状态 */
+  (e: 'toggleQuestionsCollapsed'): void
 }>()
+
+/** 语音播报开关：右上角按钮无 hover tooltip，改用切换后的即时消息反馈告知当前状态 */
+const handleTtsToggle = () => {
+  const next = !props.ttsBroadcastActive
+  emit('ttsBroadcast', next)
+  message.info(next ? '已开启自动朗读' : '已关闭自动朗读')
+}
 
 // 滚动容器 ref
 const messagesScrollRef = ref<HTMLElement | null>(null)
@@ -82,8 +127,14 @@ const savedScrollTop = ref(0)
 const workspaceFilePreviewVisible = ref(false)
 const workspaceFilePreviewNode = ref<FlatFileItem | null>(null)
 
+// 底部锚定内容观察点（滚动容器的直接子包裹）
+const messagesContentRef = ref<HTMLElement | null>(null)
+
 // 标志位：区分程序化滚动与用户手动滚动，防止 scrollToBottom 触发的 scroll 事件错误更新 shouldAutoScroll
 let programmaticScrolling = false
+// 上次 scrollTop：判定滚动方向（iOS 在内容撑高/视口变化时会额外派发 scroll 事件，
+// 只有实际向上滚动才代表用户想离开底部）
+let lastScrollTop = 0
 // 待执行的自动滚动 rAF ID，用于在用户主动上滑时立即取消，打破"抗衡"
 let scrollRafId: number | null = null
 
@@ -131,11 +182,22 @@ const checkAndUpdateAutoScroll = () => {
 const handleScroll = (event: Event) => {
   // 跳过程序化滚动触发的事件，避免展开面板/DOM变化时错误更新 shouldAutoScroll
   if (programmaticScrolling) {
+    lastScrollTop = messagesScrollRef.value?.scrollTop ?? lastScrollTop
     emit('scroll', event)
     return
   }
 
-  checkAndUpdateAutoScroll()
+  // 用户意图方向判定：iOS 在图片加载撑高内容、视口变化等时机会额外派发 scroll
+  // 事件（scrollTop 并未减小），若按「距底距离」直接判定会把贴底意图误置为
+  // false、令底部锚定整体失效（桌面无此噪声事件所以只在移动端复现）。
+  // 只有 scrollTop 实际向上（容差 2px 防 iOS 滚动锚定微调）才可能是用户想离底；
+  // 已离底状态下任何方向都重新判定（下滑回底要能恢复贴底）。
+  const currentTop = messagesScrollRef.value?.scrollTop ?? 0
+  const scrollingUp = currentTop < lastScrollTop - 2
+  lastScrollTop = currentTop
+  if (scrollingUp || !shouldAutoScroll.value) {
+    checkAndUpdateAutoScroll()
+  }
 
   // 用户主动上滑离开底部时，立即取消待执行的自动滚动，消除"抗衡感"
   if (!shouldAutoScroll.value && scrollRafId !== null) {
@@ -187,6 +249,38 @@ const inputTagPreviewHandle = (file: FlatFileItem) => {
   workspaceFilePreviewNode.value = file
 }
 
+/**
+ * 持续底部锚定。「滚到底」是一次性动作：此后图片加载、代码高亮、常用问题条
+ * 出现等不改变消息数组但改变高度的异步完成都会破坏贴底且无人修复。观察
+ * 「滚动容器」（被输入区顶高挤压变矮）与「内容包裹层」（异步渲染撑高），
+ * 本应贴底（shouldAutoScroll）时自动重新锚定；用户上滑离底后不会被拉回。
+ * 欢迎态↔对话态切换由 ref 变化的 watch 自动挂卸。
+ */
+let bottomAnchorObserver: ResizeObserver | null = null
+
+watch(
+  [messagesScrollRef, messagesContentRef],
+  ([scrollEl, contentEl]) => {
+    bottomAnchorObserver?.disconnect()
+    if (typeof ResizeObserver === 'undefined' || (!scrollEl && !contentEl)) return
+    if (!bottomAnchorObserver) {
+      bottomAnchorObserver = new ResizeObserver(() => {
+        if (shouldAutoScroll.value) {
+          scrollToBottom()
+        }
+      })
+    }
+    if (scrollEl) bottomAnchorObserver.observe(scrollEl)
+    if (contentEl) bottomAnchorObserver.observe(contentEl)
+  },
+  { flush: 'post' }
+)
+
+onBeforeUnmount(() => {
+  bottomAnchorObserver?.disconnect()
+  bottomAnchorObserver = null
+})
+
 // 监听消息变化，自动滚动
 watch(
   () => props.messages,
@@ -233,6 +327,7 @@ defineExpose({
     <header class="chat-main-header">
       <!-- 移动端菜单按钮 -->
       <button
+        v-if="!embed"
         type="button"
         class="chat-mobile-menu-btn"
         title="打开会话列表"
@@ -241,19 +336,33 @@ defineExpose({
         <MenuOutlined />
       </button>
       <h1 class="chat-main-title" :title="title">{{ title }}</h1>
-      <!-- 工作空间入口按钮（与左侧菜单按钮对称） -->
-      <ATooltip placement="left" title="工作空间">
+      <!-- 右上角操作组：语音播报 + 工作空间（持续性界面控制，与左侧菜单按钮对称）。
+           v-if 必须落在最外层元素上——ATooltip 直接包裹 v-if 的 button 时，条件为假会
+           留下空触发节点致其挂载抛错，中断同容器后续兄弟节点的 patch（曾致工作区按钮被连累消失） -->
+      <div class="chat-header-actions">
+        <!-- 语音播报：无 hover tooltip（避免悬浮文案），点击后由 message 即时反馈状态 -->
         <button
-          v-if="sessionId && hasCodeExecutionConfig"
+          v-if="ttsEnabled"
           type="button"
-          class="chat-workspace-btn"
-          :class="{ 'is-active': workspacePanelOpen }"
-          @click="$emit('toggleWorkspace')"
+          class="chat-header-action-btn"
+          :class="{ 'is-active': ttsBroadcastActive }"
+          @click="handleTtsToggle"
         >
-          <FolderOpenOutlined v-if="workspacePanelOpen" />
-          <FolderOutlined v-else />
+          <SoundFilled v-if="ttsBroadcastActive" />
+          <AudioMutedOutlined v-else />
         </button>
-      </ATooltip>
+        <ATooltip v-if="sessionId && hasCodeExecutionConfig" placement="bottom" title="工作空间">
+          <button
+            type="button"
+            class="chat-header-action-btn"
+            :class="{ 'is-active': workspacePanelOpen }"
+            @click="$emit('toggleWorkspace')"
+          >
+            <FolderOpenOutlined v-if="workspacePanelOpen" />
+            <FolderOutlined v-else />
+          </button>
+        </ATooltip>
+      </div>
 
     </header>
 
@@ -264,25 +373,36 @@ defineExpose({
         :input-value="inputValue"
         :agent-id="agentId"
         :description="welcomeDesc"
+        :agent-avatar="agentAvatar"
+        :common-questions="commonQuestions"
         :uploaded-files="uploadedFiles"
         :isRunning="isRunning"
-        :memory-active="memoryActive"
         :plan-active="planActive"
-        :enable-memory="enableMemory"
         :enable-planning="enablePlanning"
         :allow-upload-file-type="allowUploadFileType"
         :show-tool-process="showToolProcess"
         :tool-process-active="toolProcessActive"
+        :confirm-mode="confirmMode"
+        :thinking-supported="thinkingSupported"
+        :thinking-active="thinkingActive"
+        :model-options="modelOptions"
+        :active-model-id="activeModelId"
+        :has-pending-confirm="hasPendingConfirm"
+        :voice-state="voiceState"
         :session-id="sessionId"
-        :has-code-execution-config="hasCodeExecutionConfig"
         :mention-allowed="true"
         @update:input-value="$emit('update:inputValue', $event)"
         @update:uploaded-files="$emit('update:uploadedFiles', $event)"
-        @memory="$emit('memory', $event)"
         @plan="$emit('plan', $event)"
         @toolProcess="$emit('toolProcess', $event)"
+        @confirm-mode="$emit('confirmMode', $event)"
+        @thinking="$emit('thinking', $event)"
+        @model="$emit('model', $event)"
+        @voice-toggle="$emit('voiceToggle')"
+        @voice-press="$emit('voicePress', $event)"
         @send="handleSend"
         @new-session="$emit('newSession')"
+        @quick-question="$emit('quickQuestion', $event)"
       />
     </div>
 
@@ -293,32 +413,37 @@ defineExpose({
           class="chat-main-messages-scroll"
           @scroll="handleScroll"
         >
-          <!-- 历史消息加载提示 -->
-          <div v-if="hasMoreHistory || historyLoading" class="chat-history-loading">
-            <template v-if="historyLoading">
-              <LoadingOutlined style="margin-right: 6px; font-size: 14px" />
-              <span>正在加载</span>
-            </template>
-            <template v-else-if="hasMoreHistory">
-              <span>下拉加载更多历史消息</span>
-            </template>
+          <!-- 内容包裹层：底部锚定的尺寸观察点（图片加载/代码高亮等撑高时重新贴底） -->
+          <div ref="messagesContentRef">
+            <!-- 历史消息加载提示 -->
+            <div v-if="hasMoreHistory || historyLoading" class="chat-history-loading">
+              <template v-if="historyLoading">
+                <LoadingOutlined style="margin-right: 6px; font-size: 14px" />
+                <span>正在加载</span>
+              </template>
+              <template v-else-if="hasMoreHistory">
+                <span>下拉加载更多历史消息</span>
+              </template>
+            </div>
+            <PlanPanel
+              v-if="currentPlan"
+              :plan="currentPlan"
+              :is-running="isRunning"
+              @destroy="$emit('planDestroyed')"
+            />
+            <MessageList
+              :agent-has-result="agentHasResult"
+              :messages="messages"
+              :tool-calls="toolCalls"
+              :tts-enabled="ttsEnabled"
+              @inputTagPreview="inputTagPreviewHandle"
+              @toolContent="(content: any) => $emit('toolContent', content)"
+              @sub-confirm="$emit('subConfirm', $event)"
+              @interaction-submit="$emit('interactionSubmit', $event)"
+              @uip-retry="$emit('uipRetry', $event)"
+              @vep-retry="$emit('vepRetry', $event)"
+            />
           </div>
-          <PlanPanel
-            v-if="currentPlan"
-            :plan="currentPlan"
-            :is-running="isRunning"
-            @destroy="$emit('planDestroyed')"
-          />
-          <MessageList
-            :agent-has-result="agentHasResult"
-            :messages="messages"
-            :tool-calls="toolCalls"
-            @inputTagPreview="inputTagPreviewHandle"
-            @toolContent="(content: any) => $emit('toolContent', content)"
-            @interaction-submit="$emit('interactionSubmit', $event)"
-            @uip-retry="$emit('uipRetry', $event)"
-            @vep-retry="$emit('vepRetry', $event)"
-          />
         </div>
         <MessageNavigator
           :messages="messages"
@@ -327,30 +452,75 @@ defineExpose({
       </div>
       <div class="chat-main-input-wrap" v-if="!sessionMessageTable">
         <div class="chat-input-outer">
+          <div
+            v-if="commonQuestionsPinned && commonQuestions && commonQuestions.length > 0"
+            class="chat-pinned-questions"
+          >
+            <button
+              type="button"
+              class="chat-pinned-questions-toggle"
+              :title="commonQuestionsCollapsed ? '展开常用问题' : '收起常用问题'"
+              @click="$emit('toggleQuestionsCollapsed')"
+            >
+              <DownOutlined
+                class="chat-pinned-questions-caret"
+                :class="{ collapsed: commonQuestionsCollapsed }"
+              />
+              <span>常用问题</span>
+            </button>
+            <div v-show="!commonQuestionsCollapsed" class="chat-pinned-questions-chips">
+              <button
+                v-for="(q, index) in commonQuestions"
+                :key="index"
+                type="button"
+                class="chat-pinned-question-chip"
+                :disabled="isRunning"
+                :title="q.question"
+                @click="$emit('quickQuestion', q.question)"
+              >
+                <span
+                  v-if="resolveCommonQuestionIcon(q.icon)"
+                  class="chip-icon"
+                  :style="{ color: q.color || undefined }"
+                >
+                  <component :is="resolveCommonQuestionIcon(q.icon)" />
+                </span>
+                <span class="chip-title">{{ q.title }}</span>
+              </button>
+            </div>
+          </div>
           <ChatInput
             :model-value="inputValue"
             :agent-id="agentId"
             :uploaded-files="uploadedFiles"
             :isRunning="isRunning"
-            :memory-active="memoryActive"
-            :plan-active="planActive"
-            :enable-memory="enableMemory"
-            :enable-planning="enablePlanning"
+                :plan-active="planActive"
+                :enable-planning="enablePlanning"
             :allow-upload-file-type="allowUploadFileType"
             :show-tool-process="showToolProcess"
             :tool-process-active="toolProcessActive"
+            :confirm-mode="confirmMode"
+            :thinking-supported="thinkingSupported"
+            :thinking-active="thinkingActive"
+            :model-options="modelOptions"
+            :active-model-id="activeModelId"
+            :has-pending-confirm="hasPendingConfirm"
+            :voice-state="voiceState"
             :session-id="sessionId"
             :mention-allowed="true"
             @inputTagPreview="inputTagPreviewHandle"
             @update:model-value="$emit('update:inputValue', $event)"
             @update:uploaded-files="$emit('update:uploadedFiles', $event)"
-            @memory="$emit('memory', $event)"
-            @plan="$emit('plan', $event)"
+                @plan="$emit('plan', $event)"
             @toolProcess="$emit('toolProcess', $event)"
+            @confirm-mode="$emit('confirmMode', $event)"
+            @thinking="$emit('thinking', $event)"
+            @model="$emit('model', $event)"
+            @voice-toggle="$emit('voiceToggle')"
+            @voice-press="$emit('voicePress', $event)"
             @send="handleSend"
             @abort="$emit('abort')"
           />
-          <div class="text-placeholder text-xs mt-sm" style="text-align: center; margin: 5px 0;">内容由AI生成，仅供参考</div>
         </div>
       </div>
     </template>

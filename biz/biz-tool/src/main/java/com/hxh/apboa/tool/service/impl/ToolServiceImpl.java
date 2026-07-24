@@ -76,6 +76,7 @@ public class ToolServiceImpl extends ServiceImpl<ToolMapper, ToolConfig> impleme
                 .map(ToolInfoWrapper::getClassPath).toList();
         if (currentClassPaths.isEmpty()) {
             jdbcTemplate.update("DELETE FROM " + TableConst.TOOL + " WHERE tool_type = 'BUILTIN'");
+            cleanDanglingToolRefs();
             return;
         }
         List<String> existingClassPaths = jdbcTemplate.queryForList(
@@ -93,6 +94,23 @@ public class ToolServiceImpl extends ServiceImpl<ToolMapper, ToolConfig> impleme
         for (ToolInfoWrapper toolInfo : toolInfos) {
             syncSingleTool(toolInfo, allTenantIds, tenantCodeToId);
         }
+
+        // 4. 孤儿关联清理(启动自愈)
+        cleanDanglingToolRefs();
+    }
+
+    /**
+     * 清理指向已不存在工具的悬空关联(agent_tools / skill_tools)。
+     * 上面的同步只删 tool_config 自身(类路径移除、作用域回收两类 DELETE),历史上因此遗留过
+     * agent_tools 悬空引用——前端架构页按悬空 id 逐个查详情报"工具不存在"。
+     * 每次启动同步末尾统一自愈,顺带清掉历史存量;手动删除路径(deleteTools)本就有级联,不受影响。
+     * 同步期无租户上下文,沿用 jdbcTemplate 直删;子查询列是主键,NOT IN 无 NULL 陷阱。
+     */
+    private void cleanDanglingToolRefs() {
+        jdbcTemplate.update("DELETE FROM " + TableConst.AGENT_TOOL
+                + " WHERE tool_id NOT IN (SELECT id FROM " + TableConst.TOOL + ")");
+        jdbcTemplate.update("DELETE FROM " + TableConst.SKILL_TOOL
+                + " WHERE tool_id NOT IN (SELECT id FROM " + TableConst.TOOL + ")");
     }
 
     /**
@@ -196,14 +214,17 @@ public class ToolServiceImpl extends ServiceImpl<ToolMapper, ToolConfig> impleme
     }
 
     /**
-     * 更新内置工具（刷新元数据，不改变租户归属）
+     * 更新内置工具（刷新元数据，不改变租户归属）。
+     * 注意：不覆盖 name —— 内置工具允许用户改名（UI 通用编辑，见 doUpdate 的 BUILTIN 分支），启动同步
+     * 只维护 tool_id/description/input_schema/scope_type，避免把用户改的 name 冲掉。name 仅在首次
+     * insert 时用代码值；tool_id 是调用/匹配用的稳定名（= @Tool 原始 name），随代码升级刷新。
+     * 改 name 不影响生效（ToolkitFactory 按 class_path 反查、need_confirm 按 tool_id 匹配）。
      */
     private void updateToolConfig(ToolInfoWrapper toolInfo, Long recordId) {
         jdbcTemplate.update(
                 "UPDATE " + TableConst.TOOL
-                        + " SET name = ?, tool_id = ?, description = ?, input_schema = ?, scope_type = ?, updated_at = ?"
+                        + " SET tool_id = ?, description = ?, input_schema = ?, scope_type = ?, updated_at = ?"
                         + " WHERE id = ?",
-                toolInfo.getName(),
                 toolInfo.getName(),
                 toolInfo.getDescription(),
                 JsonUtils.toJsonStr(toolInfo.getParams()),

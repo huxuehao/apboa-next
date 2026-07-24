@@ -23,9 +23,9 @@ import java.time.Duration;
 public class CustomToolkitConfig {
 
     /**
-     * 是否允许并行执行多个工具，默认 false
+     * 是否允许并行执行多个工具，默认 true；可通过 APBOA_TOOL_PARALLEL=false 回退串行
      */
-    private boolean parallel = false;
+    private boolean parallel = true;
 
     /**
      * 是否允许删除工具，默认 false
@@ -33,9 +33,10 @@ public class CustomToolkitConfig {
     private boolean allowToolDeletion = false;
 
     /**
-     * 工具执行超时时间（秒），默认 60 秒
+     * 工具执行超时时间（秒），默认 300 秒
+     * （联网搜索等 agentic 长调用需要充裕窗口；可通过 apboa.tool.execution-timeout-seconds 覆盖）
      */
-    private long executionTimeoutSeconds = 60;
+    private long executionTimeoutSeconds = 300;
 
     /**
      * 构建 ExecutionConfig

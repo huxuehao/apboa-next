@@ -1,53 +1,12 @@
 <template>
-  <div class="apboa-loading" :class="sizeClass">
-    <div class="logo-container">
-      <svg viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <!-- 波光渐变 -->
-          <linearGradient :id="shimmerGradId" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%"   stop-color="white" stop-opacity="0"/>
-            <stop offset="25%"  stop-color="white" stop-opacity="0.06"/>
-            <stop offset="45%"  stop-color="white" stop-opacity="0.38"/>
-            <stop offset="55%"  stop-color="white" stop-opacity="0.38"/>
-            <stop offset="75%"  stop-color="white" stop-opacity="0.06"/>
-            <stop offset="100%" stop-color="white" stop-opacity="0"/>
-          </linearGradient>
-
-          <!-- 遮罩 -->
-          <mask :id="maskId">
-            <rect width="300" height="300" fill="black"/>
-            <path d="M 152 212 A 85 85 0 1 1 212 152"
-                  fill="none" stroke="white" stroke-width="42" stroke-linecap="round"/>
-            <circle cx="210" cy="210" r="24" fill="white"/>
-          </mask>
-        </defs>
-
-        <!-- 圆环 -->
-        <path d="M 152 212 A 85 85 0 1 1 212 152"
-              fill="none"
-              stroke="#DEDEDE"
-              stroke-width="42"
-              stroke-linecap="round"/>
-
-        <!-- 圆点 -->
-        <circle cx="210" cy="210" r="24" fill="#DEDEDE"/>
-
-        <!-- 波光 -->
-        <g :mask="`url(#${maskId})`">
-          <g class="shimmer-sweep">
-            <rect x="0" y="-60" width="620" height="500"
-                  :fill="`url(#${shimmerGradId})`"
-                  transform="rotate(-28 60 190)"/>
-          </g>
-        </g>
-      </svg>
-    </div>
+  <div class="apboa-loading" :class="sizeClass" role="status" aria-live="polite">
+    <div class="fly-spinner" aria-hidden="true"></div>
     <div v-if="tip" class="loading-tip">{{ tip }}</div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 
 interface Props {
   /** 加载提示文本 */
@@ -62,11 +21,6 @@ const props = withDefaults(defineProps<Props>(), {
   size: 'default',
   fullscreen: false
 })
-
-// 生成唯一的ID，避免多个实例冲突
-const uniqueId = ref(Math.random().toString(36).substring(2, 9))
-const shimmerGradId = computed(() => `shimmerGrad-${uniqueId.value}`)
-const maskId = computed(() => `logoMask-${uniqueId.value}`)
 
 const sizeClass = computed(() => ({
   [`size-${props.size}`]: true,
@@ -94,25 +48,26 @@ const sizeClass = computed(() => ({
   background-color: rgba(255, 255, 255, 0.9);
 }
 
-.logo-container {
+.fly-spinner {
   width: 64px;
   height: 64px;
+  border: 5px solid rgba(40, 120, 255, 0.16);
+  border-top-color: #2878ff;
+  border-right-color: #7b42e8;
+  border-radius: 50%;
+  animation: fly-spin 0.75s linear infinite;
 }
 
-.logo-container svg {
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-}
-
-.apboa-loading.size-small .logo-container {
+.apboa-loading.size-small .fly-spinner {
   width: 32px;
   height: 32px;
+  border-width: 3px;
 }
 
-.apboa-loading.size-large .logo-container {
+.apboa-loading.size-large .fly-spinner {
   width: 96px;
   height: 96px;
+  border-width: 7px;
 }
 
 .loading-tip {
@@ -129,14 +84,7 @@ const sizeClass = computed(() => ({
   font-size: 16px;
 }
 
-/* ── 波光扫描动画 ── */
-.shimmer-sweep {
-  animation: shimmerMove 1.2s ease-in-out 0.8s infinite;
-}
-
-@keyframes shimmerMove {
-  0%   { transform: translateX(-380px); }
-  50%  { transform: translateX(560px); }
-  100% { transform: translateX(560px); }
+@keyframes fly-spin {
+  to { transform: rotate(360deg); }
 }
 </style>

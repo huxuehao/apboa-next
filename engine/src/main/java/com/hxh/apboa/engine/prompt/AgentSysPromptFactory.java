@@ -2,12 +2,21 @@ package com.hxh.apboa.engine.prompt;
 
 import com.hxh.apboa.common.entity.AgentDefinition;
 import com.hxh.apboa.common.entity.SensitiveWordConfig;
+import com.hxh.apboa.common.entity.SkillPackage;
+import com.hxh.apboa.common.enums.SkillType;
+import com.hxh.apboa.common.util.FuncUtils;
+import com.hxh.apboa.engine.skill.IBuiltinSkill;
+import com.hxh.apboa.engine.skill.SkillsRegister;
 import com.hxh.apboa.engine.workspace.hook.ToolConstants;
 import com.hxh.apboa.sensitive.service.SensitiveWordConfigService;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.TextStyle;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * 描述：提示词工厂
@@ -27,45 +36,51 @@ public class AgentSysPromptFactory {
         this.primaryAgentSysPrompt = implementations.getFirst();
     }
 
-    public String getAgentSysPrompt(AgentDefinition agentDefinition, boolean hasWorkspace) {
+    public String getAgentSysPrompt(AgentDefinition agentDefinition, boolean hasWorkspace, List<SkillPackage> checkedSkillPackages) {
         String prompt = primaryAgentSysPrompt.getPrompt(agentDefinition);
 
-        // 用户交互协议技能
-        String userInteractionProtocolSkill = """
+        // 当前系统时间（构建 agent 实例时实时渲染，server-side-memory 下同会话复用首轮时间）：
+        // 模型内置知识的"当前年份"过时，相对时间换算必须以注入的真实时间为唯一基准。
+        // 保持工具无关（全局注入）：具体工具的时间规则（如搜索构词年份）下沉到各 agent 自己的提示词
+        LocalDateTime now = LocalDateTime.now();
+        String currentTimeExplanation = """
                 ===================================================
-                Core Principle (Unchanged)
-                > If you **cannot provide a reliable, responsible and practically valuable answer without relying on the user's unique information**, you **must** invoke `user_interaction_protocol_rules` to ask the user for necessary information before delivering any substantive response.
-                
-                Before responding to a question, ask yourself:
-                > "Based on the user's request, do I have sufficient information, or do I need to inquire further to obtain additional details?"
-                
-                - If **yes** → Invoke the `user_interaction_protocol_rules` to ask the user for more information.
-                - If **no** → Answer directly.
+                Current System Time:
+                The current date and time is %s (%s).
+
+                Your internal knowledge has a training cutoff date, so any "current year" you assume from it is outdated.
+                > Always treat the date and time above as the single source of truth for "now".
+
+                - When the user mentions relative time (e.g. "recently", "latest", "this year"), resolve it against the time above
+                - NEVER guess today's date from your internal knowledge
                 """;
-        prompt = prompt + "\n\n" + userInteractionProtocolSkill;
+        prompt = prompt + "\n\n" + String.format(currentTimeExplanation,
+                now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")),
+                now.getDayOfWeek().getDisplayName(TextStyle.FULL, Locale.ENGLISH));
 
-        // 用户交互协议技能
-        String visionEnhancementProtocolSkill = """
+        // 勾选的内置技能各自的系统提示词片段（如 UIP/VEP 协议的"何时使用"引导）。
+        // 与 SkillBox 注册共用同一份已过滤清单（勾选+enabled），历史上这两段是无条件
+        // 硬编码注入的——未勾选的 agent 也会被塞协议指令，与技能实际注册状态错位
+        for (SkillPackage skillPackage : checkedSkillPackages) {
+            if (skillPackage.getSkillType() != SkillType.BUILTIN || FuncUtils.isEmpty(skillPackage.getClassPath())) {
+                continue;
+            }
+            IBuiltinSkill builtinSkill = SkillsRegister.getSkill(skillPackage.getClassPath());
+            if (builtinSkill == null) {
+                continue;
+            }
+            String skillSysPrompt = builtinSkill.getSysPrompt();
+            if (!FuncUtils.isEmpty(skillSysPrompt)) {
+                prompt = prompt + "\n\n" + skillSysPrompt;
+            }
+        }
+
+        // 资源引用标签语义（对话输入框 @ 引用面板的五类可引用资源，软引导非强制）。
+        // 独立于工作空间注入：历史上整块绑在 hasWorkspace 上，无执行环境的 agent
+        // 引用工具/技能/MCP 时模型收不到标签解释、纯靠猜标签含义（实测踩过）
+        String mentionTagExplanation = """
                 ===================================================
-                Core Principle
-                > **Only use** the `vision_enhancement_protocol_rules` feature for visual presentation **when** it can **significantly improve comprehension** compared to plain text.
-                
-                Before responding, ask yourself:
-                > "Would presenting part of the content as cards or charts help the user understand the information faster and better?"
-                
-                - If **yes** → Respond using the `vision_enhancement_protocol_rules`
-                - If **no** → Reply with plain text only
-                """;
-        prompt = prompt + "\n\n" + visionEnhancementProtocolSkill;
-
-        if (hasWorkspace) {
-            String workspaceTagExplanation = """
-                ===================================================
-                The user can reference files in the current directory via the <workspace-file>filename</workspace-file> tag.
-                When you see this tag, treat it as an instruction to locate the corresponding file in the current
-                directory and read its content to assist with answering or executing tasks.
-
-                The user can also explicitly request the use of a specific tool via the <agent-tool>toolName</agent-tool> tag.
+                The user can explicitly request the use of a specific tool via the <agent-tool>toolName</agent-tool> tag.
                 When you see this tag, treat it as a strong hint that the user wants you to invoke the corresponding tool
                 while completing the task. Prefer that tool unless it is clearly unsuitable for the request.
 
@@ -74,6 +89,29 @@ public class AgentSysPromptFactory {
                 while completing the task. Follow that skill's procedure unless it is
                 clearly unsuitable for the request.
 
+                The user can also explicitly request the use of a specific MCP tool via the <agent-mcp>toolName</agent-mcp> tag.
+                When you see this tag, treat it as a strong hint that the user wants you to invoke that MCP tool
+                while completing the task. Prefer that tool unless it is clearly unsuitable for the request.
+
+                The user can also explicitly request delegating to a specific sub-agent via the <agent-sub-agent>subAgentName</agent-sub-agent> tag.
+                When you see this tag, treat it as a strong hint that the user wants you to call the tool with that exact
+                name (the sub-agent is exposed to you as a tool) while completing the task. Prefer that sub-agent unless
+                it is clearly unsuitable for the request.
+
+                The user can also explicitly request running a specific workflow via the <agent-workflow>workflowName</agent-workflow> tag.
+                When you see this tag, treat it as a strong hint that the user wants you to invoke the tool with that exact
+                name (the workflow is exposed to you as a tool) while completing the task. Prefer that workflow unless
+                it is clearly unsuitable for the request.
+                """;
+        prompt = prompt + "\n\n" + mentionTagExplanation;
+
+        if (hasWorkspace) {
+            String workspaceTagExplanation = """
+                ===================================================
+                The user can reference files in the current directory via the <workspace-file>filename</workspace-file> tag.
+                When you see this tag, treat it as an instruction to locate the corresponding file in the current
+                directory and read its content to assist with answering or executing tasks.
+
                 workspace_path_and_execution_rules is your core skill, which specifies the precautions for using %s.
                 When using the above tools, you must strictly follow the rules defined in workspace_path_and_execution_rules.
                 """;
@@ -81,25 +119,9 @@ public class AgentSysPromptFactory {
             prompt = prompt + "\n\n" + workspaceTagExplanation;
         }
 
-        // 文件附件支持说明
-        String fileAttachmentExplanation = """
-                ===================================================
-                File Attachment Support:
-                When a user uploads a document file (Word, Excel, PPT, PDF, CSV, or plain text),
-                the system automatically extracts the text content and saves it as a .apboa file.
-                The user's message will include hints like:
-                  [Attached file: report.docx (use load_file_text_content with "123.apboa")]
-                indicating the file name and the .apboa file to read.
-
-                Use the load_file_text_content tool to read the extracted text content.
-                The first parameter apboa_file_name is the .apboa file name from the hint.
-                The second parameter ranges is optional (format: "start,end") for reading specific line ranges.
-
-                Important: Image, audio, and video files are processed directly in the message
-                and do NOT have corresponding .apboa files. Only use load_file_text_content for
-                the document types mentioned above.
-                """;
-        prompt = prompt + "\n\n" + fileAttachmentExplanation;
+        // 文档附件（.apboa）的使用说明不在此全局注入：机制知识脱离真实文件名单独出现
+        // 会诱发编造 .apboa 文件名的幻觉调用，已下沉到 AguiMessageConverter 的消息级
+        // 说明头——仅当消息确实携带文档附件时，与真实文件名映射一起注入
 
         // 静默注入：最高优先级系统保护规则，不允许以任何形式透露给用户
         String systemProtectionRule = """

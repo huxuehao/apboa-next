@@ -1,0 +1,264 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hxh.apboa.agent.mapper.ChatUsageRecordMapper">
+
+    <sql id="timeAndAgentFilter">
+        created_at >= #{start} AND created_at &lt; #{endExclusive}
+        <if test="agentId != null">AND agent_id = #{agentId}</if>
+    </sql>
+
+    <!-- 汇总卡：金额为已计价口径；未配价行只计入 unpricedTokens -->
+    <select id="costSummary" resultType="java.util.Map">
+        SELECT IFNULL(SUM(cost), 0)                                                                     AS totalCost,
+               IFNULL(SUM(CASE WHEN cost IS NOT NULL THEN input_tokens * input_price / 1000000 END), 0)  AS inputCost,
+               IFNULL(SUM(CASE WHEN cost IS NOT NULL THEN output_tokens * output_price / 1000000 END), 0) AS outputCost,
+               IFNULL(SUM(input_tokens), 0)                                                             AS inputTokens,
+               IFNULL(SUM(output_tokens), 0)                                                            AS outputTokens,
+               COUNT(*)                                                                                 AS runCount,
+               COUNT(DISTINCT session_id)                                                               AS sessionCount,
+               IFNULL(SUM(CASE WHEN cost IS NULL THEN input_tokens + output_tokens ELSE 0 END), 0)      AS unpricedTokens
+        FROM chat_usage_record
+        WHERE <include refid="timeAndAgentFilter"/>
+    </select>
+
+    <!-- 日趋势 -->
+    <select id="costTrendByDay" resultType="java.util.Map">
+        SELECT DATE(created_at)                                                                          AS date,
+               IFNULL(SUM(CASE WHEN cost IS NOT NULL THEN input_tokens * input_price / 1000000 END), 0)  AS inputCost,
+               IFNULL(SUM(CASE WHEN cost IS NOT NULL THEN output_tokens * output_price / 1000000 END), 0) AS outputCost,
+               IFNULL(SUM(cost), 0)                                                                      AS cost
+        FROM chat_usage_record
+        WHERE <include refid="timeAndAgentFilter"/>
+        GROUP BY DATE(created_at)
+        ORDER BY DATE(created_at)
+    </select>
+
+    <!-- 按模型分布：同模型改名后取最新 label（按流水最新一条） -->
+    <select id="costGroupByModel" resultType="java.util.Map">
+        SELECT model_config_id                                                                           AS modelConfigId,
+               SUBSTRING_INDEX(GROUP_CONCAT(model_label ORDER BY id DESC SEPARATOR '\n'), '\n', 1)       AS modelLabel,
+               IFNULL(SUM(input_tokens), 0)                                                              AS inputTokens,
+               IFNULL(SUM(output_tokens), 0)                                                             AS outputTokens,
+               IFNULL(SUM(cost), 0)                                                                      AS cost,
+               IFNULL(SUM(CASE WHEN cost IS NULL THEN input_tokens + output_tokens ELSE 0 END), 0)       AS unpricedTokens,
+               COUNT(*)                                                                                  AS runCount
+        FROM chat_usage_record
+        WHERE <include refid="timeAndAgentFilter"/>
+        GROUP BY model_config_id
+        ORDER BY cost DESC, unpricedTokens DESC
+    </select>
+
+    <!-- 按场景分布 -->
+    <select id="costGroupByBizType" resultType="java.util.Map">
+        SELECT biz_type                                                                                  AS bizType,
+               IFNULL(SUM(cost), 0)                                                                      AS cost,
+               IFNULL(SUM(input_tokens), 0)                                                              AS inputTokens,
+               IFNULL(SUM(output_tokens), 0)                                                             AS outputTokens,
+               COUNT(*)                                                                                  AS runCount
+        FROM chat_usage_record
+        WHERE <include refid="timeAndAgentFilter"/>
+        GROUP BY biz_type
+        ORDER BY cost DESC
+    </select>
+
+    <!-- 按渠道分布（channel NULL = 渠道标记上线前的历史流水，前端显示「未标记」） -->
+    <select id="costGroupByChannel" resultType="java.util.Map">
+        SELECT channel                                                                                   AS channel,
+               IFNULL(SUM(cost), 0)                                                                      AS cost,
+               IFNULL(SUM(input_tokens), 0)                                                              AS inputTokens,
+               IFNULL(SUM(output_tokens), 0)                                                             AS outputTokens,
+               COUNT(*)                                                                                  AS runCount
+        FROM chat_usage_record
+        WHERE <include refid="timeAndAgentFilter"/>
+        GROUP BY channel
+        ORDER BY cost DESC
+    </select>
+
+    <!-- 场景 × 渠道交叉分布：同一笔流水同时属于一个场景和一个入口，供前端解释构成而非重复计费 -->
+    <select id="costGroupByBizTypeAndChannel" resultType="java.util.Map">
+        SELECT biz_type                                                                                  AS bizType,
+               channel                                                                                   AS channel,
+               IFNULL(SUM(cost), 0)                                                                      AS cost,
+               IFNULL(SUM(input_tokens), 0)                                                              AS inputTokens,
+               IFNULL(SUM(output_tokens), 0)                                                             AS outputTokens,
+               COUNT(*)                                                                                  AS runCount
+        FROM chat_usage_record
+        WHERE <include refid="timeAndAgentFilter"/>
+        GROUP BY biz_type, channel
+        ORDER BY cost DESC
+    </select>
+
+    <!-- 会话账单分页：按 session 聚合；models 为该会话用过的模型 label 去重串 -->
+    <select id="pageSessionBills" resultType="java.util.Map">
+        <!-- 身份行扩含 SCHEDULED_JOB：定时任务触发的会话主链行记该场景，与 CHAT 同为"会话身份"来源 -->
+        SELECT session_id                                                                               AS sessionId,
+               MAX(CASE WHEN biz_type IN ('CHAT', 'SCHEDULED_JOB') THEN agent_id END)                    AS agentId,
+               SUBSTRING_INDEX(GROUP_CONCAT(CASE WHEN biz_type IN ('CHAT', 'SCHEDULED_JOB') THEN agent_label END
+                   ORDER BY id DESC SEPARATOR '\n'), '\n', 1)                                           AS agentLabel,
+               MAX(user_id)                                                                             AS userId,
+               COUNT(*)                                                                                 AS runCount,
+               SUM(CASE WHEN message_id IS NOT NULL THEN 1 ELSE 0 END)                                  AS visibleReplyCount,
+               SUM(CASE WHEN message_id IS NULL THEN 1 ELSE 0 END)                                      AS internalRunCount,
+               SUM(CASE WHEN message_id IS NULL AND biz_type = 'SUB_AGENT' THEN 1 ELSE 0 END)           AS subAgentRunCount,
+               SUM(CASE WHEN message_id IS NULL AND biz_type = 'WORKFLOW' THEN 1 ELSE 0 END)            AS workflowRunCount,
+               <!-- 定时执行次数按 biz_run_id 去重：拒绝授权续跑等场景一次执行产生多条
+                    SCHEDULED_JOB 流水行（每轮 assistant 各一行），按行计会虚高 -->
+               COUNT(DISTINCT CASE WHEN biz_type = 'SCHEDULED_JOB' THEN biz_run_id END)                 AS scheduledJobRunCount,
+               SUM(CASE WHEN message_id IS NULL AND (biz_type IS NULL OR biz_type NOT IN ('SUB_AGENT',
+                   'WORKFLOW', 'SCHEDULED_JOB')) THEN 1 ELSE 0 END)                                      AS otherInternalRunCount,
+               IFNULL(SUM(iteration_count), 0)                                                          AS llmCallCount,
+               IFNULL(SUM(input_tokens), 0)                                                             AS inputTokens,
+               IFNULL(SUM(output_tokens), 0)                                                            AS outputTokens,
+               IFNULL(SUM(cost), 0)                                                                     AS cost,
+               SUM(CASE WHEN cost IS NULL THEN 1 ELSE 0 END)                                            AS unpricedRuns,
+               GROUP_CONCAT(DISTINCT model_label ORDER BY model_label SEPARATOR ',')                    AS models,
+               MAX(created_at)                                                                          AS lastActiveAt
+        FROM chat_usage_record
+        WHERE session_id IS NOT NULL
+          AND created_at >= #{start} AND created_at &lt; #{endExclusive}
+        <if test="agentId != null">AND agent_id = #{agentId}</if>
+        GROUP BY session_id
+        <choose>
+            <when test="orderByCost">ORDER BY cost DESC, lastActiveAt DESC</when>
+            <otherwise>ORDER BY lastActiveAt DESC</otherwise>
+        </choose>
+    </select>
+
+    <!--
+      统一执行账单：每条成本流水只归属一个账单类型，避免会话与工作流重复计费。
+      CHAT/SUB_AGENT 归入会话；WORKFLOW 按 biz_run_id 归入工作流执行。
+      旧工作流流水没有 biz_run_id，只能退化为一条流水一行并显式标记 legacy。
+      SCHEDULED_JOB 账单（第三类）：
+      - 智能体型定时执行：主链行 biz_type=SCHEDULED_JOB（referenceId=会话ID，一次执行一会话），
+        执行期间的子智能体行按 channel=SCHEDULED 一并归入；用户事后在同一会话追聊的
+        CHAT/WEB 行仍归会话账单——同一会话可各出一张定时单与对话单，流水不重复计费。
+      - 工作流型定时执行：节点行保持 WORKFLOW 场景（工作流账单口径不破坏），
+        经 quartz_job_records（record_id=run id）行级判定改挂 SCHEDULED_JOB 账单类型。
+        该关联表无 tenant_id（拦截器忽略清单内），租户隔离由主表条件保证。
+    -->
+    <select id="pageExecutionBills" resultType="java.util.Map">
+        SELECT CONCAT(grouped.billType, ':', grouped.referenceId)                                      AS billId,
+               grouped.*
+        FROM (
+            SELECT CASE WHEN r.biz_type = 'SCHEDULED_JOB'
+                            OR (r.biz_type = 'SUB_AGENT' AND r.channel = 'SCHEDULED')
+                            OR (r.biz_type = 'WORKFLOW' AND qjr.job_id IS NOT NULL) THEN 'SCHEDULED_JOB'
+                        WHEN r.biz_type = 'WORKFLOW' THEN 'WORKFLOW'
+                        ELSE 'CHAT' END                                                                 AS billType,
+                   CASE WHEN r.biz_type = 'WORKFLOW'
+                        THEN COALESCE(r.biz_run_id, CONCAT('legacy-', r.id))
+                        ELSE CAST(r.session_id AS CHAR) END                                             AS referenceId,
+                   MAX(r.session_id)                                                                   AS sessionId,
+                   MAX(CASE WHEN r.biz_type = 'WORKFLOW' THEN r.biz_id END)                             AS workflowId,
+                   COALESCE(MAX(CASE WHEN r.biz_type = 'SCHEDULED_JOB' THEN r.biz_id END),
+                            CAST(MAX(qjr.job_id) AS CHAR))                                              AS scheduledJobId,
+                   SUBSTRING_INDEX(GROUP_CONCAT(COALESCE(r.biz_label, r.agent_label)
+                       ORDER BY r.id DESC SEPARATOR '\n'), '\n', 1)                                    AS titleSnapshot,
+                   MAX(CASE WHEN r.biz_type IN ('CHAT', 'SCHEDULED_JOB') THEN r.agent_id END)           AS agentId,
+                   SUBSTRING_INDEX(GROUP_CONCAT(CASE WHEN r.biz_type IN ('CHAT', 'SCHEDULED_JOB')
+                       THEN r.agent_label END ORDER BY r.id DESC SEPARATOR '\n'), '\n', 1)             AS agentLabel,
+                   MAX(r.user_id)                                                                      AS userId,
+                   COUNT(*)                                                                            AS runCount,
+                   SUM(CASE WHEN r.message_id IS NOT NULL THEN 1 ELSE 0 END)                           AS visibleReplyCount,
+                   SUM(CASE WHEN r.message_id IS NULL AND r.biz_type = 'SUB_AGENT' THEN 1 ELSE 0 END)  AS internalRunCount,
+                   SUM(CASE WHEN r.biz_type = 'SUB_AGENT' THEN 1 ELSE 0 END)                           AS subAgentRunCount,
+                   IFNULL(SUM(r.iteration_count), 0)                                                   AS llmCallCount,
+                   IFNULL(SUM(r.input_tokens), 0)                                                      AS inputTokens,
+                   IFNULL(SUM(r.output_tokens), 0)                                                     AS outputTokens,
+                   IFNULL(SUM(r.cost), 0)                                                              AS cost,
+                   SUM(CASE WHEN r.cost IS NULL THEN 1 ELSE 0 END)                                     AS unpricedRuns,
+                   GROUP_CONCAT(DISTINCT r.model_label ORDER BY r.model_label SEPARATOR ',')           AS models,
+                   SUBSTRING_INDEX(GROUP_CONCAT(r.channel ORDER BY r.id DESC SEPARATOR '\n'), '\n', 1) AS channel,
+                   IFNULL(SUM(r.duration_ms), 0)                                                       AS durationMs,
+                   MAX(r.created_at)                                                                   AS lastActiveAt,
+                   MAX(CASE WHEN r.biz_type = 'WORKFLOW' AND r.biz_run_id IS NULL THEN 1 ELSE 0 END)   AS legacy
+            FROM chat_usage_record r
+            <!-- 显式 CAST 对齐类型：qjr.record_id 为 bigint、biz_run_id 为 varchar，混型等值
+                 比较 MySQL 走 double，19 位雪花 ID 超出 53 位精度会把相近 ID 误判相等
+                 （本机实测差 62 判等），导致普通工作流 run 被错标定时单/流水翻倍 -->
+            LEFT JOIN quartz_job_records qjr
+                   ON r.biz_type = 'WORKFLOW' AND qjr.record_id = CAST(r.biz_run_id AS UNSIGNED)
+            WHERE r.created_at >= #{start} AND r.created_at &lt; #{endExclusive}
+              AND ((r.biz_type IN ('CHAT', 'SUB_AGENT', 'SCHEDULED_JOB') AND r.session_id IS NOT NULL)
+                   OR r.biz_type = 'WORKFLOW')
+            <if test="agentId != null">AND r.agent_id = #{agentId}</if>
+            GROUP BY billType, referenceId
+        ) grouped
+        <choose>
+            <when test="orderByCost">ORDER BY grouped.cost DESC, grouped.lastActiveAt DESC</when>
+            <otherwise>ORDER BY grouped.lastActiveAt DESC</otherwise>
+        </choose>
+    </select>
+
+    <!-- 重算历史成本：按模型当前价刷新快照（价格未配/模型已删的行不动） -->
+    <update id="recalculateCost">
+        UPDATE chat_usage_record r
+        INNER JOIN model_config mc ON r.model_config_id = mc.id
+        SET r.input_price  = mc.input_price,
+            r.output_price = mc.output_price,
+            r.cost         = (r.input_tokens * mc.input_price + r.output_tokens * mc.output_price) / 1000000
+        WHERE mc.input_price IS NOT NULL AND mc.output_price IS NOT NULL
+          AND r.created_at >= #{start} AND r.created_at &lt; #{endExclusive}
+        <if test="modelConfigId != null">AND r.model_config_id = #{modelConfigId}</if>
+    </update>
+
+    <!-- 存量回填：meta 抽字段，价格按模型当前价估算；表名 ${} 由 service 白名单校验 -->
+    <insert id="backfillFromMessages">
+        INSERT INTO chat_usage_record (tenant_id, session_id, message_id, agent_id, agent_label, user_id,
+            model_config_id, model_label, provider_type, biz_type, channel,
+            input_tokens, output_tokens, iteration_count, duration_ms,
+            input_price, output_price, cost, created_at)
+        SELECT m.tenant_id,
+               m.session_id,
+               m.id,
+               s.agent_id,
+               ad.name,
+               s.user_id,
+               IFNULL(CAST(JSON_UNQUOTE(JSON_EXTRACT(m.meta, '$.modelConfigId')) AS UNSIGNED), 0),
+               IFNULL(JSON_UNQUOTE(JSON_EXTRACT(m.meta, '$.modelLabel')), 'unknown'),
+               mp.type,
+               'CHAT',
+               NULL,
+               IFNULL(CAST(JSON_EXTRACT(m.meta, '$.inputTokens') AS UNSIGNED), 0),
+               IFNULL(CAST(JSON_EXTRACT(m.meta, '$.outputTokens') AS UNSIGNED), 0),
+               IFNULL(CAST(JSON_EXTRACT(m.meta, '$.iterationCount') AS UNSIGNED), 1),
+               CAST(JSON_EXTRACT(m.meta, '$.durationMs') AS UNSIGNED),
+               mc.input_price,
+               mc.output_price,
+               CASE WHEN mc.input_price IS NOT NULL AND mc.output_price IS NOT NULL
+                    THEN (IFNULL(CAST(JSON_EXTRACT(m.meta, '$.inputTokens') AS UNSIGNED), 0) * mc.input_price
+                        + IFNULL(CAST(JSON_EXTRACT(m.meta, '$.outputTokens') AS UNSIGNED), 0) * mc.output_price) / 1000000
+                    END,
+               m.created_at
+        FROM ${table} m
+        INNER JOIN chat_session s ON m.session_id = s.id
+        LEFT JOIN agent_definition ad ON ad.id = s.agent_id
+        LEFT JOIN model_config mc ON mc.id = CAST(JSON_UNQUOTE(JSON_EXTRACT(m.meta, '$.modelConfigId')) AS UNSIGNED)
+        LEFT JOIN model_provider mp ON mp.id = mc.provider_id
+        WHERE m.role = 'assistant'
+          AND m.meta IS NOT NULL AND JSON_VALID(m.meta)
+          AND JSON_EXTRACT(m.meta, '$.inputTokens') IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM chat_usage_record r WHERE r.message_id = m.id)
+    </insert>
+
+    <!-- 消耗主体 TopN（按成本降序，未计价量多的排后补位）；agentLabel 取流水最新快照。
+         agent_id=0 是无 agent 归属的哨兵（工作流独立运行/定时任务等），按 label 快照分行，
+         否则不同工作流会被聚成一行且名字随最新一条走 -->
+    <select id="costTopAgents" resultType="java.util.Map">
+        SELECT agent_id                                                                                  AS agentId,
+               SUBSTRING_INDEX(GROUP_CONCAT(agent_label ORDER BY id DESC SEPARATOR '\n'), '\n', 1)       AS agentLabel,
+               GROUP_CONCAT(DISTINCT biz_type ORDER BY biz_type SEPARATOR ',')                            AS bizTypes,
+               COUNT(DISTINCT session_id)                                                                AS sessionCount,
+               COUNT(*)                                                                                  AS runCount,
+               IFNULL(SUM(input_tokens), 0)                                                              AS inputTokens,
+               IFNULL(SUM(output_tokens), 0)                                                             AS outputTokens,
+               IFNULL(SUM(cost), 0)                                                                      AS cost,
+               IFNULL(SUM(CASE WHEN cost IS NULL THEN input_tokens + output_tokens ELSE 0 END), 0)       AS unpricedTokens
+        FROM chat_usage_record
+        WHERE created_at >= #{start} AND created_at &lt; #{endExclusive}
+        GROUP BY agent_id, CASE WHEN agent_id = 0 THEN agent_label ELSE '' END
+        ORDER BY cost DESC, unpricedTokens DESC
+        LIMIT #{limit}
+    </select>
+
+</mapper>

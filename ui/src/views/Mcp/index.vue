@@ -4,7 +4,6 @@
  * @author huxuehao
  */
 <script setup lang="ts">
-/* eslint-disable vue/multi-word-component-names */
 import { computed, h, onActivated, onBeforeMount, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Modal } from 'ant-design-vue'
@@ -20,6 +19,8 @@ import CreateCard from '@/components/mcp/CreateCard.vue'
 import McpCard from '@/components/mcp/McpCard.vue'
 import McpForm from '@/components/mcp/McpForm.vue'
 import { getMcpConnectionStatusText } from '@/composables/useMcpPresentation'
+
+defineOptions({ name: 'McpManagementView' })
 
 const store = useMcpStore()
 const router = useRouter()

@@ -57,6 +57,7 @@ public class HookConfigServiceImpl extends ServiceImpl<HookConfigMapper, HookCon
         if (currentClassPaths.isEmpty()) {
             jdbcTemplate.update("DELETE FROM " + TableConst.HOOK
                     + " WHERE hook_type = 'BUILTIN' AND class_path IS NOT NULL");
+            cleanDanglingHookRefs();
             return;
         }
         List<String> existingClassPaths = jdbcTemplate.queryForList(
@@ -76,6 +77,19 @@ public class HookConfigServiceImpl extends ServiceImpl<HookConfigMapper, HookCon
         for (HookConfigWrapper configWrapper : configWrappers) {
             syncSingleHook(configWrapper, allTenantIds, tenantCodeToId);
         }
+
+        // 4. 孤儿关联清理(启动自愈)
+        cleanDanglingHookRefs();
+    }
+
+    /**
+     * 清理指向已不存在 Hook 的悬空关联(agent_hooks)。
+     * 同步的 DELETE 只删 hook_config 自身,不级联关联表;启动同步末尾统一自愈,
+     * 手动删除路径(deleteByIds)本就有级联。同步期无租户上下文,沿用 jdbcTemplate。
+     */
+    private void cleanDanglingHookRefs() {
+        jdbcTemplate.update("DELETE FROM " + TableConst.AGENT_HOOKS
+                + " WHERE hook_config_id NOT IN (SELECT id FROM " + TableConst.HOOK + ")");
     }
 
     /**
@@ -176,14 +190,16 @@ public class HookConfigServiceImpl extends ServiceImpl<HookConfigMapper, HookCon
     }
 
     /**
-     * 更新内置Hook（刷新元数据，不改变租户归属）
+     * 更新内置Hook（刷新元数据，不改变租户归属）。
+     * 注意：不覆盖 name —— 内置 Hook 允许用户改名（见 updateName），启动同步只维护
+     * description/scope_type，避免把用户改的 name 冲掉。name 仅在首次 insert 时用代码值；
+     * 改 name 不影响生效（HooksFactory 按 class_path 反查）。
      */
     private void updateHookConfig(HookConfigWrapper configWrapper, Long recordId) {
         jdbcTemplate.update(
                 "UPDATE " + TableConst.HOOK
-                        + " SET name = ?, description = ?, scope_type = ?, updated_at = ?"
+                        + " SET description = ?, scope_type = ?, updated_at = ?"
                         + " WHERE id = ?",
-                configWrapper.getName(),
                 configWrapper.getDescription(),
                 configWrapper.getScopeType().name(),
                 LocalDateTime.now(),
@@ -232,6 +248,16 @@ public class HookConfigServiceImpl extends ServiceImpl<HookConfigMapper, HookCon
         boolean result = updateById(entity);
         publishAgentReregister(agentHookService.getAgentIds(List.of(entity.getId())));
         return result;
+    }
+
+    @Override
+    public boolean updateName(Long id, String name) {
+        // 仅改展示 name（允许内置 Hook）；name 不影响生效（HooksFactory 按 class_path 反查），
+        // 故无需触发关联智能体重新注册。启动同步不会覆盖此 name（见 updateHookConfig）。
+        return lambdaUpdate()
+                .set(HookConfig::getName, name)
+                .eq(HookConfig::getId, id)
+                .update();
     }
 
     private void publishAgentReregister(List<Long> agentIds) {

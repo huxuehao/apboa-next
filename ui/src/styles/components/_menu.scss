@@ -1,29 +1,76 @@
 /**
- * AppMenu组件样式
+ * AppSidebar 侧边栏样式
  *
- * @author huxuehao
+ * @author vaulka
  */
 
-.app-menu {
-  :deep(.ant-segmented) {
-    font-size: 14px;
-    color: var(--color-text-primary);
+.app-sidebar {
+  width: 220px;
+  height: 100%;
+  background: var(--color-bg-white);
+  border-right: 1px solid var(--color-border-light);
+  transition: width 0.2s ease;
+  overflow: hidden;
 
+  &.collapsed {
+    width: 80px;
   }
 
-  :deep(.ant-segmented-item-selected) {
-    font-weight: bold;
-    font-size: 16px;
-    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.15);
+  .sidebar-logo {
+    height: 55px;
+    padding: 0 16px;
+    border-bottom: 1px solid var(--color-border-light);
+    flex-shrink: 0;
+    overflow: hidden;
+    white-space: nowrap;
   }
 
-  :deep(.menu-item-label) {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
+  .sidebar-menu {
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 8px 0;
+
+    // antd inline menu：去掉右侧分割线、透明底，交给侧边栏统一控制
+    :deep(.ant-menu),
+    :deep(.ant-menu-inline),
+    :deep(.ant-menu-inline-collapsed) {
+      border-inline-end: none;
+      background: transparent;
+    }
   }
 
-  :deep(.menu-item-icon) {
-    font-size: 16px;
+  .sidebar-collapse-btn {
+    height: 48px;
+    padding: 0 24px;
+    gap: 10px;
+    flex-shrink: 0;
+    border-top: 1px solid var(--color-border-light);
+    color: var(--color-text-regular);
+    cursor: pointer;
+    transition: color 0.2s, background-color 0.2s;
+
+    &:hover {
+      color: var(--color-primary);
+      background-color: var(--color-bg-light);
+    }
+
+    .anticon {
+      font-size: 16px;
+    }
+    .collapse-text {
+      font-size: 14px;
+    }
+  }
+
+  // 折叠态：logo 与折叠按钮居中
+  &.collapsed {
+    .sidebar-logo {
+      padding: 0;
+      justify-content: center;
+    }
+    .sidebar-collapse-btn {
+      padding: 0;
+      justify-content: center;
+    }
   }
 }

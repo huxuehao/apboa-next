@@ -56,6 +56,12 @@ public class McpServer extends BaseTenantEntity {
     private String description;
 
     /**
+     * 身份断言 audience（业务方验签的 aud 标识，如 mcp:order-system）。
+     * 未配置时该 MCP 的工具调用不注入身份断言（docs/identity-propagation-design.md §6.M5）
+     */
+    private String audience;
+
+    /**
      * 缓存的工具目录 JSON
      */
     private String toolSchemas;
@@ -109,6 +115,11 @@ public class McpServer extends BaseTenantEntity {
      * 自动降级连续失败阈值
      */
     private Integer runtimeFailThreshold;
+
+    /**
+     * HTTP/SSE 空闲连接回收阈值（毫秒），0 表示不回收；STDIO 不适用
+     */
+    private Integer idleTimeoutMs;
 
     /**
      * 激活版本号

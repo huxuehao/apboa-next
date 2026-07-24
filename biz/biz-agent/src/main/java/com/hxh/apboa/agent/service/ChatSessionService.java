@@ -1,5 +1,7 @@
 package com.hxh.apboa.agent.service;
 
+import com.hxh.apboa.common.enums.ConfirmMode;
+
 import com.hxh.apboa.common.dto.ChatMessageAppendDTO;
 import com.hxh.apboa.common.dto.ChatSessionCreateDTO;
 import com.hxh.apboa.common.dto.ChatSessionQueryDTO;
@@ -133,5 +135,50 @@ public interface ChatSessionService extends IService<ChatSession> {
      * @param id 会话 ID
      */
     void deleteSession(Long id);
+
+    /**
+     * 查询会话「一键授权」开关（Redis，无记录=false 逐步确认）
+     *
+     * @param sessionId 会话 ID
+     * @return 当前授权模式
+     */
+    ConfirmMode getConfirmMode(Long sessionId);
+
+    /**
+     * 设置会话 HITL 授权模式（三态）：AUTO_APPROVE/AUTO_REJECT 写 Redis（TTL 30 天滚动刷新），
+     * MANUAL 删 key。runtime 侧在 stopAgent 前/暂停处理层实时读取——一键授权直接放行，
+     * 拒绝授权自动全拒续跑，逐步确认冒泡人工决策。
+     *
+     * @param sessionId 会话 ID
+     * @param mode      授权模式
+     */
+    void setConfirmMode(Long sessionId, ConfirmMode mode);
+
+    /**
+     * 查询会话思考模式覆盖值（Redis）。
+     *
+     * @return true/false=会话覆盖；null=无覆盖（默认开，见 ChatModelFactory 合成语义）
+     */
+    Boolean getThinkingMode(Long sessionId);
+
+    /**
+     * 设置会话思考模式覆盖（写 Redis，TTL 30 天滚动）。
+     * runtime 侧 ChatModelFactory 构建模型时读取，AguiRequestProcessor 检测变化重建 agent。
+     */
+    void setThinkingMode(Long sessionId, boolean enabled);
+
+    /**
+     * 查询会话对话模型覆盖值（Redis）。
+     *
+     * @return 候选 modelConfigId=会话覆盖；null=无覆盖（用 agent 默认模型）
+     */
+    Long getSessionModel(Long sessionId);
+
+    /**
+     * 设置会话对话模型覆盖（写 Redis，TTL 30 天滚动；null=清除覆盖回落默认模型）。
+     * 校验目标模型必须在该智能体候选集内且可用。
+     * runtime 侧 ChatModelFactory 构建模型时读取，AguiRequestProcessor 检测变化重建 agent。
+     */
+    void setSessionModel(Long sessionId, Long modelConfigId);
 }
 

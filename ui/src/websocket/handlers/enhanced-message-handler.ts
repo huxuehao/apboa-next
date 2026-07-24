@@ -1,4 +1,4 @@
-import {WS_MESSAGE_TYPES, type WSMessageType} from '../const/websocket';
+import {WS_MESSAGE_TYPES, TTS_AUDIO_FRAME_EVENT, type WSMessageType} from '../const/websocket';
 import { eventBus } from '../core/event-bus';
 import type { TypedWebSocketMessage, MessagePayloadMap } from '../types/events';
 import { useAccountStore } from '@/stores'
@@ -18,6 +18,12 @@ export class EnhancedMessageHandler {
   handleMessage(event: MessageEvent) {
     try {
       let message: TypedWebSocketMessage;
+
+      // 二进制帧（TTS 音频）直接分发，不走 JSON 解析
+      if (event.data instanceof ArrayBuffer) {
+        eventBus.emit(TTS_AUDIO_FRAME_EVENT, event.data);
+        return;
+      }
 
       // 尝试解析消息
       if (typeof event.data === 'string') {

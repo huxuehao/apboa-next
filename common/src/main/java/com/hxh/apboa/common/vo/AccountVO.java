@@ -21,6 +21,12 @@ public class AccountVO implements SerializableEnable {
     private Boolean enabled;
     /** 当前租户内的角色 */
     private String tenantRole;
+    /** 嵌入场景：业务方声称的外部用户 ID（仅在 externalIss 命名空间内有意义） */
+    private String externalSub;
+    /** 嵌入场景：外部身份出处（chatKey 标识） */
+    private String externalIss;
+    /** 嵌入场景：业务方声称的外部用户显示名 */
+    private String externalName;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private Long createdBy;

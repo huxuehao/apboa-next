@@ -1,6 +1,8 @@
 package io.agentscope.spring.boot.agui.mvc;
 
+import com.hxh.apboa.common.vo.AccountVO;
 import com.hxh.apboa.engine.agui.AgentContext;
+import com.hxh.apboa.engine.agui.TrustedUserInfoResolver;
 import io.agentscope.core.agui.AguiException;
 import io.agentscope.core.agui.adapter.AguiAdapterConfig;
 import io.agentscope.core.agui.encoder.AguiEventEncoder;
@@ -12,7 +14,9 @@ import io.agentscope.core.session.Session;
 import io.agentscope.spring.boot.agui.common.DefaultAgentResolver;
 import io.agentscope.spring.boot.agui.common.ThreadSessionManager;
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -37,8 +41,11 @@ public class AguiMvcController {
     private final ExecutorService executorService;
     private final ThreadSessionManager sessionManager;
     private final RunTracker runTracker;
+    // Apboa 语音播报：AGUI 事件旁路分叉（可空，未配置时零开销）
+    private final java.util.function.Consumer<AguiEvent> ttsEventTap;
 
     private AguiMvcController(Builder builder) {
+        this.ttsEventTap = builder.ttsEventTap;
         Session session = builder.session;
         JdbcTemplate jdbcTemplate = builder.jdbcTemplate;
         this.processor =
@@ -55,6 +62,7 @@ public class AguiMvcController {
                                         : AguiAdapterConfig.defaultConfig())
                         .session(session)
                         .jdbcTemplate(jdbcTemplate)
+                        .sessionManager(builder.sessionManager)
                         .build();
         this.encoder = new AguiEventEncoder();
         this.agentIdHeader =
@@ -95,77 +103,22 @@ public class AguiMvcController {
         String threadId = input.getThreadId();
         String runId = input.getRunId();
 
+        // 身份盖章：必须在 controller 同步线程提取认证身份——异步块内 postHandle 已清
+        // RequestHolder，且池化线程的 InheritableThreadLocal 可能残留其他请求（串号风险）
+        AccountVO trustedUserInfo = TrustedUserInfoResolver.fromCurrentRequest();
+
         executorService.submit(
                 () -> {
-                    Disposable subscription = null;
                     try {
-                        // 初始化上下文
-                        AgentContext.init(input, threadId);
+                        // 初始化上下文（userInfo 为服务端盖章值，不读 forwardedProps 自报）
+                        AgentContext.init(input, threadId, trustedUserInfo);
 
                         // Process request - returns both agent and event stream
                         AguiRequestProcessor.ProcessResult result =
                                 processor.process(input, headerAgentId, pathAgentId);
 
-                        // 注册到 RunTracker（在订阅前完成，保证事件不丢失）
-                        runTracker.registerRun(threadId, result.agent(), null);
-
-                        // SSE 回调不再中断 Agent，仅清理 SSE 连接
-                        emitter.onCompletion(
-                                () -> {
-                                    logger.debug("SSE connection completed for run {}", runId);
-                                    runTracker.removeEmitter(threadId, emitter);
-                                });
-                        emitter.onTimeout(
-                                () -> {
-                                    logger.info(
-                                            "SSE connection timed out for run {}", runId);
-                                    runTracker.removeEmitter(threadId, emitter);
-                                });
-                        emitter.onError(
-                                (ex) -> {
-                                    logger.info(
-                                            "SSE connection error for run {}: {}",
-                                            runId,
-                                            ex.getMessage());
-                                    runTracker.removeEmitter(threadId, emitter);
-                                });
-
-                        // 初始 emitter 加入 RunTracker 的 subscriber 列表
-                        runTracker.reconnect(threadId, emitter);
-
-                        // 订阅 Flux 管道：事件推入 RunTracker，而非直接发送 SSE
-                        // onErrorResume：将 publish 侧异常转为正常完成（避免 Flux 被取消）
-                        // 注意：不用 doFinally —— cancel 信号（SSE 断连）不应触发 markCompleted，
-                        // 只有 agent 正常结束或异常→完成时才标记完成
-                        subscription =
-                                result.events()
-                                        .onErrorResume(e -> {
-                                            logger.warn(
-                                                    "Agent flux error for thread {}: {} -> {}",
-                                                    threadId,
-                                                    e != null ? e.getClass().getSimpleName() : "null",
-                                                    e != null ? e.getMessage() : "null");
-                                            return Flux.empty();
-                                        })
-                                        .subscribe(
-                                                event -> runTracker.pushEvent(threadId, event),
-                                                error -> {
-                                                    // 理论上不应到达这里（已被 onErrorResume 拦截）
-                                                    logger.error(
-                                                            "Residual flux error for thread {}: {}",
-                                                            threadId,
-                                                            error != null ? error.getMessage() : "null");
-                                                    runTracker.markCompleted(threadId);
-                                                },
-                                                () -> {
-                                                    logger.debug(
-                                                            "AG-UI run stream completed for thread {}",
-                                                            threadId);
-                                                    runTracker.markCompleted(threadId);
-                                                });
-
-                        // 更新 subscription 引用（不替换 ActiveRun，保住 buffer）
-                        runTracker.updateSubscription(threadId, subscription);
+                        // 注册 RunTracker + 订阅 Flux 管道（与 resume 共用）
+                        subscribeAndTrack(emitter, threadId, runId, result);
 
                     } catch (AguiException.AgentNotFoundException e) {
                         logger.error("Agent not found: {}", e.getMessage());
@@ -174,7 +127,7 @@ public class AguiMvcController {
 
                         sendErrorAndComplete(emitter, threadId, runId, e.getMessage());
                     } catch (Exception e) {
-                        logger.error("Error processing AG-UI request: {}", e.getMessage());
+                        logger.error("Error processing AG-UI request: {}", e.getMessage(), e);
 
                         AgentContext.clean();
 
@@ -186,6 +139,171 @@ public class AguiMvcController {
                 });
 
         return emitter;
+    }
+
+    /**
+     * HITL resume（docs/hitl-confirmation-refactor.md §6.3 / §11①②）：根据用户确认决策恢复暂停的 agent。
+     *
+     * <p>与 {@link #handleInternal} 共用 {@link #subscribeAndTrack} 的 SSE 管道，差异在于：
+     * <ul>
+     *   <li>resume 无 {@link RunAgentInput}，需手动初始化最小 {@link AgentContext}
+     *       （threadId/runId/memoryActive）。租户故意留空——由 {@code processor.resume} 内
+     *       {@code resolveAgent} 重建 agent 时经 {@code setTenantInfo} 回填进该上下文。
+     *       若此处不 init，重建必然在 {@code AgentContext.get()} 抛
+     *       "AgentContext not initialized"（异步线程 ThreadLocal 已丢）。</li>
+     *   <li>事件流由 {@link AguiRequestProcessor#resume} 产出。</li>
+     * </ul>
+     *
+     * @param threadId 会话 ID（暂停态的 key）
+     * @param decisions 逐工具决策（toolUseId/name/approved）；空表示全部允许
+     * @param memoryActive 是否开启长期记忆（决定 resume 完成后保留还是删除 session）
+     * @return SseEmitter 续接暂停前的事件流
+     */
+    public SseEmitter handleResume(
+            String threadId,
+            List<AguiRequestProcessor.ResumeDecision> decisions,
+            boolean memoryActive) {
+        SseEmitter emitter = new SseEmitter(sseTimeout);
+        String runId = UUID.randomUUID().toString();
+
+        // 身份盖章（同 handleInternal）：resume 后续跑的 pending 工具同样需要断言身份，
+        // 操作者语义 = 当前提交确认决策的认证用户
+        AccountVO trustedUserInfo = TrustedUserInfoResolver.fromCurrentRequest();
+
+        executorService.submit(
+                () -> {
+                    try {
+                        // resume 无 RunAgentInput：手动初始化最小上下文；租户留待 resolveAgent 重建时回填。
+                        AgentContext agentContext = new AgentContext();
+                        agentContext.setThreadId(threadId);
+                        agentContext.setRunId(runId);
+                        agentContext.setMemoryActive(memoryActive);
+                        agentContext.setUserInfo(trustedUserInfo);
+                        AgentContext.init(agentContext);
+
+                        AguiRequestProcessor.ProcessResult result =
+                                processor.resume(threadId, decisions, memoryActive);
+
+                        // 注册 RunTracker + 订阅 Flux 管道（与 run 共用）
+                        subscribeAndTrack(emitter, threadId, runId, result);
+
+                    } catch (Exception e) {
+                        logger.error("Error resuming AG-UI request: {}", e.getMessage());
+
+                        AgentContext.clean();
+
+                        sendErrorAndComplete(emitter, threadId, runId, e.getMessage());
+                    } finally {
+                        // 在同一个线程中清理上下文
+                        AgentContext.clean();
+                    }
+                });
+
+        return emitter;
+    }
+
+    /**
+     * HITL 刷新恢复：从持久 Session 的暂停态读取「待确认工具」列表（同步返回 JSON，非 SSE）。
+     *
+     * <p>用于前端刷新页面 / 重新进入会话时重建确认 UI——此时前端内存态（pendingConfirms）已丢，
+     * 而暂停态会话在 {@link RunTracker} 里 {@code completed=true}（不在 active-runs），且 RunTracker
+     * 是内存态跨重启/实例会丢，故不能靠 reconnect 回放，必须从持久 Session 重建。
+     *
+     * <p>与 {@link #handleResume} 一样需最小 {@link AgentContext}（resolveAgent 重建时经 setTenantInfo 回填）；
+     * 差别在于本方法在 Tomcat 请求线程<b>同步</b>执行（只读、快速），不走 executorService。
+     *
+     * @param threadId 会话 ID
+     * @return 待确认工具 [{toolUseId,name,input}]；无暂停态返回空列表
+     */
+    public List<Map<String, Object>> getPendingConfirms(String threadId) {
+        try {
+            AgentContext agentContext = new AgentContext();
+            agentContext.setThreadId(threadId);
+            AgentContext.init(agentContext);
+            return processor.getPendingConfirms(threadId);
+        } catch (Exception e) {
+            logger.warn("获取待确认列表失败 threadId={}: {}", threadId, e.getMessage());
+            return List.of();
+        } finally {
+            AgentContext.clean();
+        }
+    }
+
+    /**
+     * 注册 RunTracker 并订阅 Agent 事件流，将事件推入 RunTracker 缓冲（run / resume 共用）。
+     *
+     * <p>SSE 回调仅清理连接、不中断 Agent；用 onErrorResume 把 publish 侧异常转为正常完成，
+     * 避免 Flux 被取消。不用 doFinally —— cancel 信号（SSE 断连）不应触发 markCompleted，
+     * 只有 agent 正常结束或异常→完成时才标记完成。
+     *
+     * @param emitter 初始 SSE 连接
+     * @param threadId 会话 ID
+     * @param runId 运行 ID（仅用于日志）
+     * @param result processor 产出的 agent + 事件流
+     */
+    private void subscribeAndTrack(
+            SseEmitter emitter,
+            String threadId,
+            String runId,
+            AguiRequestProcessor.ProcessResult result) {
+        // 注册到 RunTracker（在订阅前完成，保证事件不丢失）
+        runTracker.registerRun(threadId, result.agent(), null);
+
+        // SSE 回调不再中断 Agent，仅清理 SSE 连接
+        emitter.onCompletion(
+                () -> {
+                    logger.debug("SSE connection completed for run {}", runId);
+                    runTracker.removeEmitter(threadId, emitter);
+                });
+        emitter.onTimeout(
+                () -> {
+                    logger.info("SSE connection timed out for run {}", runId);
+                    runTracker.removeEmitter(threadId, emitter);
+                });
+        emitter.onError(
+                (ex) -> {
+                    logger.info("SSE connection error for run {}: {}", runId, ex.getMessage());
+                    runTracker.removeEmitter(threadId, emitter);
+                });
+
+        // 初始 emitter 加入 RunTracker 的 subscriber 列表
+        runTracker.reconnect(threadId, emitter);
+
+        // 订阅 Flux 管道：事件推入 RunTracker，而非直接发送 SSE
+        Disposable subscription =
+                result.events()
+                        .onErrorResume(e -> {
+                            logger.warn(
+                                    "Agent flux error for thread {}: {} -> {}",
+                                    threadId,
+                                    e != null ? e.getClass().getSimpleName() : "null",
+                                    e != null ? e.getMessage() : "null");
+                            return Flux.empty();
+                        })
+                        .subscribe(
+                                event -> {
+                                    // Apboa 语音播报旁路（tap 自吞异常，不影响主流）
+                                    if (ttsEventTap != null) {
+                                        ttsEventTap.accept(event);
+                                    }
+                                    runTracker.pushEvent(threadId, event);
+                                },
+                                error -> {
+                                    // 理论上不应到达这里（已被 onErrorResume 拦截）
+                                    logger.error(
+                                            "Residual flux error for thread {}: {}",
+                                            threadId,
+                                            error != null ? error.getMessage() : "null");
+                                    runTracker.markCompleted(threadId);
+                                },
+                                () -> {
+                                    logger.debug(
+                                            "AG-UI run stream completed for thread {}", threadId);
+                                    runTracker.markCompleted(threadId);
+                                });
+
+        // 更新 subscription 引用（不替换 ActiveRun，保住 buffer）
+        runTracker.updateSubscription(threadId, subscription);
     }
 
     private void sendErrorAndComplete(
@@ -290,6 +408,8 @@ public class AguiMvcController {
         private Session session;
         private JdbcTemplate jdbcTemplate;
         private RunTracker runTracker;
+        // Apboa 语音播报事件分叉
+        private java.util.function.Consumer<AguiEvent> ttsEventTap;
 
         /**
          * Set the agent registry.
@@ -387,6 +507,15 @@ public class AguiMvcController {
          */
         public Builder runTracker(RunTracker runTracker) {
             this.runTracker = runTracker;
+            return this;
+        }
+
+        /**
+         * Apboa 语音播报：设置 AGUI 事件旁路分叉（事件推入 RunTracker 前同步调用，
+         * 实现方必须自吞异常且不得阻塞）。
+         */
+        public Builder ttsEventTap(java.util.function.Consumer<AguiEvent> ttsEventTap) {
+            this.ttsEventTap = ttsEventTap;
             return this;
         }
 

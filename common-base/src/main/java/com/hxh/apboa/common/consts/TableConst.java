@@ -24,6 +24,7 @@ public class TableConst {
     public static final String HOOK = "hook_config";
     public static final String CHAT_SESSION = "chat_session";
     public static final String CHAT_MESSAGE = "chat_message";
+    public static final String CHAT_USAGE_RECORD = "chat_usage_record";
     public static final String ATTACH_LOG = "attach_log";
     public static final String ATTACH_CHUNK = "attach_chunk";
     public static final String ATTACH = "attach";
@@ -36,6 +37,7 @@ public class TableConst {
     public static final String AGENT_SKILL = "agent_skill_packages";
     public static final String AGENT_MCP = "agent_mcp_servers";
     public static final String AGENT_MCP_TOOL = "agent_mcp_tool";
+    public static final String AGENT_MODEL_CONFIG = "agent_model_configs";
     public static final String AGENT_KNOWLEDGE = "agent_knowledge_bases";
     public static final String AGENT_HOOKS = "agent_hooks";
     public static final String AGENT_STUDIO = "agent_studio";
@@ -54,6 +56,7 @@ public class TableConst {
     public static final String LONG_TERM_MEMORY_CONFIG = "long_term_memory_config";
     public static final String AGENT_LONG_TERM_MEMORY = "agent_long_term_memory";
     public static final String SKILL_TOKEN = "skill_token";
+    public static final String IDENTITY_SIGNING_KEY = "identity_signing_key";
     public static final String CACHE = "cache";
     public static final String DATASOURCE = "datasource";
     public static final String MQ = "mq";

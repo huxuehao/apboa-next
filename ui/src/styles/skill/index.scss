@@ -37,6 +37,10 @@
     .filter-left {
       flex: 1;
       min-width: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: var(--spacing-sm);
     }
 
     .filter-right {

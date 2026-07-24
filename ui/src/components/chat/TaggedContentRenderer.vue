@@ -4,6 +4,9 @@ import { parseTaggedContent, TagRegistry } from '@/utils/chat/tagSystem'
 import WorkspaceFileTag from './WorkspaceFileTag.vue'
 import AgentToolTag from './AgentToolTag.vue'
 import AgentSkillTag from './AgentSkillTag.vue'
+import AgentMcpTag from './AgentMcpTag.vue'
+import AgentSubAgentTag from './AgentSubAgentTag.vue'
+import AgentWorkflowTag from './AgentWorkflowTag.vue'
 
 defineEmits(['inputTagPreview'])
 
@@ -22,6 +25,18 @@ TagRegistry.register({
 TagRegistry.register({
   tagName: 'agent-skill',
   component: AgentSkillTag
+})
+TagRegistry.register({
+  tagName: 'agent-mcp',
+  component: AgentMcpTag
+})
+TagRegistry.register({
+  tagName: 'agent-sub-agent',
+  component: AgentSubAgentTag
+})
+TagRegistry.register({
+  tagName: 'agent-workflow',
+  component: AgentWorkflowTag
 })
 
 const props = defineProps<{

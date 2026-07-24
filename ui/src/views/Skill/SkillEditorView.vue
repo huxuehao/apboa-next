@@ -4,7 +4,7 @@
  * 左侧文件树 + 右侧编辑器布局
  */
 import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, h } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { Modal, Input, Select, message } from 'ant-design-vue'
 import {
   ArrowLeftOutlined,
@@ -37,6 +37,9 @@ const skillInfo = reactive({
   enabled: true,
   tools: [] as string[],
 })
+
+// 是否只读（内置技能包只读查看，不可编辑）
+const isReadonly = ref(false)
 
 // 文件树数据
 const treeData = ref<SkillFileTreeNode[]>([])
@@ -170,6 +173,8 @@ async function loadSkillDetail() {
       skillInfo.category = vo.category
       skillInfo.enabled = vo.enabled
       skillInfo.tools = vo.tools || []
+      // 内置技能包只读查看
+      isReadonly.value = vo.skillType === 'BUILTIN'
     }
   } finally {
     loading.value = false
@@ -325,31 +330,29 @@ async function handleSaved() {
  * 返回列表
  */
 async function handleGoBack() {
-  if (hasDirty.value) {
+  await router.push({ name: 'Skill' })
+}
+
+/**
+ * 统一保护所有路由离开路径（返回按钮、侧栏菜单、浏览器后退）。
+ */
+function confirmLeaveEditor(): Promise<boolean> {
+  if (!hasDirty.value && !notSyncing.value) return Promise.resolve(true)
+
+  const dirty = hasDirty.value
+  return new Promise((resolve) => {
     Modal.confirm({
-      title: '未保存的更改',
-      content: '您有未保存的文件修改，确定要离开吗？',
+      title: dirty ? '未保存的更改' : '未同步的技能',
+      content: dirty
+        ? '您有未保存的文件修改，确定要离开吗？'
+        : '当前技能有更改，尚未同步到运行节点，确定要离开吗？',
       okText: '确定离开',
-      cancelText: '继续编辑',
+      cancelText: dirty ? '继续编辑' : '同步后再离开',
       okButtonProps: { danger: true },
-      onOk: () => {
-        router.push({ name: 'Skill' })
-      },
+      onOk: () => resolve(true),
+      onCancel: () => resolve(false),
     })
-  } else if (notSyncing.value) {
-    Modal.confirm({
-      title: '未同步的技能',
-      content: '当前技能有更改，为手动同步到运行节点，确定要离开吗？',
-      okText: '确定离开',
-      cancelText: '同步后在离开',
-      okButtonProps: { danger: true },
-      onOk: () => {
-        router.push({ name: 'Skill' })
-      }
-    })
-  } else {
-    await router.push({ name: 'Skill' })
-  }
+  })
 }
 
 /**
@@ -474,6 +477,8 @@ function handleBeforeUnload(e: BeforeUnloadEvent) {
   }
 }
 
+onBeforeRouteLeave(() => confirmLeaveEditor())
+
 onMounted(() => {
   window.addEventListener('beforeunload', handleBeforeUnload)
 })
@@ -500,11 +505,12 @@ onBeforeUnmount(() => {
           <span v-if="!isNew" class="skill-name-text">{{ skillInfo.name }}</span>
           <span v-else>新建技能包</span>
         </span>
+        <a-tag v-if="isReadonly" color="default" style="margin-left: 4px; flex-shrink: 0">只读</a-tag>
         <span style="flex:1"></span>
-        <a-button v-if="!isNew" type="text" size="small" title="新建文件" @click="handleNewFile">
+        <a-button v-if="!isNew && !isReadonly" type="text" size="small" title="新建文件" @click="handleNewFile">
           <PlusOutlined />
         </a-button>
-        <a-button v-if="!isNew" type="text" size="small" title="新建文件夹" @click="handleNewFolder">
+        <a-button v-if="!isNew && !isReadonly" type="text" size="small" title="新建文件夹" @click="handleNewFolder">
           <FolderAddOutlined />
         </a-button>
         <a-button v-if="!isNew" type="text" size="small" title="下载技能包" @click="handleDownloadZip">
@@ -518,6 +524,7 @@ onBeforeUnmount(() => {
           ref="skillTreeRef"
           :skill-id="skillId"
           :tree-data="treeData"
+          :readonly="isReadonly"
           @select="handleFileSelect"
           @refresh="refreshTree"
           @file-deleted="handleFileDeleted"
@@ -525,7 +532,7 @@ onBeforeUnmount(() => {
       </div>
 
       <!-- 删除按钮 -->
-      <div class="panel-footer" v-if="!isNew">
+      <div class="panel-footer" v-if="!isNew && !isReadonly">
         <div class="footer-actions">
           <a-button type="text" size="small" @click="handleSyncToFile" :loading="syncing">
             <CloudUploadOutlined />
@@ -554,6 +561,7 @@ onBeforeUnmount(() => {
           ref="editorRef"
           :skill-id="skillId"
           :file="selectedFile"
+          :readonly="isReadonly"
           @dirty-change="handleDirtyChange"
           @saved="handleSaved"
         />

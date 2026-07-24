@@ -61,7 +61,8 @@ public class CodeExecutionConfigController {
     @DeleteMapping
     @RoleNeed({TenantRole.TENANT_ADMIN, TenantRole.TENANT_EDITOR})
     public R<Boolean> delete(@RequestBody List<Long> ids) {
-        return R.data(codeExecutionConfigService.removeByIds(ids));
+        // deleteByIds 级联清理 agent_code_execution 关联,裸 removeByIds 会留悬空引用
+        return R.data(codeExecutionConfigService.deleteByIds(ids));
     }
 
     /**

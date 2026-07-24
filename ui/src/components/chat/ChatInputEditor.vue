@@ -11,21 +11,27 @@ import ResourceMentionDropdown from './ResourceMentionDropdown.vue'
 import { type FlatFileItem, useWorkspaceFiles } from '@/composables/chat/useWorkspaceFiles'
 import { extractTextFromEditor, renderTaggedTextToHtml } from '@/utils/chat/tagSystem'
 import type {
+  AgentMcpToolItem,
   AgentSkillItem,
+  AgentSubAgentItem,
   AgentToolItem,
+  AgentWorkflowItem,
   MentionResourceItem
 } from '@/types/chat-mention'
 import {
   RESOURCE_CATEGORY_REGISTRY,
   findKindByTagName
 } from '@/composables/chat/useResourceCategories'
-import { enabledToolsOfAgent, enabledSkillsOfAgent } from "@/api/agent"
-import type {SkillPackage, ToolConfig} from "@/types";
+import { fetchAgentChatContext } from '@/composables/chat/useAgentChatContext'
+import { useSkillAliasMap } from '@/composables/chat/useSkillAliasMap'
+import { useToolNameMap } from '@/composables/chat/useToolNameMap'
 
 const props = withDefaults(
   defineProps<{
     modelValue: string
     agentId: string
+    /** 最近使用资源按账号 + agent 隔离 */
+    accountId?: string | number
     placeholder?: string
     sessionId?: string | null
     mentionAllowed?: boolean
@@ -56,6 +62,9 @@ const isComposing = ref(false)
 const mentionVisible = ref(false)
 /** @mention 查询关键词 */
 const mentionQuery = ref('')
+const mentionRecentScope = computed(() => `${props.accountId || 'anonymous'}:${props.agentId}`)
+/** 当前正在编辑的 @ 触发点；避免正文存在多个 @ 时清空/选择误命中最后一个。 */
+let activeMention: { textNode: Text; atIndex: number } | null = null
 
 /** 工作空间文件数据 */
 const sessionIdRef = computed(() => props.sessionId ?? null)
@@ -65,30 +74,58 @@ const { flatFiles, fetchFiles } = useWorkspaceFiles(sessionIdRef)
 const agentTools = ref<AgentToolItem[]>([])
 /** Agent 技能列表 */
 const agentSkills = ref<AgentSkillItem[]>([])
+/** Agent MCP 工具列表（按 server 分组拍平，带 server 标注） */
+const agentMcpTools = ref<AgentMcpToolItem[]>([])
+/** Agent 子智能体列表（agentCode 小写即 LLM 调用名） */
+const agentSubAgents = ref<AgentSubAgentItem[]>([])
+/** Agent 工作流列表（工作流名即 LLM 调用名） */
+const agentWorkflows = ref<AgentWorkflowItem[]>([])
 
-watch(() => props.agentId, () => {
-  enabledToolsOfAgent(props.agentId).then((toolRes) => {
-    if (toolRes.data.data) {
-      agentTools.value = toolRes.data.data.map((item:ToolConfig) => {
-        return {
-          id: item.toolId,
-          name: item.name,
-          description: item.description
-        }
-      })
-    }
-  })
-  enabledSkillsOfAgent(props.agentId).then((skills) => {
-    if (skills.data.data) {
-      agentSkills.value = skills.data.data.map((item:SkillPackage) => {
-        return {
-          id: item.name,
-          name: item.name,
-          description: item.description
-        }
-      })
-    }
-  })
+watch(() => props.agentId, async () => {
+  const ctx = await fetchAgentChatContext(props.agentId)
+  if (ctx?.enabledTools) {
+    agentTools.value = ctx.enabledTools.map((item) => ({
+      id: item.toolId,
+      name: item.name,
+      description: item.description
+    }))
+    useToolNameMap().setFromTools(ctx.enabledTools)
+  }
+  if (ctx?.enabledSkills) {
+    agentSkills.value = ctx.enabledSkills.map((item) => ({
+      id: item.name,
+      name: item.name,
+      alias: item.alias,
+      description: item.description
+    }))
+    useSkillAliasMap().setFromSkills(ctx.enabledSkills)
+  }
+  if (ctx?.enabledMcp) {
+    // 后端按 server 分组返回，拍平成带 server 标注的工具列表；工具名既作 content 也作唯一标识
+    agentMcpTools.value = ctx.enabledMcp.flatMap((server) =>
+      (server.tools || []).map((t) => ({
+        name: t.name,
+        description: t.description,
+        serverId: String(server.serverId),
+        serverName: server.serverName
+      }))
+    )
+  }
+  if (ctx?.enabledSubAgents) {
+    // 子智能体以 Agent-as-Tool 注册，agentCode 小写即 LLM 调用名（= 标签 content）
+    agentSubAgents.value = ctx.enabledSubAgents.map((a) => ({
+      code: (a.agentCode || '').toLowerCase(),
+      name: a.name,
+      description: a.description
+    }))
+  }
+  if (ctx?.enabledWorkflows) {
+    // 工作流以 WorkflowTool 注册，工作流名即 LLM 调用名（= 标签 content = 展示名）
+    agentWorkflows.value = ctx.enabledWorkflows.map((w) => ({
+      name: w.name,
+      description: w.remark
+    }))
+  }
 }, { immediate: true })
 
 
@@ -131,7 +168,10 @@ const renderTagToHtml = (tagName: string, tagContent: string): string => {
     const display = meta.resolveDisplayFromContent(tagContent, {
       workspaceFiles: flatFiles.value,
       agentTools: agentTools.value,
-      agentSkills: agentSkills.value
+      agentSkills: agentSkills.value,
+      agentMcpTools: agentMcpTools.value,
+      agentSubAgents: agentSubAgents.value,
+      agentWorkflows: agentWorkflows.value
     })
     return `<span contenteditable="false" class="editor-tag editor-tag-${tagName}" data-tag="${tagName}" data-content="${escapeHtml(tagContent)}"><span class="editor-tag-inner"><span class="editor-tag-name">${escapeHtml(display)}</span></span></span>`
   }
@@ -212,6 +252,7 @@ const checkMentionTrigger = () => {
   const sel = window.getSelection()
   if (!sel || sel.rangeCount === 0) {
     mentionVisible.value = false
+    activeMention = null
     return
   }
 
@@ -222,6 +263,7 @@ const checkMentionTrigger = () => {
   // 仅当光标在文本节点中时检测
   if (node.nodeType !== Node.TEXT_NODE) {
     mentionVisible.value = false
+    activeMention = null
     return
   }
 
@@ -232,6 +274,7 @@ const checkMentionTrigger = () => {
   const atIndex = textBeforeCursor.lastIndexOf('@')
   if (atIndex === -1) {
     mentionVisible.value = false
+    activeMention = null
     return
   }
 
@@ -239,13 +282,17 @@ const checkMentionTrigger = () => {
   const charBeforeAt = textBeforeCursor.charAt(atIndex - 1)
   if (atIndex > 0 && charBeforeAt !== ' ') {
     mentionVisible.value = false
+    activeMention = null
     return
   }
 
   // 提取查询词（@ 之后到光标）
+  const wasVisible = mentionVisible.value
+  activeMention = { textNode: node as Text, atIndex }
   mentionQuery.value = textBeforeCursor.slice(atIndex + 1)
   mentionVisible.value = true
-  fetchFiles()
+  // 工作空间文件已随 sessionId 自动加载；菜单一次打开期间不应每输入一个字都重复请求。
+  if (!wasVisible) fetchFiles()
 }
 
 /**
@@ -274,6 +321,32 @@ const findMentionAtInEditor = (): { textNode: Text; atIndex: number } | null => 
   return lastMatch
 }
 
+/** 优先按当前光标定位 @；点击列表造成 selection 丢失时再回退到最后一个合法 @。 */
+const findActiveMentionAtInEditor = (): { textNode: Text; atIndex: number } | null => {
+  if (
+    activeMention
+    && editorRef.value?.contains(activeMention.textNode)
+    && activeMention.textNode.data[activeMention.atIndex] === '@'
+  ) {
+    return activeMention
+  }
+  const selection = window.getSelection()
+  if (selection?.rangeCount) {
+    const range = selection.getRangeAt(0)
+    const node = range.startContainer
+    if (node.nodeType === Node.TEXT_NODE && editorRef.value?.contains(node)) {
+      const textBeforeCursor = (node.textContent || '').slice(0, range.startOffset)
+      const atIndex = textBeforeCursor.lastIndexOf('@')
+      if (atIndex >= 0 && (atIndex === 0 || textBeforeCursor[atIndex - 1] === ' ')) {
+        activeMention = { textNode: node as Text, atIndex }
+        return activeMention
+      }
+    }
+  }
+  activeMention = findMentionAtInEditor()
+  return activeMention
+}
+
 /**
  * 插入资源标签（工作空间文件 / 工具 / 技能）
  *
@@ -287,7 +360,7 @@ const insertResourceTag = (item: MentionResourceItem) => {
   }
 
   // 通过 TreeWalker 查找 @ 位置（不依赖 selection）
-  const match = findMentionAtInEditor()
+  const match = findActiveMentionAtInEditor()
   if (!match) {
     mentionVisible.value = false
     return
@@ -352,6 +425,7 @@ const insertResourceTag = (item: MentionResourceItem) => {
 
   mentionVisible.value = false
   mentionQuery.value = ''
+  activeMention = null
 
   nextTick(() => {
     emitContentUpdate()
@@ -375,6 +449,9 @@ const isTagElement = (node: Node): node is HTMLElement => {
  */
 const handleEditorInput = () => {
   if (isComposing.value) return
+  // contenteditable 在程序化插入 @ 后可能把后续键入内容放进相邻文本节点；合并后
+  // selection 会随 Range 迁移到同一节点，查询检测才能稳定读取完整的 @keyword。
+  editorRef.value?.normalize()
   sanitizeEmptyEditor()
   emitContentUpdate()
   nextTick(() => {
@@ -389,11 +466,19 @@ const handleEditorInput = () => {
  * @param e 键盘事件
  */
 const handleEditorKeydown = (e: KeyboardEvent) => {
+  // 中文输入法候选确认期间，Enter/方向键全部交给 IME，禁止误选菜单或发送消息。
+  if (isComposing.value || e.isComposing) return
   // 下拉打开时，优先让下拉处理键盘导航
   if (mentionVisible.value) {
-    if (['ArrowUp', 'ArrowDown', 'Enter', 'Escape'].includes(e.key)) {
+    const primaryNavigation = ['ArrowUp', 'ArrowDown', 'Enter', 'Escape'].includes(e.key)
+    const hierarchyNavigation = !mentionQuery.value && ['ArrowLeft', 'ArrowRight'].includes(e.key)
+    if (primaryNavigation) {
       dropdownRef.value?.handleKeydown(e)
       return
+    }
+    if (hierarchyNavigation) {
+      dropdownRef.value?.handleKeydown(e)
+      if (e.defaultPrevented) return
     }
   }
 
@@ -560,6 +645,7 @@ const handleCompositionStart = () => {
  */
 const handleCompositionEnd = () => {
   isComposing.value = false
+  editorRef.value?.normalize()
   emitContentUpdate()
   nextTick(() => {
     checkMentionTrigger()
@@ -617,8 +703,11 @@ const triggerMention = async () => {
   const insertText = needSpace ? ' @' : '@'
   const textNode = document.createTextNode(insertText)
   range.insertNode(textNode)
+  activeMention = { textNode, atIndex: insertText.lastIndexOf('@') }
 
-  range.setStartAfter(textNode)
+  // 光标必须落在 @ 文本节点内部；若放在节点外，浏览器后续输入会新建相邻文本节点，
+  // checkMentionTrigger 只看到查询词节点而找不到前一个 @，全局搜索随即失效。
+  range.setStart(textNode, insertText.length)
   range.collapse(true)
   sel.removeAllRanges()
   sel.addRange(range)
@@ -635,6 +724,7 @@ const triggerMention = async () => {
   if (!mentionVisible.value && insertText.includes('@')) {
     mentionQuery.value = ''
     mentionVisible.value = true
+    activeMention = { textNode, atIndex: insertText.lastIndexOf('@') }
     fetchFiles()
   }
 
@@ -646,7 +736,8 @@ const triggerMention = async () => {
  */
 defineExpose({
   triggerMention,
-  focus: () => editorRef.value?.focus()
+  /** options 透传给 DOM focus（preventScroll 用于抑制 iOS 程序化聚焦的激进滚动） */
+  focus: (options?: FocusOptions) => editorRef.value?.focus(options)
 })
 
 // 监听外部 modelValue 变化，重新渲染 editor
@@ -686,7 +777,11 @@ watch(
       :workspace-files="flatFiles"
       :agent-tools="agentTools"
       :agent-skills="agentSkills"
+      :agent-mcp-tools="agentMcpTools"
+      :agent-sub-agents="agentSubAgents"
+      :agent-workflows="agentWorkflows"
       :keyword="mentionQuery"
+      :recent-scope="mentionRecentScope"
       @select="insertResourceTag"
       @close="mentionVisible = false"
     />

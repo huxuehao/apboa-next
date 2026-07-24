@@ -6,6 +6,7 @@ import com.hxh.apboa.common.entity.SkillFile;
 import com.hxh.apboa.common.entity.SkillPackage;
 import com.hxh.apboa.common.consts.SysConst;
 import com.hxh.apboa.common.enums.SkillFileType;
+import com.hxh.apboa.common.enums.SkillType;
 import com.hxh.apboa.common.exception.BusinessException;
 import com.hxh.apboa.common.r.R;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -83,6 +84,7 @@ public class SkillFileController {
         if (skillPackage == null) {
             throw new BusinessException("技能包不存在");
         }
+        assertNotBuiltin(skillPackage);
 
         // 构建完整路径
         String parentPath = request.getParentPath();
@@ -136,6 +138,7 @@ public class SkillFileController {
         if (skillPackage == null) {
             throw new BusinessException("技能包不存在");
         }
+        assertNotBuiltin(skillPackage);
 
         // 更新 DB
         skillFileService.updateContent(fileId, request.getContent());
@@ -176,6 +179,7 @@ public class SkillFileController {
         if (skillPackage == null) {
             throw new BusinessException("技能包不存在");
         }
+        assertNotBuiltin(skillPackage);
 
         SkillFileSystemService.writeFile(skillPackage.getName(), request.getPath(), request.getContent());
         return R.data(true);
@@ -199,6 +203,7 @@ public class SkillFileController {
         }
 
         SkillPackage skillPackage = skillPackageService.getById(file.getSkillId());
+        assertNotBuiltin(skillPackage);
         if (skillPackage != null) {
             SkillFileSystemService.deleteFile(skillPackage.getName(), file.getFilePath());
         }
@@ -219,6 +224,7 @@ public class SkillFileController {
         if (skillPackage == null) {
             throw new BusinessException("技能包不存在");
         }
+        assertNotBuiltin(skillPackage);
 
         if (request.isDirectory()) {
             // 先清理该目录下所有入库文件的 DB 记录
@@ -248,6 +254,7 @@ public class SkillFileController {
         if (skillPackage == null) {
             throw new BusinessException("技能包不存在");
         }
+        assertNotBuiltin(skillPackage);
 
         String parentPath = request.getParentPath();
         if (parentPath != null && !parentPath.isEmpty() && !parentPath.endsWith("/")) {
@@ -271,6 +278,7 @@ public class SkillFileController {
         if (skillPackage == null) {
             throw new BusinessException("技能包不存在");
         }
+        assertNotBuiltin(skillPackage);
 
         String fileName = file.getOriginalFilename();
         if (fileName == null || fileName.isEmpty()) {
@@ -458,6 +466,15 @@ public class SkillFileController {
             return fileName.substring(dotIndex + 1).toLowerCase();
         }
         return "";
+    }
+
+    /**
+     * 内置技能包只读，禁止修改其文件（前端只读之外的后端双保险）
+     */
+    private void assertNotBuiltin(SkillPackage skillPackage) {
+        if (skillPackage != null && skillPackage.getSkillType() == SkillType.BUILTIN) {
+            throw new BusinessException("内置技能包只读，不可修改文件");
+        }
     }
 
     /**

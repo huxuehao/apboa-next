@@ -10,7 +10,9 @@ import { message } from 'ant-design-vue'
 import { CloseOutlined, LoadingOutlined } from '@ant-design/icons-vue'
 import MediaPreview from '@/components/common/MediaPreview.vue'
 import MediaIcon from '@/components/common/MediaIcon.vue'
+import AttachImage from '@/components/common/AttachImage.vue'
 import { getExtension } from '@/composables/chat/useChatAttachments'
+import { isImageExtension } from '@/utils/chat/attachImage'
 import type { UploadedFileItem } from '@/types'
 
 defineProps<{
@@ -55,26 +57,53 @@ const handleRemove = (item: UploadedFileItem) => {
   <template v-if="files.length > 0">
     <div class="chat-input-files-row">
       <div class="chat-input-files-scroll">
-        <div
-          v-for="(item, index) in files"
-          :key="item.id"
-          @click="openPreview(item, index)"
-          class="chat-input-file-item"
-        >
-          <span v-if="item.uploading" class="chat-input-file-loading">
-            <LoadingOutlined spin />
-          </span>
-          <MediaIcon :type="(item.extension ?? getExtension(item.name)) || 'FILE'" size="19" />
-          <span class="chat-input-file-name" :title="item.name">{{ item.name }}</span>
-          <button
-            type="button"
-            class="chat-input-file-remove"
-            title="移除"
-            @click.stop="handleRemove(item)"
+        <template v-for="(item, index) in files" :key="item.id">
+          <!-- 图片：保比例预览卡 -->
+          <div
+            v-if="isImageExtension(item.extension || getExtension(item.name))"
+            class="chat-input-image-item"
+            @click="openPreview(item, index)"
           >
-            <CloseOutlined />
-          </button>
-        </div>
+            <AttachImage
+              class="chat-input-image"
+              :attach-id="item.id"
+              :name="item.name"
+              :extension="item.extension || getExtension(item.name)"
+              :local-url="item.localUrl"
+            />
+            <span v-if="item.uploading" class="chat-input-image-mask">
+              <LoadingOutlined spin />
+            </span>
+            <button
+              type="button"
+              class="chat-input-image-remove"
+              title="移除"
+              @click.stop="handleRemove(item)"
+            >
+              <CloseOutlined />
+            </button>
+          </div>
+          <!-- 其他类型：保持原有文件名 chip -->
+          <div
+            v-else
+            @click="openPreview(item, index)"
+            class="chat-input-file-item"
+          >
+            <span v-if="item.uploading" class="chat-input-file-loading">
+              <LoadingOutlined spin />
+            </span>
+            <MediaIcon :type="(item.extension ?? getExtension(item.name)) || 'FILE'" size="19" />
+            <span class="chat-input-file-name" :title="item.name">{{ item.name }}</span>
+            <button
+              type="button"
+              class="chat-input-file-remove"
+              title="移除"
+              @click.stop="handleRemove(item)"
+            >
+              <CloseOutlined />
+            </button>
+          </div>
+        </template>
       </div>
     </div>
 
@@ -135,6 +164,62 @@ const handleRemove = (item: UploadedFileItem) => {
 
   &:hover {
     background: rgba($chat-primary, 0.1);
+  }
+}
+
+/* 图片附件：保比例预览卡（约束范围，非小方块缩略图） */
+.chat-input-image-item {
+  position: relative;
+  flex-shrink: 0;
+  cursor: pointer;
+  border-radius: var(--border-radius-md);
+
+  :deep(.attach-image),
+  :deep(.attach-image-skeleton) {
+    max-width: 200px;
+    max-height: 120px;
+    border: 1px solid var(--color-border-extra-light);
+  }
+
+  :deep(.attach-image-skeleton) {
+    width: 120px;
+    height: 90px;
+  }
+}
+
+.chat-input-image-mask {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.55);
+  border-radius: var(--border-radius-md);
+  color: $chat-primary;
+  font-size: 18px;
+  pointer-events: none;
+}
+
+.chat-input-image-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  cursor: pointer;
+  font-size: 10px;
+  transition: background-color 0.2s ease;
+
+  &:hover {
+    background: rgba(0, 0, 0, 0.75);
   }
 }
 

@@ -670,6 +670,56 @@ export class AgentClient {
   }
 
   /**
+   * HITL resume：提交逐工具确认决策，POST 续接 SSE 事件流（复用 readStream 与事件处理）
+   * @param url resume 端点 URL（含 threadId）
+   * @param body { decisions: 逐工具决策, memoryActive }
+   */
+  async resume(
+    url: string,
+    body: {
+      decisions: Array<{ toolUseId: string; name: string; approved: boolean; input?: Record<string, unknown> }>
+      memoryActive: boolean
+    }
+  ): Promise<void> {
+    this.abortController = new AbortController()
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'text/event-stream',
+          ...this.headers
+        },
+        body: JSON.stringify(body),
+        signal: this.abortController.signal
+      })
+
+      if (!response.ok) {
+        this.handleEvent({
+          type: 'RUN_ERROR',
+          message: `Resume HTTP ${response.status}`,
+          code: String(response.status)
+        } as RunErrorEvent)
+        return
+      }
+      if (!response.body) {
+        throw new Error('Resume response body is null')
+      }
+      await this.readStream(response.body.getReader())
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        return
+      }
+      this.handleEvent({
+        type: 'RUN_ERROR',
+        message: err instanceof Error ? err.message : String(err)
+      } as RunErrorEvent)
+    } finally {
+      this.abortController = null
+    }
+  }
+
+  /**
    * 追加一条用户消息
    * @param content 文本内容
    * @param id 可选消息 id

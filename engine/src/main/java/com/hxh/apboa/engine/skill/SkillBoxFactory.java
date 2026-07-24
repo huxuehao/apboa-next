@@ -4,8 +4,6 @@ import com.hxh.apboa.common.consts.SysConst;
 import com.hxh.apboa.common.entity.*;
 import com.hxh.apboa.common.enums.SkillFileType;
 import com.hxh.apboa.engine.agui.AgentContext;
-import com.hxh.apboa.engine.skill.builtins.UserInteractionProtocolSkill;
-import com.hxh.apboa.engine.skill.builtins.VisionEnhancementProtocolSkill;
 import com.hxh.apboa.engine.tool.ToolkitFactory;
 import com.hxh.apboa.engine.workspace.skills.SearchReplaceSkill;
 import com.hxh.apboa.engine.workspace.skills.WorkspaceSkill;
@@ -45,16 +43,18 @@ public class SkillBoxFactory {
     /**
      * 获取SkillBox
      *
-     * @param agentDefinition 智能体定义
      * @param codeExecutionConfig   代码执行配置
+     * @param checkedSkillPackages  agent 勾选且启用的技能包（{@link #getCheckedSkillPackages}）
      * @return SkillBox
      */
-    public SkillBox getSkillBox(AgentDefinition agentDefinition, CodeExecutionConfig codeExecutionConfig) {
-        return getSkillBox(agentDefinition, new Toolkit(), codeExecutionConfig);
+    public SkillBox getSkillBox(CodeExecutionConfig codeExecutionConfig, List<SkillPackage> checkedSkillPackages) {
+        return getSkillBox(new Toolkit(), codeExecutionConfig, checkedSkillPackages);
     }
 
     /**
-     * 根据技能包ID列表构建SkillBox。
+     * 根据技能包ID列表构建SkillBox（workflow Agent 节点用，清单来自节点配置勾选）。
+     * 与 agent 主链路同口径：按勾选 + enabled 过滤，内置技能（UIP/VEP）不无条件注册，
+     * 节点勾选了对应内置技能包才加载。
      *
      * @param skillPackageIds 技能包ID列表
      * @param toolkit         工具箱
@@ -64,58 +64,48 @@ public class SkillBoxFactory {
         Toolkit currentToolkit = toolkit == null ? new Toolkit() : toolkit;
         SkillBox skillBox = new SkillBox(currentToolkit);
 
-        // 注册智能体基础技能，不启用代码执行能力。
-        skillBox.registerSkill(UserInteractionProtocolSkill.getAgentSkill());
-        skillBox.registerSkill(VisionEnhancementProtocolSkill.getAgentSkill());
-
         if (skillPackageIds == null || skillPackageIds.isEmpty()) {
             return skillBox;
         }
 
-        registerSkills(skillBox, skillPackageIds, currentToolkit);
+        skillPackageService.listByIds(skillPackageIds).stream()
+                .filter(SkillPackage::getEnabled)
+                .forEach(skillPackage -> registerSkill(skillBox, skillPackage, currentToolkit));
         return skillBox;
     }
 
     /**
      * 获取SkillBox
      *
-     * @param agentDefinition 智能体定义
+     * @param toolkit               工具包
      * @param codeExecutionConfig   代码执行配置
+     * @param checkedSkillPackages  agent 勾选且启用的技能包（{@link #getCheckedSkillPackages}）
      * @return SkillBox
      */
-        public SkillBox getSkillBox(AgentDefinition agentDefinition, Toolkit toolkit, CodeExecutionConfig codeExecutionConfig) {
+    public SkillBox getSkillBox(Toolkit toolkit, CodeExecutionConfig codeExecutionConfig, List<SkillPackage> checkedSkillPackages) {
         SkillBox skillBox = new SkillBox(toolkit);
-
-        // 用户交互技能
-        skillBox.registerSkill(UserInteractionProtocolSkill.getAgentSkill());
-        skillBox.registerSkill(VisionEnhancementProtocolSkill.getAgentSkill());
 
         configureCodeExecution(skillBox, codeExecutionConfig);
 
-        // 注册技能包
-        List<Long> skillPackageIds = agentSkillPackageService.getSkillPackageIds(agentDefinition.getId());
-        if (skillPackageIds.isEmpty()) {
-            return skillBox;
-        }
-
-        registerSkills(skillBox, skillPackageIds, toolkit);
+        // 注册技能包（清单已按勾选+enabled 过滤，与系统提示词注入共用同一份）
+        checkedSkillPackages.forEach(skillPackage -> registerSkill(skillBox, skillPackage, toolkit));
 
         return skillBox;
     }
 
     /**
-     * 注册技能包到SkillBox
-     *
-     * @param skillBox SkillBox
-     * @param skillPackageIds 技能包ID列表
-     * @param toolkit    工具包
+     * 查 agent 勾选且启用的技能包。一次 agent 构建周期内系统提示词注入
+     * （AgentSysPromptFactory 遍历内置技能的 getSysPrompt）与 SkillBox 注册共用：
+     * 调用方查一次传两处，保证两边勾选口径一致且不重复查库。
      */
-    private void registerSkills(SkillBox skillBox, List<Long> skillPackageIds, Toolkit toolkit) {
-        List<SkillPackage> skillPackages = skillPackageService.listByIds(skillPackageIds);
-
-        skillPackages.stream()
+    public List<SkillPackage> getCheckedSkillPackages(Long agentDefinitionId) {
+        List<Long> skillPackageIds = agentSkillPackageService.getSkillPackageIds(agentDefinitionId);
+        if (skillPackageIds.isEmpty()) {
+            return List.of();
+        }
+        return skillPackageService.listByIds(skillPackageIds).stream()
                 .filter(SkillPackage::getEnabled)
-                .forEach(skillPackage -> registerSkill(skillBox, skillPackage, toolkit));
+                .toList();
     }
 
     /**

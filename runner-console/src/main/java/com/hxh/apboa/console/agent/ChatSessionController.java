@@ -5,6 +5,7 @@ import com.hxh.apboa.agent.service.ChatSessionService;
 import com.hxh.apboa.common.config.auth.ChatKeyAccess;
 import com.hxh.apboa.common.config.auth.SkAccess;
 import com.hxh.apboa.common.dto.ChatMessageAppendDTO;
+import com.hxh.apboa.common.enums.ConfirmMode;
 import com.hxh.apboa.common.dto.ChatSessionCreateDTO;
 import com.hxh.apboa.common.dto.ChatSessionQueryDTO;
 import com.hxh.apboa.common.mp.support.PageParams;
@@ -12,6 +13,7 @@ import com.hxh.apboa.common.r.R;
 import com.hxh.apboa.common.util.UserUtils;
 import com.hxh.apboa.common.vo.ChatMessageVO;
 import com.hxh.apboa.common.vo.ChatMessagePageVO;
+import com.hxh.apboa.common.vo.ChatSessionStateVO;
 import com.hxh.apboa.common.vo.ChatSessionVO;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import lombok.RequiredArgsConstructor;
@@ -105,6 +107,82 @@ public class ChatSessionController {
             @RequestParam(value = "beforeDepth", required = false) Integer beforeDepth,
             @RequestParam(value = "size", defaultValue = "50") int size) {
         return R.data(chatSessionService.getCurrentMessagesPaged(sessionId, beforeDepth, size));
+    }
+
+    /**
+     * 会话状态聚合查询（confirm-mode + thinking-mode 合一，减少会话切换时的请求数）
+     */
+    @SkAccess
+    @ChatKeyAccess
+    @GetMapping("/{sessionId}/state")
+    public R<ChatSessionStateVO> getState(@PathVariable("sessionId") Long sessionId) {
+        ChatSessionStateVO vo = new ChatSessionStateVO();
+        vo.setConfirmMode(chatSessionService.getConfirmMode(sessionId).name());
+        Boolean override = chatSessionService.getThinkingMode(sessionId);
+        vo.setThinkingMode(override == null || override);
+        vo.setModelConfigId(chatSessionService.getSessionModel(sessionId));
+        return R.data(vo);
+    }
+
+    /**
+     * 查询会话 HITL 授权模式（Redis，无记录=MANUAL 逐步确认）
+     */
+    @SkAccess
+    @ChatKeyAccess
+    @GetMapping("/{sessionId}/confirm-mode")
+    public R<String> getConfirmMode(@PathVariable("sessionId") Long sessionId) {
+        return R.data(chatSessionService.getConfirmMode(sessionId).name());
+    }
+
+    /**
+     * 设置会话 HITL 授权模式（AUTO_APPROVE 一键授权 / MANUAL 逐步确认 / AUTO_REJECT 拒绝授权；
+     * AUTO_APPROVE/AUTO_REJECT 写 Redis TTL 30 天滚动，MANUAL 删 key。
+     * runtime 侧实时读取生效：Hook 放行 / 暂停处理层自动全拒 / 冒泡人工决策）
+     */
+    @SkAccess
+    @ChatKeyAccess
+    @PutMapping("/{sessionId}/confirm-mode")
+    public R<Boolean> setConfirmMode(@PathVariable("sessionId") Long sessionId,
+                                     @RequestParam("mode") String mode) {
+        chatSessionService.setConfirmMode(sessionId, ConfirmMode.fromName(mode));
+        return R.data(true);
+    }
+
+    /**
+     * 查询会话思考模式有效值（会话覆盖 ?? 默认开）。仅支持思考开关的模型
+     * （agent 详情 thinkingSwitchSupported=true，当前 DASH_SCOPE）有实际意义
+     */
+    @SkAccess
+    @ChatKeyAccess
+    @GetMapping("/{sessionId}/thinking-mode")
+    public R<Boolean> getThinkingMode(@PathVariable("sessionId") Long sessionId) {
+        Boolean override = chatSessionService.getThinkingMode(sessionId);
+        return R.data(override == null || override);
+    }
+
+    /**
+     * 设置会话思考模式（写 Redis 覆盖值，下一条消息生效——runtime 检测变化重建 agent）
+     */
+    @SkAccess
+    @ChatKeyAccess
+    @PutMapping("/{sessionId}/thinking-mode")
+    public R<Boolean> setThinkingMode(@PathVariable("sessionId") Long sessionId,
+                                      @RequestParam("enabled") boolean enabled) {
+        chatSessionService.setThinkingMode(sessionId, enabled);
+        return R.data(true);
+    }
+
+    /**
+     * 设置会话对话模型覆盖（写 Redis 覆盖值，下一条消息生效——runtime 检测变化重建 agent；
+     * 不传 modelConfigId = 清除覆盖回落 agent 默认模型。目标须在该智能体候选集内且可用）
+     */
+    @SkAccess
+    @ChatKeyAccess
+    @PutMapping("/{sessionId}/model")
+    public R<Boolean> setSessionModel(@PathVariable("sessionId") Long sessionId,
+                                      @RequestParam(value = "modelConfigId", required = false) Long modelConfigId) {
+        chatSessionService.setSessionModel(sessionId, modelConfigId);
+        return R.data(true);
     }
 
     /**

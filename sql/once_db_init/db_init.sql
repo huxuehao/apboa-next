@@ -57,6 +57,8 @@ DROP TABLE IF EXISTS `agent_chat_key`;
 CREATE TABLE `agent_chat_key` (
   `agent_code` varchar(100) NOT NULL COMMENT '智能体code',
   `chat_key` varchar(100) NOT NULL COMMENT 'chat key',
+  `embed_secret` varchar(128) DEFAULT NULL COMMENT '嵌入身份密钥（业务方 HMAC 签 userJwt 用），空=未启用',
+  `embed_secret_prev` varchar(128) DEFAULT NULL COMMENT '上一代嵌入身份密钥（轮换双活）',
   `tenant_id` bigint NOT NULL
 ) COMMENT='智能体对话Key';
 
@@ -76,8 +78,15 @@ CREATE TABLE `agent_definition` (
   `name` varchar(100) NOT NULL COMMENT '智能体名称',
   `agent_code` varchar(100) NOT NULL COMMENT '智能体代码（英文小写下划线）',
   `description` text COMMENT '智能体描述',
+  `avatar` mediumtext COMMENT '智能体头像(base64 data URL，512x512 裁切输出约百 KB，text 64KB 上限不够)',
+  `common_questions` json DEFAULT NULL COMMENT '常用问题列表',
+  `common_questions_pinned` tinyint(1) NOT NULL DEFAULT 1 COMMENT '常用问题是否在对话中常驻显示',
   `model_config_id` bigint DEFAULT NULL COMMENT '基础模型配置ID',
+  `asr_model_config_id` bigint DEFAULT NULL COMMENT '语音识别模型配置ID（NULL=不启用语音输入）',
+  `tts_model_config_id` bigint DEFAULT NULL COMMENT '语音合成模型配置ID（NULL=不启用语音播报）',
   `model_params_override` text COMMENT '模型参数覆盖',
+  `tts_params_override` text COMMENT '语音合成(TTS)参数覆盖（agent 级，如 {"voice":"Cherry"}）',
+  `asr_params_override` text COMMENT '语音识别(ASR)参数覆盖（预留，二期启用）',
   `tool_choice_strategy` enum('AUTO','NONE','REQUIRED','SPECIFIC') DEFAULT 'AUTO' COMMENT '工具选择策略',
   `specific_tool_name` varchar(100) DEFAULT NULL COMMENT '指定工具名称（当tool_choice_strategy=SPECIFIC时）',
   `system_prompt_template_id` bigint DEFAULT NULL COMMENT '系统提示词模板ID',
@@ -86,6 +95,7 @@ CREATE TABLE `agent_definition` (
   `sensitive_word_config_id` bigint DEFAULT NULL COMMENT '敏感词配置ID',
   `sensitive_filter_enabled` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否启用敏感词过滤',
   `max_iterations` int DEFAULT 10 COMMENT 'React最大迭代次数',
+  `monthly_budget` decimal(12,2) DEFAULT NULL COMMENT '月度成本预算（元）；NULL=不限额，达到即拒绝新对话',
   `enable_planning` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否启用计划',
   `show_tool_process` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否显示工具调用过程',
   `max_subtasks` int DEFAULT 10 COMMENT '最大子任务数',
@@ -115,6 +125,18 @@ CREATE TABLE `agent_hooks` (
   `tenant_id` bigint NOT NULL,
   PRIMARY KEY (`id`)
 ) COMMENT='智能体与Hook关联表';
+
+DROP TABLE IF EXISTS `agent_model_configs`;
+CREATE TABLE `agent_model_configs` (
+  `id` bigint NOT NULL,
+  `agent_definition_id` bigint NOT NULL COMMENT '智能体定义ID',
+  `model_config_id` bigint NOT NULL COMMENT '额外候选模型ID（默认模型仍在 agent_definition.model_config_id）',
+  `model_params_override` text COMMENT '该候选模型的参数覆盖（结构同 agent_definition.model_params_override；NULL=跟随模型默认）',
+  `sort` int DEFAULT 0 COMMENT '展示排序',
+  `tenant_id` bigint NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_agent_model` (`agent_definition_id`,`model_config_id`)
+) COMMENT='智能体候选对话模型关联表';
 
 DROP TABLE IF EXISTS `agent_knowledge_bases`;
 CREATE TABLE `agent_knowledge_bases` (
@@ -257,10 +279,11 @@ CREATE TABLE `chat_message` (
   `id` int NOT NULL AUTO_INCREMENT COMMENT '消息ID',
   `session_id` bigint NOT NULL COMMENT '会话ID',
   `role` varchar(20) NOT NULL COMMENT '消息角色',
-  `content` text NOT NULL COMMENT '消息内容',
+  `content` mediumtext NOT NULL COMMENT '消息内容（tool 消息含子智能体过程 subProcess 全量步骤，可能较大）',
   `parent_id` int DEFAULT NULL COMMENT '父消息ID',
   `path` text COMMENT '消息路径，格式如：/1/2/3/',
   `depth` int DEFAULT NULL COMMENT '消息深度，从0开始，根消息深度为0',
+  `meta` text COMMENT '消息元数据JSON：durationMs/iterationCount/inputTokens/outputTokens/totalTokens，仅assistant正文消息写入',
   `created_at` datetime DEFAULT NULL COMMENT '创建时间',
   `tenant_id` bigint NOT NULL,
   PRIMARY KEY (`id`)
@@ -284,6 +307,43 @@ CREATE TABLE `chat_session` (
 ) COMMENT='聊天会话表';
 
 -- chat_message 月度归档方案：归档表通过 ChatMessageArchiveTask 定时创建：CREATE TABLE chat_message_yyyyMM LIKE chat_message;
+
+DROP TABLE IF EXISTS `chat_usage_record`;
+CREATE TABLE `chat_usage_record` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '流水ID',
+  `session_id` bigint DEFAULT NULL COMMENT '会话ID，非对话消耗（workflow/定时任务）为NULL',
+  `message_id` int DEFAULT NULL COMMENT '对应assistant正文消息ID，审计钻取回链',
+  `agent_id` bigint NOT NULL COMMENT '智能体ID',
+  `agent_label` varchar(100) DEFAULT NULL COMMENT '智能体名称快照（删除后审计仍可读）',
+  `user_id` bigint DEFAULT NULL COMMENT '发起人ID',
+  `model_config_id` bigint NOT NULL COMMENT '模型配置ID',
+  `model_label` varchar(100) NOT NULL COMMENT '模型名快照（模型删改后流水仍自洽）',
+  `provider_type` varchar(50) DEFAULT NULL COMMENT '供应商类型快照',
+  `biz_type` varchar(20) NOT NULL DEFAULT 'CHAT' COMMENT '场景：CHAT/WORKFLOW/SCHEDULED_JOB/SUB_AGENT',
+  `biz_id` varchar(64) DEFAULT NULL COMMENT '业务定义ID（workflow.id/未来任务定义ID）',
+  `biz_run_id` varchar(64) DEFAULT NULL COMMENT '业务运行ID（workflow_run.id/未来任务运行ID）',
+  `biz_label` varchar(160) DEFAULT NULL COMMENT '业务名称快照',
+  `step_id` varchar(100) DEFAULT NULL COMMENT '执行步骤ID（workflow node.id/未来任务步骤ID）',
+  `step_label` varchar(200) DEFAULT NULL COMMENT '执行步骤名称快照',
+  `channel` varchar(20) DEFAULT NULL COMMENT '渠道：WEB/CHAT_KEY/SK_API',
+  `input_tokens` bigint NOT NULL DEFAULT 0 COMMENT '输入token（run内累计）',
+  `output_tokens` bigint NOT NULL DEFAULT 0 COMMENT '输出token（run内累计）',
+  `iteration_count` int NOT NULL DEFAULT 1 COMMENT 'run内LLM调用轮数',
+  `duration_ms` bigint DEFAULT NULL COMMENT 'run墙钟耗时毫秒',
+  `input_price` decimal(12,4) DEFAULT NULL COMMENT '记账时输入单价快照（元/百万token）',
+  `output_price` decimal(12,4) DEFAULT NULL COMMENT '记账时输出单价快照（元/百万token）',
+  `cost` decimal(16,8) DEFAULT NULL COMMENT '成本额（元）；NULL=记账时模型未配价',
+  `created_at` datetime NOT NULL COMMENT '创建时间',
+  `tenant_id` bigint NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_tenant_time` (`tenant_id`, `created_at`),
+  KEY `idx_session` (`session_id`),
+  KEY `idx_agent_time` (`agent_id`, `created_at`),
+  KEY `idx_model_time` (`model_config_id`, `created_at`),
+  KEY `idx_user_time` (`user_id`, `created_at`),
+  KEY `idx_biz_run` (`tenant_id`, `biz_type`, `biz_run_id`),
+  KEY `idx_biz_entity` (`tenant_id`, `biz_type`, `biz_id`, `created_at`)
+) COMMENT='LLM用量成本流水表';
 
 DROP TABLE IF EXISTS `code_execution_config`;
 CREATE TABLE `code_execution_config` (
@@ -374,6 +434,7 @@ CREATE TABLE `mcp_server` (
   `timeout` int DEFAULT 30 COMMENT '超时时间（秒）',
   `protocol_config` text COMMENT '协议配置',
   `description` varchar(500) DEFAULT NULL COMMENT '描述',
+  `audience` varchar(200) DEFAULT NULL COMMENT '身份断言 audience（业务方验签的 aud 标识），空则不注入断言',
   `tool_schemas` mediumtext COMMENT 'Cached MCP tool schemas JSON',
   `activation_status` enum('NOT_ACTIVATED','ACTIVATING','ACTIVE','FAILED') NOT NULL DEFAULT 'NOT_ACTIVATED' COMMENT 'MCP 激活状态',
   `activation_message` varchar(500) DEFAULT NULL COMMENT '激活或同步说明',
@@ -383,6 +444,7 @@ CREATE TABLE `mcp_server` (
   `last_tool_sync_time` datetime DEFAULT NULL COMMENT '上次工具同步时间',
   `tool_count` int NOT NULL DEFAULT 0 COMMENT '当前工具数量',
   `runtime_fail_threshold` int NOT NULL DEFAULT 3 COMMENT '运行时自动降级连续失败阈值，0 表示关闭',
+  `idle_timeout_ms` int NOT NULL DEFAULT 300000 COMMENT 'HTTP/SSE 空闲连接回收阈值（毫秒），0 表示不回收；STDIO 不适用',
   `activation_revision` bigint NOT NULL DEFAULT 0 COMMENT '激活版本号',
   `config_hash` varchar(64) DEFAULT NULL COMMENT '当前连接配置哈希',
   `needs_sync` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否需要同步工具列表',
@@ -402,7 +464,7 @@ CREATE TABLE `mcp_tool` (
   `id` bigint NOT NULL,
   `mcp_server_id` bigint NOT NULL COMMENT '所属 MCP 服务 ID',
   `tool_name` varchar(200) NOT NULL COMMENT '工具名',
-  `description` varchar(1000) DEFAULT NULL COMMENT '工具描述',
+  `description` text COMMENT '工具描述',
   `input_schema` json DEFAULT NULL COMMENT '输入 Schema',
   `output_schema` json DEFAULT NULL COMMENT '输出 Schema',
   `raw_schema` json DEFAULT NULL COMMENT '原始工具 Schema',
@@ -410,6 +472,7 @@ CREATE TABLE `mcp_tool` (
   `missing` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否已从当前 MCP 服务中消失',
   `sort` int NOT NULL DEFAULT 0 COMMENT '排序',
   `enabled` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否全局可用',
+  `need_confirm` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否需要用户确认',
   `last_discovered_at` datetime DEFAULT NULL COMMENT '首次发现时间',
   `last_seen_at` datetime DEFAULT NULL COMMENT '最近发现时间',
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -426,8 +489,11 @@ CREATE TABLE `model_config` (
   `provider_id` bigint NOT NULL COMMENT '提供商ID',
   `name` varchar(100) NOT NULL COMMENT '模型名称',
   `model_id` varchar(100) NOT NULL COMMENT '模型编号/标识符',
-  `model_type` varchar(100) DEFAULT NULL COMMENT '模型类型',
+  `category` varchar(20) NOT NULL DEFAULT 'LLM' COMMENT '模型用途: LLM=对话生成, ASR=语音识别, TTS=语音合成',
+  `model_type` varchar(100) DEFAULT NULL COMMENT '模型类型（LLM 输入模态能力，仅 category=LLM 有意义）',
   `description` varchar(500) DEFAULT NULL COMMENT '模型描述',
+  `logo` varchar(100) DEFAULT NULL COMMENT '展示图标（antd 图标组件名；NULL=默认 DeploymentUnitOutlined）',
+  `logo_color` varchar(20) DEFAULT NULL COMMENT '展示图标颜色（hex；NULL=默认 #0F74FF）',
   `streaming` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否支持流式',
   `thinking` tinyint(1) DEFAULT NULL COMMENT '是否支持思考',
   `context_window` int DEFAULT 2048 COMMENT '上下文窗口大小',
@@ -441,6 +507,8 @@ CREATE TABLE `model_config` (
   `connectivity_status` enum('NOT_CHECKED','CHECKING','CONNECTED','FAILED') NOT NULL DEFAULT 'NOT_CHECKED' COMMENT '连接性检测状态',
   `connectivity_message` varchar(500) DEFAULT NULL COMMENT '连接性检测消息',
   `last_connectivity_check` datetime DEFAULT NULL COMMENT '最后连接性检测时间',
+  `input_price` decimal(12,4) DEFAULT NULL COMMENT '输入单价（元/百万token；NULL=未配价，0=免费/本地）',
+  `output_price` decimal(12,4) DEFAULT NULL COMMENT '输出单价（元/百万token；NULL=未配价，0=免费/本地）',
   `enabled` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否可用',
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -483,9 +551,9 @@ CREATE TABLE `params` (
 INSERT INTO `params` (`id`, `param_name`, `param_key`, `param_value`, `tenant_id`) VALUES (1, '访问Token有效期（单位 ms）', 'ACCESS_TOKEN_TTL', '21600000', 1);
 INSERT INTO `params` (`id`, `param_name`, `param_key`, `param_value`, `tenant_id`) VALUES (2, '刷新Token有效期（单位 ms）', 'REFRESH_TOKEN_TTL', '64800000', 1);
 INSERT INTO `params` (`id`, `param_name`, `param_key`, `param_value`, `tenant_id`) VALUES (3, '单个文件大小限制（单位 MB）', 'SINGLE_FILE_MAX_SIZE', '5', 1);
-INSERT INTO `params` (`id`, `param_name`, `param_key`, `param_value`, `tenant_id`) VALUES (4, '支持的图片文件类型', 'ALLOW_IMAGE_FILE_TYPE', 'png,jpeg,png,gif,webp', 1);
-INSERT INTO `params` (`id`, `param_name`, `param_key`, `param_value`, `tenant_id`) VALUES (5, '支持的音频文件类型', 'ALLOW_AUDIO_FILE_TYPE', 'mp3,wav,mpeg', 1);
-INSERT INTO `params` (`id`, `param_name`, `param_key`, `param_value`, `tenant_id`) VALUES (6, '支持的视频文件类型', 'ALLOW_VIDEO_FILE_TYPE', 'mp4,mpeg', 1);
+INSERT INTO `params` (`id`, `param_name`, `param_key`, `param_value`, `tenant_id`) VALUES (4, '支持的图片文件类型', 'ALLOW_IMAGE_FILE_TYPE', 'png,jpg,jpeg,gif,webp,bmp,svg,ico', 1);
+INSERT INTO `params` (`id`, `param_name`, `param_key`, `param_value`, `tenant_id`) VALUES (5, '支持的音频文件类型', 'ALLOW_AUDIO_FILE_TYPE', 'mp3,wav,ogg,m4a,flac,aac,wma,mpeg', 1);
+INSERT INTO `params` (`id`, `param_name`, `param_key`, `param_value`, `tenant_id`) VALUES (6, '支持的视频文件类型', 'ALLOW_VIDEO_FILE_TYPE', 'mp4,webm,mov,mkv,avi,flv,m3u8,mpeg', 1);
 INSERT INTO `params` (`id`, `param_name`, `param_key`, `param_value`, `tenant_id`) VALUES (7, '技能包文件允许入库的扩展名', 'SKILL_FILE_ALLOWED_EXTENSIONS', 'md,py,sh,js,ts,json,yaml,yml,xml,txt,java,cs,go,rs,rb,php,sql,html,css,scss,less,cfg,conf,toml', 1);
 
 
@@ -618,8 +686,12 @@ DROP TABLE IF EXISTS `skill_package`;
 CREATE TABLE `skill_package` (
   `id` bigint NOT NULL,
   `name` varchar(500) NOT NULL COMMENT '技能包名称',
+  `alias` varchar(500) DEFAULT NULL COMMENT '展示别名（仅展示层，不影响 name 与发送给 agent 的值）',
   `description` text NOT NULL COMMENT '技能描述',
   `category` varchar(100) DEFAULT NULL COMMENT '技能分类',
+  `skill_type` varchar(20) NOT NULL DEFAULT 'CUSTOM' COMMENT '技能类型: BUILTIN=内置, CUSTOM=自定义',
+  `class_path` varchar(500) DEFAULT NULL COMMENT '内置技能实现类全名（skill_type=BUILTIN 时使用，供 SkillsRegister 反查）',
+  `scope_type` varchar(20) NOT NULL DEFAULT 'GLOBAL' COMMENT '作用域: GLOBAL=全局, TENANT=指定租户（仅内置有意义）',
   `enabled` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否可用',
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -747,6 +819,23 @@ CREATE TABLE `tool_config` (
   `scope_type` enum('GLOBAL','TENANT') NOT NULL DEFAULT 'GLOBAL' COMMENT '作用域类型: GLOBAL=全局, TENANT=指定租户',
   PRIMARY KEY (`id`)
 ) COMMENT='工具表';
+
+DROP TABLE IF EXISTS `identity_signing_key`;
+CREATE TABLE `identity_signing_key` (
+  `id` bigint NOT NULL,
+  `kid` varchar(64) NOT NULL COMMENT '密钥标识（JWT header kid）',
+  `algorithm` varchar(16) NOT NULL DEFAULT 'RS256' COMMENT '签名算法',
+  `private_pem` text NOT NULL COMMENT '私钥（PKCS#8 PEM），绝不出库到日志/前端',
+  `public_pem` text NOT NULL COMMENT '公钥（X.509 PEM）',
+  `status` varchar(16) NOT NULL DEFAULT 'ACTIVE' COMMENT '状态: ACTIVE=签名用, RETIRING=轮换观察期仅验签, RETIRED=下线',
+  `enabled` tinyint(1) NOT NULL DEFAULT '1' COMMENT '是否可用',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `created_by` bigint DEFAULT NULL,
+  `updated_by` bigint DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_identity_signing_key_kid` (`kid`)
+) COMMENT='平台身份断言签名密钥';
 
 DROP TABLE IF EXISTS `cache`;
 CREATE TABLE `cache` (
@@ -998,7 +1087,7 @@ UNIQUE KEY `uk_agent_workflow` (`tenant_id`,`agent_definition_id`,`workflow_id`)
 KEY `idx_agent_id` (`agent_definition_id`) USING BTREE,
 KEY `idx_workflow_id` (`workflow_id`) USING BTREE,
 KEY `idx_tenant_id` (`tenant_id`)
-) COMMENT='智能体与工具关联表';
+) COMMENT='智能体与工作流关联表';
 
 DROP TABLE IF EXISTS `channel`;
 CREATE TABLE `channel` (

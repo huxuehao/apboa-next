@@ -8,15 +8,21 @@
 
 import { computed, h, type Component, type Ref } from 'vue'
 import {
+  ApartmentOutlined,
+  ApiOutlined,
   AppstoreOutlined,
   FolderOutlined,
+  RobotOutlined,
   ToolOutlined
 } from '@ant-design/icons-vue'
 import MediaIcon from '@/components/common/MediaIcon.vue'
 import type { FlatFileItem } from '@/composables/chat/useWorkspaceFiles'
 import type {
+  AgentMcpToolItem,
   AgentSkillItem,
+  AgentSubAgentItem,
   AgentToolItem,
+  AgentWorkflowItem,
   MentionResourceItem,
   ResourceKind
 } from '@/types/chat-mention'
@@ -38,6 +44,9 @@ export interface DisplayResolveContext {
   workspaceFiles?: FlatFileItem[]
   agentTools?: AgentToolItem[]
   agentSkills?: AgentSkillItem[]
+  agentMcpTools?: AgentMcpToolItem[]
+  agentSubAgents?: AgentSubAgentItem[]
+  agentWorkflows?: AgentWorkflowItem[]
 }
 
 /**
@@ -98,10 +107,13 @@ export const RESOURCE_CATEGORY_REGISTRY: Record<ResourceKind, ResourceCategoryMe
     asFolder: true,
     order: 10,
     renderItemIcon: () => h(ToolOutlined),
-    // 工具直接以 name 作为 tagContent，便于消息侧无依赖渲染
+    // 工具以 toolId 作为 tagContent（值/发送用 toolId 不变），显示映射回工具名
     resolveTagContent: (item) => item.id,
     resolveTagDisplay: (item) => item.name,
-    resolveDisplayFromContent: (content) => content
+    resolveDisplayFromContent: (content, ctx) => {
+      const hit = ctx.agentTools?.find((t) => t.id === content)
+      return hit?.name || content
+    }
   },
   'agent-skill': {
     kind: 'agent-skill',
@@ -111,7 +123,58 @@ export const RESOURCE_CATEGORY_REGISTRY: Record<ResourceKind, ResourceCategoryMe
     asFolder: true,
     order: 20,
     renderItemIcon: () => h(AppstoreOutlined),
-    // 技能直接以 name 作为 tagContent
+    // 技能以 name 作为 tagContent（值/发送不变），显示优先用别名
+    resolveTagContent: (item) => item.id,
+    resolveTagDisplay: (item) => item.alias || item.name,
+    resolveDisplayFromContent: (content, ctx) => {
+      const hit = ctx.agentSkills?.find((s) => s.name === content)
+      return hit?.alias || content
+    }
+  },
+  'agent-mcp': {
+    kind: 'agent-mcp',
+    tagName: 'agent-mcp',
+    label: 'MCP 工具',
+    folderIcon: ApiOutlined,
+    asFolder: true,
+    order: 30,
+    renderItemIcon: () => h(ApiOutlined),
+    // MCP 工具以「工具名」作为 tagContent（= LLM 调用名，软引导让模型认得），显示成「服务名 · 工具名」
+    resolveTagContent: (item) => item.id,
+    resolveTagDisplay: (item) => {
+      const raw = item.raw as AgentMcpToolItem | undefined
+      return raw?.serverName ? `${raw.serverName} · ${item.name}` : item.name
+    },
+    resolveDisplayFromContent: (content, ctx) => {
+      const hit = ctx.agentMcpTools?.find((t) => t.name === content)
+      return hit ? `${hit.serverName} · ${hit.name}` : content
+    }
+  },
+  'agent-sub-agent': {
+    kind: 'agent-sub-agent',
+    tagName: 'agent-sub-agent',
+    label: '子智能体',
+    folderIcon: RobotOutlined,
+    asFolder: true,
+    order: 40,
+    renderItemIcon: () => h(RobotOutlined),
+    // 子智能体以 agentCode 小写作 tagContent（= Agent-as-Tool 的 LLM 调用名），显示映射回名称
+    resolveTagContent: (item) => item.id,
+    resolveTagDisplay: (item) => item.name,
+    resolveDisplayFromContent: (content, ctx) => {
+      const hit = ctx.agentSubAgents?.find((a) => a.code === content)
+      return hit?.name || content
+    }
+  },
+  'agent-workflow': {
+    kind: 'agent-workflow',
+    tagName: 'agent-workflow',
+    label: '工作流',
+    folderIcon: ApartmentOutlined,
+    asFolder: true,
+    order: 50,
+    renderItemIcon: () => h(ApartmentOutlined),
+    // 工作流名即 WorkflowTool 的 LLM 调用名，也是展示名
     resolveTagContent: (item) => item.id,
     resolveTagDisplay: (item) => item.name,
     resolveDisplayFromContent: (content) => content
@@ -140,7 +203,7 @@ export function findKindByTagName(tagName: string): ResourceKind | null {
  */
 export function toResourceItem(
   kind: ResourceKind,
-  raw: FlatFileItem | AgentToolItem | AgentSkillItem
+  raw: FlatFileItem | AgentToolItem | AgentSkillItem | AgentMcpToolItem | AgentSubAgentItem | AgentWorkflowItem
 ): MentionResourceItem {
   if (kind === 'workspace-file') {
     const f = raw as FlatFileItem
@@ -152,11 +215,42 @@ export function toResourceItem(
       raw: f
     }
   }
+  if (kind === 'agent-mcp') {
+    const m = raw as AgentMcpToolItem
+    return {
+      kind,
+      id: m.name,
+      name: m.name,
+      description: m.description,
+      raw: m
+    }
+  }
+  if (kind === 'agent-sub-agent') {
+    const a = raw as AgentSubAgentItem
+    return {
+      kind,
+      id: a.code,
+      name: a.name,
+      description: a.description,
+      raw: a
+    }
+  }
+  if (kind === 'agent-workflow') {
+    const w = raw as AgentWorkflowItem
+    return {
+      kind,
+      id: w.name,
+      name: w.name,
+      description: w.description,
+      raw: w
+    }
+  }
   const r = raw as AgentToolItem | AgentSkillItem
   return {
     kind,
     id: r.id,
     name: r.name,
+    alias: (r as AgentSkillItem).alias,
     description: r.description,
     raw: r
   }
@@ -169,6 +263,9 @@ export interface ResourceSources {
   workspaceFiles: Ref<FlatFileItem[]>
   agentTools: Ref<AgentToolItem[]>
   agentSkills: Ref<AgentSkillItem[]>
+  agentMcpTools: Ref<AgentMcpToolItem[]>
+  agentSubAgents: Ref<AgentSubAgentItem[]>
+  agentWorkflows: Ref<AgentWorkflowItem[]>
 }
 
 /**
@@ -235,9 +332,12 @@ export function useResourceCategories(sources: ResourceSources) {
 function pickRawList(
   kind: ResourceKind,
   sources: ResourceSources
-): Array<FlatFileItem | AgentToolItem | AgentSkillItem> {
+): Array<FlatFileItem | AgentToolItem | AgentSkillItem | AgentMcpToolItem | AgentSubAgentItem | AgentWorkflowItem> {
   if (kind === 'workspace-file') return sources.workspaceFiles.value
   if (kind === 'agent-tool') return sources.agentTools.value
   if (kind === 'agent-skill') return sources.agentSkills.value
+  if (kind === 'agent-mcp') return sources.agentMcpTools.value
+  if (kind === 'agent-sub-agent') return sources.agentSubAgents.value
+  if (kind === 'agent-workflow') return sources.agentWorkflows.value
   return []
 }

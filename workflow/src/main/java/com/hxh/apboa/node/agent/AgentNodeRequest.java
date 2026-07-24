@@ -1,6 +1,7 @@
 package com.hxh.apboa.node.agent;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.hxh.apboa.common.enums.ToolChoiceStrategy;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -16,10 +17,29 @@ import java.util.Map;
 @Getter
 @Setter
 public class AgentNodeRequest {
+    /** 工作流定义 ID（成本账单按工作流聚合与回链用）。 */
+    private String workflowId;
     private String workflowInstanceId;
+    /**
+     * 工作流名（成本流水归属快照用；经变量上下文下传，可能为 null）
+     */
+    private String workflowName;
+    /**
+     * 触发渠道（成本流水归因用；经变量上下文下传，定时任务=SCHEDULED，其余场景 null）
+     */
+    private String triggerChannel;
+    /**
+     * 发起人（成本流水归属用；经变量上下文下传。定时执行线程无登录上下文，
+     * 执行器的 UserUtils 兜底取不到值，靠此字段带入任务创建人）
+     */
+    private Long triggerUserId;
     private String nodeId;
     private String nodeName;
     private Long modelConfigId;
+    /** null 表示跟随模型配置。 */
+    private Boolean streaming;
+    /** null 表示跟随模型配置。 */
+    private Boolean thinking;
     private boolean modelParamsOverrideEnabled;
     private JsonNode modelParamsOverride;
     private String systemPrompt;
@@ -27,6 +47,7 @@ public class AgentNodeRequest {
     private List<Long> skillPackageIds = new ArrayList<>();
     private List<Long> toolIds = new ArrayList<>();
     private List<McpConfig> mcps = new ArrayList<>();
+    private ToolChoiceStrategy toolChoiceStrategy = ToolChoiceStrategy.AUTO;
     private int maxIterations;
     private boolean structuredOutputEnabled;
     private JsonNode structuredOutput;

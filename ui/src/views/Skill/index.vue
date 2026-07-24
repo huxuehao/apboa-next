@@ -12,6 +12,7 @@ import {SearchOutlined, AppstoreOutlined} from '@ant-design/icons-vue'
 import { useSkillStore } from '@/stores'
 import { storeToRefs } from 'pinia'
 import * as skillApi from '@/api/skill'
+import { SkillType } from '@/types'
 import SkillCard from '@/components/skill/SkillCard.vue'
 import CreateCard from '@/components/skill/CreateCard.vue'
 import ImportLocalForm from '@/components/skill/ImportLocalForm.vue'
@@ -23,7 +24,7 @@ import ApboaInfiniteLoading from '@/components/common/ApboaInfiniteLoading.vue'
 
 const store = useSkillStore()
 const router = useRouter()
-const { list, categories, selectedCategory, keyword, loading, hasMore } = storeToRefs(store)
+const { list, categories, selectedCategory, selectedSkillType, keyword, loading, hasMore } = storeToRefs(store)
 
 const importLocalVisible = ref(false)
 const importGitVisible = ref(false)
@@ -41,9 +42,51 @@ const categoryOptions = computed(() => {
     value: cat
   }))
   return [
-    { label: '全部', value: null },
+    { label: '全部', value: SKILL_CATEGORY_ALL },
     ...options
   ]
+})
+
+/** 全部类型的占位值（用于 Segmented，避免 null 绑定问题） */
+const SKILL_TYPE_ALL = 'ALL'
+
+/** 分类「全部」的占位值（用于 Segmented，避免 null 绑定 warning） */
+const SKILL_CATEGORY_ALL = '__ALL__'
+
+/**
+ * 技能类型选项（全部、内置、自定义）
+ */
+const skillTypeOptions = [
+  { label: '全部', value: SKILL_TYPE_ALL },
+  { label: '内置', value: SkillType.BUILTIN },
+  { label: '自定义', value: SkillType.CUSTOM }
+]
+
+/**
+ * 当前选中的技能类型（用于 Segmented 显示，ALL 表示全部）
+ */
+const selectedSkillTypeDisplay = computed({
+  get: () => (selectedSkillType.value === null ? SKILL_TYPE_ALL : selectedSkillType.value),
+  set: (val: string | SkillType) => {
+    store.setSkillType(val === SKILL_TYPE_ALL ? null : (val as SkillType))
+  }
+})
+
+/**
+ * 当前选中的分类（用于 Segmented 显示，占位值表示全部）
+ */
+const selectedCategoryDisplay = computed({
+  get: () => (selectedCategory.value === null ? SKILL_CATEGORY_ALL : selectedCategory.value),
+  set: (val: string) => {
+    store.setCategory(val === SKILL_CATEGORY_ALL ? null : val)
+  }
+})
+
+/**
+ * 是否显示新增卡片（全部或自定义时显示，内置时隐藏）
+ */
+const showCreateCard = computed(() => {
+  return selectedSkillType.value !== SkillType.BUILTIN
 })
 
 function handleCreate() {
@@ -96,12 +139,21 @@ async function handleView(id: string) {
     footer: null,
     content: h('div', {}, [
       h('p', {}, [h('strong', '关联智能体: '), data.used?.length ? data.used.join('、') : '无']),
+      h('p', {}, [h('strong', '类型: '), data.skillType === 'BUILTIN' ? '内置' : '自定义']),
       h('p', {}, [h('strong', '分类: '), data.category]),
+      h('p', {}, [h('strong', '别名: '), data.alias || '未设置']),
       h('p', {}, [h('strong', '名称: '), data.name]),
       h('p', {}, [h('strong', '描述: '), data.description]),
       h('p', {}, [h('strong', '是否关联工具: '), data.tools?.length ? '是' : '否']),
     ])
   })
+}
+
+/**
+ * 处理查看内容（进入只读编辑器查看技能包文件正文，如 SKILL.md）
+ */
+function handleViewContent(id: string) {
+  router.push({ name: 'SkillEditor', params: { id }, query: { view: '1' } })
 }
 
 /**
@@ -147,6 +199,15 @@ async function handleDelete(id: string) {
  */
 async function handleSetCategory() {
   await store.fetchCategories()
+  await store.resetAndFetch()
+  isFirstLoad.value = true
+  infiniteLoadingKey.value++
+}
+
+/**
+ * 处理别名更新（刷新列表以显示新别名）
+ */
+async function handleAliasUpdated() {
   await store.resetAndFetch()
   isFirstLoad.value = true
   infiniteLoadingKey.value++
@@ -261,7 +322,7 @@ const isFirstLoad = ref(true);
 /**
  * 监听筛选条件变化，重置状态并重建 InfiniteLoading
  */
-watch([selectedCategory, keyword], () => {
+watch([selectedCategory, selectedSkillType, keyword], () => {
   // 重置列表和分页状态
   list.value = [];
   store.resetPagination();
@@ -287,10 +348,17 @@ onMounted(() => {
     </section>
 
     <section class="filter-section flex justify-between items-center">
-      <ASegmented
-        v-model:value="selectedCategory"
-        :options="categoryOptions"
-      />
+      <div class="filter-left">
+        <ASegmented
+          v-model:value="selectedSkillTypeDisplay"
+          :options="skillTypeOptions"
+        />
+        <ASegmented
+          v-if="categories.length > 0"
+          v-model:value="selectedCategoryDisplay"
+          :options="categoryOptions"
+        />
+      </div>
 
       <AInput
         v-model:value="keyword"
@@ -309,6 +377,7 @@ onMounted(() => {
     <section class="card-section">
       <div class="card-grid">
         <CreateCard
+          v-if="showCreateCard"
           @click="handleCreate"
           @importLocal="handleImportLocal"
           @importGit="handleImportGit"
@@ -322,11 +391,13 @@ onMounted(() => {
           :data="item"
           :categories="categories"
           @view="handleView"
+          @view-content="handleViewContent"
           @edit="handleEdit"
           @set-category="handleSetCategory"
           @enable="handleEnable"
           @delete="handleDelete"
           @tool-link="handleToolLink"
+          @alias-updated="handleAliasUpdated"
         />
       </div>
 

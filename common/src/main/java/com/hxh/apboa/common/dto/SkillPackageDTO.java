@@ -15,11 +15,17 @@ import lombok.EqualsAndHashCode;
 @EqualsAndHashCode(callSuper = true)
 public class SkillPackageDTO extends PageParams {
 
-    @QueryDefine(value = "技能包名称", condition = QueryCondition.LIKE)
+    /**
+     * 搜索关键词：按 name 或 alias 模糊匹配（在 SkillPackageController.page 手动组 OR 条件）。
+     * 不加 @QueryDefine：通用 ConditionBuilder 只能拼 AND，而 name/alias 需要 OR。
+     */
     private String name;
 
     @QueryDefine(value = "技能分类", condition = QueryCondition.EQ)
     private String category;
+
+    @QueryDefine(value = "技能类型", condition = QueryCondition.EQ)
+    private String skillType;
 
     @QueryDefine(value = "是否可用", condition = QueryCondition.EQ)
     private Boolean enabled;

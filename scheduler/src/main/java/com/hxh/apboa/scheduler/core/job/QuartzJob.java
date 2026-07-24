@@ -5,6 +5,7 @@ import com.hxh.apboa.common.entity.JobRecord;
 import com.hxh.apboa.common.util.BeanUtils;
 import com.hxh.apboa.common.util.FuncUtils;
 import com.hxh.apboa.common.util.TenantUtils;
+import com.hxh.apboa.engine.agui.AgentContext;
 import com.hxh.apboa.scheduler.consts.JobConst;
 import com.hxh.apboa.scheduler.core.enums.QuartzEnum;
 import com.hxh.apboa.scheduler.core.enums.QuartzResult;
@@ -86,6 +87,10 @@ public abstract class QuartzJob implements Job {
             if (tenantId != null) {
                 TenantUtils.clear();
             }
+            // 清理智能体上下文（ThreadLocal）：AgentScheduler 执行会 init 且 Quartz 线程池
+            // 复用线程，不清则残留被后续 WorkflowScheduler 任务的智能体节点读到、误判为
+            // "对话内触发"，工作流消耗串账到无关 agent/会话/用户名下并污染其月预算
+            AgentContext.clean();
         }
     }
 
@@ -128,8 +133,13 @@ public abstract class QuartzJob implements Job {
             Date endTime = new Date();
             // 计算执行时长
             long duration = (endTimeMillis - startTimeMillis) / 1000;
-            // 记录日志
-            jobLog = new JobLog(identity, startTime, endTime, duration, "任务执行成功!\r\n" + (runMsg != null? runMsg.toString():""), QuartzResult.STATUS_SUCCESS.value());
+            // 记录日志：doJob 以返回 Boolean.FALSE 表达"失败但不中断调度"（内部已 catch 异常），
+            // 此处必须按失败落日志，否则执行失败的任务在日志表里恒为成功（假成功）
+            if (Boolean.FALSE.equals(result)) {
+                jobLog = new JobLog(identity, startTime, endTime, duration, "任务执行失败!\r\n" + (runMsg != null ? runMsg.toString() : "执行器返回失败，原因见服务日志"), QuartzResult.STATUS_FAIL.value());
+            } else {
+                jobLog = new JobLog(identity, startTime, endTime, duration, "任务执行成功!\r\n" + (runMsg != null ? runMsg.toString() : ""), QuartzResult.STATUS_SUCCESS.value());
+            }
         } catch (Exception ex) {
             // 结束时间毫秒
             long endTimeMillis = System.currentTimeMillis();

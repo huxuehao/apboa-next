@@ -98,3 +98,58 @@ export function getActiveRunsURL(): string {
   if (base) return `${base}${path}`
   return path
 }
+
+/**
+ * 获取批量运行状态查询 URL（一次查多个 threadId，替代逐个轮询）
+ * @param threadIds 会话 ID 列表
+ */
+export function getStatusBatchURL(threadIds: string[]): string {
+  const base = (import.meta.env.VITE_APP_BASE_API as string) || ''
+  const query = threadIds.map((id) => `threadIds=${encodeURIComponent(id)}`).join('&')
+  const path = `${DEFAULT_SSE_BASE}/status/batch?${query}`
+  if (base) return `${base}${path}`
+  return path
+}
+
+/**
+ * 获取 HITL resume URL（提交逐工具确认决策，续接 SSE 事件流）
+ * @param threadId 会话 ID
+ */
+export function getResumeURL(threadId: string): string {
+  const base = (import.meta.env.VITE_APP_BASE_API as string) || ''
+  const path = `${DEFAULT_SSE_BASE}/resume/${encodeURIComponent(threadId)}`
+  if (base) return `${base}${path}`
+  return path
+}
+
+/**
+ * 获取 HITL 待确认列表 URL（刷新/重进会话时从持久暂停态重建确认 UI）
+ * @param threadId 会话 ID
+ */
+export function getPendingURL(threadId: string): string {
+  const base = (import.meta.env.VITE_APP_BASE_API as string) || ''
+  const path = `${DEFAULT_SSE_BASE}/pending/${encodeURIComponent(threadId)}`
+  if (base) return `${base}${path}`
+  return path
+}
+
+/**
+ * 获取子智能体 HITL 决策下行 URL（唤醒挂起等待的子智能体，即时返回 JSON 不产生新事件流）
+ */
+export function getSubagentResumeURL(): string {
+  const base = (import.meta.env.VITE_APP_BASE_API as string) || ''
+  const path = `${DEFAULT_SSE_BASE}/subagent/resume`
+  if (base) return `${base}${path}`
+  return path
+}
+
+/**
+ * 获取子智能体 HITL 挂起中确认列表 URL（刷新/重进会话时重建子确认 UI）
+ * @param threadId 主会话 ID
+ */
+export function getSubagentPendingURL(threadId: string): string {
+  const base = (import.meta.env.VITE_APP_BASE_API as string) || ''
+  const path = `${DEFAULT_SSE_BASE}/subagent/pending?threadId=${encodeURIComponent(threadId)}`
+  if (base) return `${base}${path}`
+  return path
+}

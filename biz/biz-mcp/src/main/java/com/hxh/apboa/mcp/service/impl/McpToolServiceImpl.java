@@ -10,6 +10,7 @@ import com.hxh.apboa.common.util.BeanUtils;
 import com.hxh.apboa.common.util.CryptoUtils;
 import com.hxh.apboa.common.vo.McpToolVO;
 import com.hxh.apboa.mcp.mapper.McpToolMapper;
+import com.hxh.apboa.mcp.schema.SchemaNumericSanitizer;
 import com.hxh.apboa.mcp.service.McpToolService;
 import io.modelcontextprotocol.spec.McpSchema;
 import java.time.LocalDateTime;
@@ -37,6 +38,7 @@ public class McpToolServiceImpl extends ServiceImpl<McpToolMapper, McpTool> impl
     private static final String SCHEMA_HASH_SALT = "MCP_TOOL_SCHEMA_HASH";
 
     private final ObjectMapper objectMapper;
+    private final SchemaNumericSanitizer schemaNumericSanitizer;
 
     @Override
     public List<McpToolVO> listToolVos(Long mcpServerId) {
@@ -101,9 +103,12 @@ public class McpToolServiceImpl extends ServiceImpl<McpToolMapper, McpTool> impl
             entity.setMcpServerId(mcpServer.getId());
             entity.setToolName(tool.name());
             entity.setDescription(tool.description());
-            entity.setInputSchema(toJsonNode(tool.inputSchema()));
-            entity.setOutputSchema(toJsonNode(tool.outputSchema()));
-            entity.setRawSchema(toJsonNode(tool));
+            // schema 落库前做数值关键字清洗：把不规范 MCP（如 firecrawl）里被写成字符串的
+            // maximum/minLength 等校正回数字，避免本地模型编译 grammar 时 type_error.302 → 400。
+            // raw_schema 尤为关键：agent 运行时 McpClientFactory.parseToolSchema 从它重建工具 schema。
+            entity.setInputSchema(schemaNumericSanitizer.sanitize(toJsonNode(tool.inputSchema())));
+            entity.setOutputSchema(schemaNumericSanitizer.sanitize(toJsonNode(tool.outputSchema())));
+            entity.setRawSchema(schemaNumericSanitizer.sanitize(toJsonNode(tool)));
             entity.setSchemaHash(buildSchemaHash(tool));
             entity.setMissing(false);
             entity.setSort(i + 1);
@@ -112,6 +117,10 @@ public class McpToolServiceImpl extends ServiceImpl<McpToolMapper, McpTool> impl
             entity.setEnabled(existingTool == null || existingTool.getEnabled() == null
                     ? Boolean.TRUE
                     : existingTool.getEnabled());
+            // HITL §6.6：schema 刷新时保留用户设置的 need_confirm（默认 false，不覆盖已有设置）
+            entity.setNeedConfirm(existingTool == null || existingTool.getNeedConfirm() == null
+                    ? Boolean.FALSE
+                    : existingTool.getNeedConfirm());
 
             if (existingTool == null) {
                 save(entity);
@@ -150,6 +159,25 @@ public class McpToolServiceImpl extends ServiceImpl<McpToolMapper, McpTool> impl
         lambdaUpdate()
                 .in(McpTool::getId, toolIds)
                 .set(McpTool::getEnabled, enabled)
+                .update();
+    }
+
+    @Override
+    public void updateNeedConfirm(Long mcpServerId, List<Long> toolIds, Boolean needConfirm) {
+        if (toolIds == null || toolIds.isEmpty()) {
+            return;
+        }
+        List<McpTool> tools = listByIdsPreserveOrder(toolIds);
+        if (tools.size() != new LinkedHashSet<>(toolIds).size()) {
+            throw new RuntimeException("存在无效的 MCP 工具选择");
+        }
+        boolean mismatch = tools.stream().anyMatch(item -> !Objects.equals(item.getMcpServerId(), mcpServerId));
+        if (mismatch) {
+            throw new RuntimeException("存在不属于当前 MCP 的工具");
+        }
+        lambdaUpdate()
+                .in(McpTool::getId, toolIds)
+                .set(McpTool::getNeedConfirm, needConfirm)
                 .update();
     }
 

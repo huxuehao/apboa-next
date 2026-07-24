@@ -2,6 +2,7 @@ package com.hxh.apboa.node.agent;
 
 import com.hxh.apboa.common.consts.NodeConst;
 import com.hxh.apboa.common.enums.McpToolExposureMode;
+import com.hxh.apboa.common.enums.ToolChoiceStrategy;
 import com.hxh.apboa.common.util.FuncUtils;
 import com.hxh.apboa.node.base.EnhancedNode;
 import com.hxh.apboa.node.base.NodeOutput;
@@ -72,6 +73,9 @@ public class AgentNode extends EnhancedNode {
         output.addExecutionContext("skillPackageIds", config.getSkillPackageIds());
         output.addExecutionContext("toolIds", config.getToolIds());
         output.addExecutionContext("mcps", config.getMcps());
+        output.addExecutionContext("toolChoiceStrategy", result.getToolChoiceStrategy());
+        output.addExecutionContext("effectiveMaxIterations", result.getEffectiveMaxIterations());
+        output.addExecutionContext("modelRequests", result.getModelRequests());
         output.addExecutionContext("usage", result.getUsage());
         output.addExecutionContext("generateReason", result.getGenerateReason());
         output.markComplete();
@@ -102,10 +106,28 @@ public class AgentNode extends EnhancedNode {
                                           String renderedSystemPrompt,
                                           String renderedUserPrompt) {
         AgentNodeRequest request = new AgentNodeRequest();
+        Object workflowId = context.getVariables().getVariable("workflowId");
+        request.setWorkflowId(workflowId != null ? workflowId.toString() : null);
         request.setWorkflowInstanceId(context.getWorkflowInstanceId());
+        Object workflowName = context.getVariables().getVariable("workflowName");
+        request.setWorkflowName(workflowName != null ? workflowName.toString() : null);
+        Object triggerChannel = context.getVariables().getVariable("triggerChannel");
+        request.setTriggerChannel(triggerChannel != null ? triggerChannel.toString() : null);
+        Object userId = context.getVariables().getVariable("userId");
+        if (userId instanceof Long id) {
+            request.setTriggerUserId(id);
+        } else if (userId != null) {
+            try {
+                request.setTriggerUserId(Long.parseLong(userId.toString()));
+            } catch (NumberFormatException ignored) {
+                // 变量被业务覆盖为非数值时放弃归属，不影响执行
+            }
+        }
         request.setNodeId(getId());
         request.setNodeName(getName());
         request.setModelConfigId(config.getModelConfigId());
+        request.setStreaming(config.getStreaming());
+        request.setThinking(config.getThinking());
         request.setModelParamsOverrideEnabled(config.isModelParamsOverrideEnabled());
         request.setModelParamsOverride(config.getModelParamsOverride());
         request.setSystemPrompt(renderedSystemPrompt);
@@ -113,6 +135,7 @@ public class AgentNode extends EnhancedNode {
         request.setSkillPackageIds(config.getSkillPackageIds());
         request.setToolIds(config.getToolIds());
         request.setMcps(config.getMcps());
+        request.setToolChoiceStrategy(config.getToolChoiceStrategy());
         request.setMaxIterations(config.getMaxIterations());
         request.setStructuredOutputEnabled(config.isStructuredOutputEnabled());
         request.setStructuredOutput(config.getStructuredOutput());
@@ -147,6 +170,14 @@ public class AgentNode extends EnhancedNode {
         }
         if (config.getMaxIterations() <= 0) {
             return VerifyResult.invalid(new VerifyFail("maxIterations", "最大迭代次数必须大于0"));
+        }
+        if (config.getToolChoiceStrategy() == null) {
+            return VerifyResult.invalid(new VerifyFail("toolChoiceStrategy", "工具选择策略不能为空"));
+        }
+        if (!List.of(ToolChoiceStrategy.AUTO, ToolChoiceStrategy.NONE)
+                .contains(config.getToolChoiceStrategy())) {
+            return VerifyResult.invalid(new VerifyFail(
+                    "toolChoiceStrategy", "工作流智能体仅支持 AUTO 或 NONE"));
         }
         if (config.isModelParamsOverrideEnabled()
                 && (config.getModelParamsOverride() == null

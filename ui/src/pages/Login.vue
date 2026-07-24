@@ -30,7 +30,6 @@ const formRef = ref<FormInstance>()
 const loading = ref(false)
 
 /** 当前登录方式 tab: account | sso */
-const activeTab = ref<'account' | 'sso'>('account')
 
 /** 是否显示租户选择弹窗 */
 const showTenantModal = ref(false)
@@ -285,7 +284,6 @@ const goToForgotPassword = () => {
 
       <!-- 登录表单 -->
       <div v-else key="login" class="view-wrapper">
-        <!-- 标题区 -->
         <div class="auth-card-header">
           <h2 class="auth-card-title">欢迎回来 👋</h2>
           <span class="auth-lang-select">
@@ -293,7 +291,6 @@ const goToForgotPassword = () => {
           </span>
         </div>
         <p class="auth-card-subtitle">登录 Apboa Next 智能体平台</p>
-
         <AForm
           ref="formRef"
           :model="formState"

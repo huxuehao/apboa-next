@@ -8,11 +8,13 @@ import { h } from 'vue'
 import type { VNode } from 'vue'
 import {
   ApartmentOutlined,
+  BugOutlined,
   CheckCircleOutlined,
   ClockCircleOutlined,
   DeleteOutlined,
   EditOutlined,
   EyeOutlined,
+  FileTextOutlined,
   HistoryOutlined,
   MessageOutlined,
   PlayCircleOutlined,
@@ -21,6 +23,7 @@ import {
   SyncOutlined,
   TagOutlined,
   ToolOutlined,
+  TranslationOutlined,
 } from '@ant-design/icons-vue'
 
 /** 菜单项类型 */
@@ -33,6 +36,13 @@ export type CardMenuItem =
  */
 export function createViewItem(): CardMenuItem {
   return { key: 'view', label: '查看', icon: () => h(EyeOutlined) }
+}
+
+/**
+ * 创建「查看内容」菜单项（进入只读编辑器查看技能包文件正文）
+ */
+export function createViewContentItem(): CardMenuItem {
+  return { key: 'viewContent', label: '查看内容', icon: () => h(FileTextOutlined) }
 }
 
 /**
@@ -140,10 +150,31 @@ export function createSetCategoryItem(): CardMenuItem {
 }
 
 /**
+ * 创建「别名」菜单项（设置展示别名，仅展示层友好，不影响 name）
+ */
+export function createAliasItem(): CardMenuItem {
+  return { key: 'alias', label: '别名', icon: () => h(TranslationOutlined) }
+}
+
+/**
+ * 创建「改名」菜单项（修改展示名称，内置资源开放改名，不影响实际生效）
+ */
+export function createRenameItem(): CardMenuItem {
+  return { key: 'rename', label: '改名', icon: () => h(EditOutlined) }
+}
+
+/**
  * 创建「关联工具」菜单项
  */
 export function createToolLinkItem(): CardMenuItem {
   return { key: 'toolLink', label: '关联工具', icon: () => h(ToolOutlined) }
+}
+
+/**
+ * 创建「调试」菜单项
+ */
+export function createDebugItem(): CardMenuItem {
+  return { key: 'debug', label: '调试', icon: () => h(BugOutlined) }
 }
 
 /**
