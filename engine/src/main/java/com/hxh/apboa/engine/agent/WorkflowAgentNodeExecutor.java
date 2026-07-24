@@ -374,7 +374,11 @@ public class WorkflowAgentNodeExecutor implements AgentNodeExecutor {
             WorkflowProgressModel progressModel,
             WorkflowUsageHook usageHook) {
         AgentNodeResult result = new AgentNodeResult();
-        result.setModelName(model.getModelName());
+        // 展示名走平台配置映射（ChatModelFactory 构建时写入 ctx 的 ModelConfig.name），
+        // 与消息 footer/成本流水的模型标签口径一致；无上下文时回落供应商模型 code
+        String modelLabel = AgentContext.getIfExists()
+                .map(AgentContext::getActiveModelLabel).orElse(null);
+        result.setModelName(modelLabel != null && !modelLabel.isBlank() ? modelLabel : model.getModelName());
         result.setToolChoiceStrategy(toolChoiceStrategy);
         result.setEffectiveMaxIterations(effectiveMaxIterations);
         result.setModelRequests(buildModelRequestTraces(progressModel, usageHook));
