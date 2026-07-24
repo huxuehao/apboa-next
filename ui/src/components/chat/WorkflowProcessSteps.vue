@@ -206,10 +206,11 @@ async function copyContent(key: string, value?: string) {
               <CheckCircleFilled v-if="attempt.status === 'SUCCESS'" class="workflow-status-icon is-success" />
               <CloseCircleFilled v-else-if="attempt.status === 'FAIL'" class="workflow-status-icon is-fail" />
               <MinusCircleFilled v-else class="workflow-status-icon is-stop" />
-              <span>第 {{ attempt.attempt }}/{{ request.maxAttempts }} 次请求</span>
+              <!-- 单次成功是常态，重试上限对读者无信息量：仅发生多次尝试时才显示序号区分各行 -->
+              <span v-if="request.attempts.length > 1">尝试 {{ attempt.attempt }}/{{ request.maxAttempts }}</span>
               <span class="workflow-model-attempt-status" :class="attempt.status === 'SUCCESS' ? 'is-success' : 'is-fail'">
                 {{ statusText(attempt.status) }}<template v-if="attempt.elapsed != null"> · {{ formatElapsed(attempt.elapsed) }}</template>
-                <template v-if="attempt.ttft != null"> · TTFT {{ formatElapsed(attempt.ttft) }}</template>
+                <template v-if="attempt.ttft != null"> · 首响 {{ formatElapsed(attempt.ttft) }}</template>
               </span>
               <span v-if="attempt.detail" class="workflow-model-attempt-detail">{{ attempt.detail }}</span>
             </div>
