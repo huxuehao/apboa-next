@@ -76,6 +76,20 @@ function nodeType(node: WorkflowProcessNode): string {
   return NODE_TYPE_LABELS[node.type || ''] || node.type || '节点'
 }
 
+/**
+ * 结束原因合并展示：finishReason(供应商) 与 generateReason(框架) 常规场景语义等价
+ * （stop↔MODEL_STOP、tool_calls↔TOOL_CALLS），等价时只显一个；不等价才双显。
+ */
+const REASON_EQUIV: Record<string, string> = { MODEL_STOP: 'stop', TOOL_CALLS: 'tool_calls' }
+function reasonText(finishReason?: string | null, generateReason?: string | null): string {
+  const f = finishReason || ''
+  const g = generateReason || ''
+  if (f && g && (REASON_EQUIV[g] === f || f === g)) return `结束原因 ${f}`
+  if (f && !g) return `结束原因 ${f}`
+  if (!f && g) return `结束原因 ${g}`
+  return `finish=${f} · reason=${g}`
+}
+
 function statusText(status?: string): string {
   if (status === 'SUCCESS') return '成功'
   if (status === 'FAIL') return '失败'
@@ -174,8 +188,7 @@ async function copyContent(key: string, value?: string) {
               <span v-if="request.outputTokens != null">输出 {{ request.outputTokens }} tokens</span>
               <span v-if="request.durationMs != null">总耗时 {{ formatElapsed(request.durationMs) }}</span>
               <span v-if="request.ttftMs != null">首 token {{ formatElapsed(request.ttftMs) }}</span>
-              <span v-if="request.finishReason">finish={{ request.finishReason }}</span>
-              <span v-if="request.generateReason">reason={{ request.generateReason }}</span>
+              <span v-if="request.finishReason || request.generateReason">{{ reasonText(request.finishReason, request.generateReason) }}</span>
               <span v-if="request.thinkingChars">隐藏思考 {{ request.thinkingChars }} 字符</span>
             </div>
             <div v-if="request.providerMetrics && Object.keys(request.providerMetrics).length" class="workflow-model-provider-metrics">
@@ -210,7 +223,6 @@ async function copyContent(key: string, value?: string) {
               <span v-if="request.attempts.length > 1">尝试 {{ attempt.attempt }}/{{ request.maxAttempts }}</span>
               <span class="workflow-model-attempt-status" :class="attempt.status === 'SUCCESS' ? 'is-success' : 'is-fail'">
                 {{ statusText(attempt.status) }}<template v-if="attempt.elapsed != null"> · {{ formatElapsed(attempt.elapsed) }}</template>
-                <template v-if="attempt.ttft != null"> · 首响 {{ formatElapsed(attempt.ttft) }}</template>
               </span>
               <span v-if="attempt.detail" class="workflow-model-attempt-detail">{{ attempt.detail }}</span>
             </div>
