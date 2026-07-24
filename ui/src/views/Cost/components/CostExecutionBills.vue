@@ -170,7 +170,7 @@ const columns = [
         :data-source="rows"
         :loading="loading"
         row-key="billId"
-        size="middle"
+        size="small"
         table-layout="fixed"
         :scroll="{ x: 1619 }"
         :pagination="{
@@ -266,7 +266,7 @@ const columns = [
 .cost-bills { display: flex; flex-direction: column; gap: var(--spacing-md); }
 .bills-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--spacing-md); }
 .summary-item { position: relative; overflow: hidden; min-width: 0; padding: var(--spacing-md) var(--spacing-lg); border: 1px solid var(--color-border-light); border-radius: var(--border-radius-lg); background: var(--color-bg-white); }
-.summary-item::before { position: absolute; inset: 0 auto 0 0; width: 3px; content: ''; background: #d9d9d9; }
+.summary-item::before { position: absolute; inset: 0 auto 0 0; width: 3px; content: ''; background: var(--color-border-base); }
 .summary-item.primary::before { background: var(--color-primary); }
 .summary-item.warning::before { background: #fa8c16; }
 .summary-label { color: var(--color-text-secondary); font-size: var(--font-size-sm); }

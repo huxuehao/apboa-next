@@ -22,6 +22,12 @@ const customRange = ref<[Dayjs, Dayjs] | null>(null)
 /** 非空时显示类型化账单详情（返回后保留筛选与分页现场）。 */
 const detailTarget = ref<{ type: CostBillType; id: string } | null>(null)
 
+const tabOptions = [
+  { label: '概览看板', value: 'overview' },
+  { label: '执行账单', value: 'sessions' },
+  { label: '模型配价', value: 'pricing' }
+]
+
 const presetOptions = [
   { label: '近 7 天', value: '7d' },
   { label: '近 30 天', value: '30d' },
@@ -67,22 +73,26 @@ function openDetail(type: CostBillType, id: string) {
     />
 
     <template v-else-if="!detailTarget">
-      <div class="cost-head flex items-center">
-        <ATabs v-model:activeKey="activeTab" class="cost-tabs">
-          <ATabPane key="overview" tab="概览看板" />
-          <ATabPane key="sessions" tab="执行账单" />
-          <ATabPane key="pricing" tab="模型配价" />
-        </ATabs>
-        <div class="flex-1"></div>
-        <template v-if="activeTab !== 'pricing'">
+      <section class="intro-section">
+        <h3 class="intro-title">成本中心</h3>
+        <p class="intro-desc text-secondary">
+          统一归集平台各执行链路的 token 用量与成本流水：从模型计价、会话/工作流/定时任务账单，到月度预算管控与明细钻取，为智能体运营提供可核对的成本视图。
+        </p>
+      </section>
+
+      <section class="filter-section flex justify-between items-center">
+        <div class="filter-left">
+          <ASegmented v-model:value="activeTab" :options="tabOptions" />
+        </div>
+        <div v-if="activeTab !== 'pricing'" class="filter-right flex items-center">
           <ASegmented v-model:value="rangePreset" :options="presetOptions" />
           <ARangePicker
             v-if="rangePreset === 'custom'"
             v-model:value="customRange"
             :allow-clear="false"
           />
-        </template>
-      </div>
+        </div>
+      </section>
 
       <CostOverview
         v-if="activeTab === 'overview'"
@@ -109,15 +119,30 @@ function openDetail(type: CostBillType, id: string) {
   box-sizing: border-box;
 }
 
-.cost-head {
-  gap: var(--spacing-md);
+.intro-section {
+  margin-bottom: var(--spacing-lg);
+
+  .intro-title {
+    font-size: var(--font-size-2xl);
+    font-weight: 600;
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-sm);
+  }
+
+  .intro-desc {
+    font-size: var(--font-size-base);
+    line-height: 1.6;
+    max-width: 900px;
+  }
+}
+
+.filter-section {
   margin-bottom: var(--spacing-md);
+  gap: var(--spacing-md);
   flex-wrap: wrap;
 
-  .cost-tabs {
-    :deep(.ant-tabs-nav) {
-      margin-bottom: 0;
-    }
+  .filter-right {
+    gap: var(--spacing-sm);
   }
 }
 </style>

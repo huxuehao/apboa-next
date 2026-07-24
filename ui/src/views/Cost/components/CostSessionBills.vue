@@ -154,7 +154,7 @@ const columns = [
         :data-source="rows"
         :loading="loading"
         row-key="sessionId"
-        size="middle"
+        size="small"
         table-layout="fixed"
         :scroll="{ x: 1465 }"
         :pagination="{
@@ -275,7 +275,7 @@ const columns = [
     inset: 0 auto 0 0;
     width: 3px;
     content: '';
-    background: #d9d9d9;
+    background: var(--color-border-base);
   }
 
   &.primary::before { background: var(--color-primary); }

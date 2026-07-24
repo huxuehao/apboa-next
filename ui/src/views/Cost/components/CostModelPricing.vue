@@ -233,7 +233,7 @@ const columns = [
         :data-source="filteredRows"
         :loading="loading"
         row-key="modelConfigId"
-        size="middle"
+        size="small"
         :pagination="false"
         :scroll="{ x: 1175 }"
       >
@@ -353,7 +353,7 @@ const columns = [
     inset: 0 auto 0 0;
     width: 3px;
     content: '';
-    background: #d9d9d9;
+    background: var(--color-border-base);
   }
 
   &.primary::before { background: var(--color-primary); }

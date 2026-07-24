@@ -102,7 +102,7 @@ const trendOption = computed(() => {
       type: 'category',
       data: trend.map(t => t.date.slice(5)),
       boundaryGap: false,
-      axisLine: { lineStyle: { color: '#d9d9d9' } },
+      axisLine: { lineStyle: { color: 'var(--color-border-base)' } },
       axisLabel: { color: '#999' }
     },
     yAxis: {
@@ -783,7 +783,7 @@ const topAgentColumns = [
   display: inline-flex;
   align-items: center;
   padding: 1px 6px;
-  border: 1px solid #d9d9d9;
+  border: 1px solid var(--color-border-base);
   border-radius: 999px;
   background: var(--color-bg-white);
   color: var(--color-text-secondary);

@@ -194,7 +194,7 @@ function nodeRowClass(record: CostWorkflowNodeVO) {
             :data-source="data.nodes"
             :pagination="false"
             row-key="nodeId"
-            size="middle"
+            size="small"
             :scroll="{ x: 1300 }"
             :row-class-name="nodeRowClass"
           >
@@ -237,7 +237,7 @@ function nodeRowClass(record: CostWorkflowNodeVO) {
               <div class="section-hint">一行对应一个智能体节点运行；“LLM 次数”反映工具选择 / ReAct 造成的多轮模型请求。</div>
             </div>
           </div>
-          <ATable :columns="usageColumns" :data-source="data.usages" :pagination="false" row-key="recordId" size="middle" :scroll="{ x: 1150 }">
+          <ATable :columns="usageColumns" :data-source="data.usages" :pagination="false" row-key="recordId" size="small" :scroll="{ x: 1150 }">
             <template #bodyCell="{ column, record }">
               <template v-if="column.key === 'createdAt'"><span class="num">{{ record.createdAt }}</span></template>
               <template v-else-if="column.key === 'node'"><b>{{ record.nodeName || '未关联智能体节点' }}</b></template>
@@ -276,7 +276,7 @@ function nodeRowClass(record: CostWorkflowNodeVO) {
 .meta-id { color: var(--color-text-placeholder); font-size: var(--font-size-xs); font-variant-numeric: tabular-nums; }
 .summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--spacing-md); }
 .stat-card { position: relative; overflow: hidden; min-width: 0; padding: var(--spacing-md) var(--spacing-lg); border: 1px solid var(--color-border-light); border-radius: var(--border-radius-lg); background: var(--color-bg-white); }
-.stat-card::before { position: absolute; inset: 0 auto 0 0; width: 3px; content: ''; background: #d9d9d9; }
+.stat-card::before { position: absolute; inset: 0 auto 0 0; width: 3px; content: ''; background: var(--color-border-base); }
 .stat-card.primary::before { background: var(--color-primary); }
 .stat-label { color: var(--color-text-secondary); font-size: var(--font-size-sm); }
 .stat-value { margin-top: 2px; font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }

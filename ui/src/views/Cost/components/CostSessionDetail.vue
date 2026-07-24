@@ -230,7 +230,7 @@ function rowClassName(record: CostRunItemVO) {
             :columns="columns"
             :data-source="data.runs"
             :pagination="false"
-            size="middle"
+            size="small"
             row-key="recordId"
             :row-class-name="rowClassName"
             :scroll="{ x: 1220 }"
@@ -408,7 +408,7 @@ function rowClassName(record: CostRunItemVO) {
     inset: 0 auto 0 0;
     width: 3px;
     content: '';
-    background: #d9d9d9;
+    background: var(--color-border-base);
   }
 
   &.primary::before { background: var(--color-primary); }
