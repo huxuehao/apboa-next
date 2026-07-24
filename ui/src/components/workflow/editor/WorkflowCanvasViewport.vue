@@ -25,9 +25,11 @@ const emit = defineEmits<{
   showLibrary: [payload: { sourceNodeId: string; sourceHandle: string; x: number; y: number }]
   showLibraryFromEdge: [payload: { edgeId: string; x: number; y: number }]
   deleteNodes: [nodeIds: string[]]
+  deleteEdges: [edgeIds: string[]]
 }>()
 
 const flow = useVueFlow()
+const { getSelectedNodes, getSelectedEdges } = flow
 const { viewport } = flow
 
 // ========== 对齐辅助线 ==========
@@ -192,15 +194,17 @@ function clearGuides() {
 function onKeyDown(event: KeyboardEvent) {
   if (event.key !== 'Backspace' && event.key !== 'Delete') return
   if (props.readonly) return
-  // 只在画布区域有焦点时才响应，避免与输入框等控件冲突
-  const canvas = document.querySelector('.workflow-canvas-viewport')
-  if (!canvas || !canvas.contains(document.activeElement)) return
-  const tag = (document.activeElement as HTMLElement)?.tagName
-  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
-  const selectedIds = (nodes.value as GraphNode[]).filter((n) => n.selected).map((n) => n.id)
-  if (!selectedIds.length) return
+  // 焦点在输入类控件时不响应，避免与文本编辑冲突
+  const active = document.activeElement as HTMLElement | null
+  const tag = active?.tagName
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || active?.isContentEditable) return
+  // 从 VueFlow 内部 store 读取真实选中状态（v-model 数组不一定同步 selected）
+  const selectedNodeIds = getSelectedNodes.value.map((n) => n.id)
+  const selectedEdgeIds = getSelectedEdges.value.map((e) => e.id)
+  if (!selectedNodeIds.length && !selectedEdgeIds.length) return
   event.preventDefault()
-  emit('deleteNodes', selectedIds)
+  if (selectedNodeIds.length) emit('deleteNodes', selectedNodeIds)
+  if (selectedEdgeIds.length) emit('deleteEdges', selectedEdgeIds)
 }
 
 onMounted(() => {

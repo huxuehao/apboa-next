@@ -532,6 +532,18 @@ function deleteSelectedNodes(nodeIds: string[]) {
   closeContextMenu()
 }
 
+/** 删除选中的连线：只读模式下忽略，snapshot 统一记录一次 */
+function deleteSelectedEdges(edgeIds: string[]) {
+  if (readonly.value) {
+    message.warning('当前工作流为只读模式，无法删除连线')
+    return
+  }
+  if (!edgeIds.length) return
+  snapshot()
+  const ids = new Set(edgeIds)
+  edges.value = edges.value.filter((edge) => !ids.has(edge.id))
+}
+
 function copyNode(nodeId: string) {
   const source = nodes.value.find((node) => node.id === nodeId)
   if (!source || readonly.value) return
@@ -1106,6 +1118,7 @@ function computeParentUpstreamNodes(startNodeId: string): WorkflowFlowNode[] {
       @show-library="openLibraryFromNode"
       @show-library-from-edge="openLibraryFromEdge"
       @delete-nodes="deleteSelectedNodes"
+      @delete-edges="deleteSelectedEdges"
     />
 
     <WorkflowTopLeft
