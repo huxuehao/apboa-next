@@ -3,7 +3,6 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { QuestionCircleOutlined } from '@ant-design/icons-vue'
 import PanelSection from '../shared/PanelSection.vue'
 import NodeNameInput from '../shared/NodeNameInput.vue'
-import AutoInputBinding from '@/components/workflow/bindings/AutoInputBinding.vue'
 import OutputDisplay from '../shared/OutputDisplay.vue'
 import ModelConfigSelector from '@/components/workflow/bindings/ModelConfigSelector.vue'
 import ExtendConfigEditor, { type ExtendConfigData } from '@/components/model/ExtendConfigEditor.vue'
@@ -17,6 +16,7 @@ import type {
 } from '@/types'
 import type { WorkflowFlowEdge, WorkflowFlowNode, WorkflowResourceMaps } from '@/types/workflow'
 import { LoadingOutlined } from '@ant-design/icons-vue'
+import InputBindingSection from "@/components/workflow/panels/shared/InputBindingSection.vue";
 
 interface IntentItem {
   name: string
@@ -218,13 +218,13 @@ onMounted(async () => {
         />
       </PanelSection>
 
-      <AutoInputBinding
+      <InputBindingSection
         :model-value="node.data.inputConfigs"
         :nodes="nodes"
         :edges="edges"
         :current-node-id="node.id"
-        :draggable="false"
-        title="输入节点（第一个有效）"
+        :max-bindings="1"
+        :readonly-name="true"
         @update:model-value="(v: any) => updateNode({ inputConfigs: v })"
       />
 

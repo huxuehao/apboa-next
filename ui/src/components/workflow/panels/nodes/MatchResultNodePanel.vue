@@ -3,10 +3,10 @@ import { QuestionCircleOutlined } from '@ant-design/icons-vue'
 import PanelSection from '../shared/PanelSection.vue'
 import NodeNameInput from '../shared/NodeNameInput.vue'
 import NextNodeSelector from '@/components/workflow/bindings/NextNodeSelector.vue'
-import AutoInputBinding from '@/components/workflow/bindings/AutoInputBinding.vue'
 import OutputDisplay from '../shared/OutputDisplay.vue'
 import AutoMatchBinding from '@/components/workflow/bindings/AutoMatchBinding.vue'
 import type { WorkflowFlowEdge, WorkflowFlowNode, WorkflowResourceMaps } from '@/types/workflow'
+import InputBindingSection from "@/components/workflow/panels/shared/InputBindingSection.vue";
 
 const props = defineProps<{
   node: WorkflowFlowNode
@@ -32,13 +32,13 @@ function updateConfig(key: string, value: unknown) {
         @update:model-value="(v: any) => updateNode({ label: v })"
       />
     </PanelSection>
-    <AutoInputBinding
+    <InputBindingSection
       :model-value="node.data.inputConfigs"
       :nodes="nodes"
       :edges="edges"
       :current-node-id="node.id"
-      :draggable="false"
-      title="输入节点（第一个有效）"
+      :max-bindings="1"
+      :readonly-name="true"
       @update:model-value="(v: any) => updateNode({ inputConfigs: v })"
     />
     <PanelSection title="节点配置">
@@ -95,7 +95,7 @@ function updateConfig(key: string, value: unknown) {
         </div>
       </div>
     </PanelSection>
-    
+
     <PanelSection title="输出说明">
       <OutputDisplay :outputs="node.data.outputConfigs || []" />
     </PanelSection>
