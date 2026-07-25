@@ -158,7 +158,7 @@ function deduplicateGuides(guides: AlignGuide[]): AlignGuide[] {
   })
 }
 
-function onNodeDragStart({ node }: { node: GraphNode }) {
+function onNodeDragStart() {
   // if (props.readonly) return
   // emit('selectNode', node.id)
 }
@@ -316,11 +316,22 @@ function getViewport() {
   return { ...viewport.value }
 }
 
+/** 返回各节点渲染后的真实尺寸，供自动布局按实际卡片高度对齐连接点 */
+function getNodeDimensions() {
+  const map: Record<string, { width: number; height: number }> = {}
+  flow.getNodes.value.forEach((node) => {
+    if (node.dimensions.width > 0 && node.dimensions.height > 0) {
+      map[node.id] = { width: node.dimensions.width, height: node.dimensions.height }
+    }
+  })
+  return map
+}
+
 function restoreViewport(vp: { x: number; y: number; zoom: number }) {
   flow.setViewport(vp, { duration: 0 })
 }
 
-defineExpose({ addAtCenter, fitAll, zoomInCanvas, zoomOutCanvas, resetZoom, fitNode, getViewport, restoreViewport })
+defineExpose({ addAtCenter, fitAll, zoomInCanvas, zoomOutCanvas, resetZoom, fitNode, getViewport, restoreViewport, getNodeDimensions })
 </script>
 
 <template>

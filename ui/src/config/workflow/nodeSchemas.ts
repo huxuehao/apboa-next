@@ -58,11 +58,14 @@ export const workflowNodeSchemas: WorkflowNodeSchema[] = [
   }),
   schema({
     type: 'IF_ELSE', title: '条件分支', group: 'logic',
-    description: '根据输入值或表达式结果选择 true/false 分支。',
+    description: '按顺序评估多个条件分支，命中即路由到对应下游节点。',
     icon: 'branches', color: '#fa8c16', panelComponent: 'IfElseNodePanel',
-    defaultConfig: { evaluatorType: 'GROOVY', scope: 'SELF', inputIsNullUse: false, symbol: 'EQ', compareTo: { type: 'CONSTANT', value: '' } },
-    inputConfigs: input(), outputConfigs: output('Boolean'),
-    branchHandles: [{ id: 'true', label: 'true' }, { id: 'false', label: 'false' }],
+    defaultConfig: {
+      evaluatorType: 'GROOVY',
+      branches: [{ scope: 'SELF', inputIsNullUse: false, symbol: 'EQ', compareTo: { type: 'CONSTANT', value: '' }, conditionExpression: '', nextNodeId: undefined }],
+      elseNextNodeId: undefined,
+    },
+    inputConfigs: input(), outputConfigs: output('String'),
     summaryComponent: 'IfElseNodeSummary',
     showSummary: true,
   }),

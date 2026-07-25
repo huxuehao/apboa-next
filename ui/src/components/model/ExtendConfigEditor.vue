@@ -175,7 +175,7 @@ const bodyValueTypeOptions = [
               <MinusCircleOutlined />
             </AButton>
           </div>
-          <AButton type="dashed" block size="small" html-type="button" @click="addRow('headers')">
+          <AButton type="dashed" block html-type="button" @click="addRow('headers')">
             <PlusOutlined /> 添加请求头
           </AButton>
         </div>
@@ -194,7 +194,7 @@ const bodyValueTypeOptions = [
               <MinusCircleOutlined />
             </AButton>
           </div>
-          <AButton type="dashed" block size="small" html-type="button" @click="addRow('queryParams')">
+          <AButton type="dashed" block html-type="button" @click="addRow('queryParams')">
             <PlusOutlined /> 添加查询参数
           </AButton>
         </div>
@@ -219,7 +219,7 @@ const bodyValueTypeOptions = [
               <MinusCircleOutlined />
             </AButton>
           </div>
-          <AButton type="dashed" block size="small" html-type="button" @click="addRow('bodyParams')">
+          <AButton type="dashed" block html-type="button" @click="addRow('bodyParams')">
             <PlusOutlined /> 添加 Body 参数
           </AButton>
         </div>

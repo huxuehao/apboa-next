@@ -4,7 +4,7 @@ import PanelSection from '../shared/PanelSection.vue'
 import NodeNameInput from '../shared/NodeNameInput.vue'
 import NextNodeSelector from '@/components/workflow/bindings/NextNodeSelector.vue'
 import OutputDisplay from '../shared/OutputDisplay.vue'
-import AutoMatchBinding from '@/components/workflow/bindings/AutoMatchBinding.vue'
+import MatchBindingEditor from '@/components/workflow/bindings/MatchBindingEditor.vue'
 import type { WorkflowFlowEdge, WorkflowFlowNode, WorkflowResourceMaps } from '@/types/workflow'
 import InputBindingSection from "@/components/workflow/panels/shared/InputBindingSection.vue";
 
@@ -43,26 +43,26 @@ function updateConfig(key: string, value: unknown) {
     />
     <PanelSection title="节点配置">
       <div class="config-row">
-        <span class="config-row-label">
-          <ASelect
-            :value="node.data.config?.matchType || 'EQUALS'"
-            :options="[
-              { label: '等于', value: 'EQUALS' },
-              { label: '包含', value: 'CONTAINS' },
-            ]"
-            style="width: 70px; margin-right: 5px;"
-            @update:value="(v: any) => updateConfig('matchType', v)"
-          />
-        </span>
-        <div class="match-binding-wrap">
-        <AutoMatchBinding
+        <MatchBindingEditor
+          class="match-binding-wrap"
           :model-value="(node.data.config?.matches as any) || []"
           :nodes="nodes"
           :edges="edges"
           :current-node-id="node.id"
           @update:model-value="(v: any) => updateConfig('matches', v)"
-        />
-        </div>
+        >
+          <template #prefix>
+            <ASelect
+              :value="node.data.config?.matchType || 'EQUALS'"
+              :options="[
+                { label: '等于', value: 'EQUALS' },
+                { label: '包含', value: 'CONTAINS' },
+              ]"
+              style="width: 70px"
+              @update:value="(v: any) => updateConfig('matchType', v)"
+            />
+          </template>
+        </MatchBindingEditor>
       </div>
       <div class="config-row">
         <span class="config-row-label">

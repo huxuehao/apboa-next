@@ -18,17 +18,17 @@ import java.util.Objects;
  **/
 public class Evaluator {
 
-    public static boolean evaluate(Config config, Map<String, Object> inputs, NodeContext context) {
+    public static boolean evaluate(Branch branch, Map<String, Object> inputs, NodeContext context) {
         // 输入值
         Object inputValue = inputs.get(NodeConst.DEFAULT_INPUT_NAME);
         // 输入值是否为空
         if (FuncUtils.isEmpty(inputValue)) {
-            return config.getInputIsNullUse();
+            return Boolean.TRUE.equals(branch.getInputIsNullUse());
         }
 
         // 比较值
         Object compareValue;
-        CompareTo compareTo = config.getCompareTo();
+        CompareTo compareTo = branch.getCompareTo();
         CompareTo.Type compareToType = compareTo.getType();
         if (compareToType == CompareTo.Type.CONSTANT) {
             // 推演出输入值类型
@@ -49,8 +49,8 @@ public class Evaluator {
 
         // 基于数值推断类型
         OutputConfig.VariableType type = WorkflowUtils.inferType(compareValue);
-        Config.Scope scope = config.getScope();
-        Config.Symbol symbol = config.getSymbol();
+        Config.Scope scope = branch.getScope();
+        Config.Symbol symbol = branch.getSymbol();
         // 验证类型是否支持运算符
         VariableTypeSupportSymbol.verifySupportSymbol(type, scope, symbol);
 
