@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 'vue'
-import { Handle, Position } from '@vue-flow/core'
+import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import type { FlowNodeData, WorkflowResourceMaps } from '@/types/workflow'
 import IconFont from '@/components/common/IconFont.vue'
 import { getNodeIconName } from '@/config/workflow/common'
+import { hasOutgoingEdge } from '@/utils/workflow/edgeRules'
 
 const props = defineProps<{
+  id: string
   data: FlowNodeData & { resources?: WorkflowResourceMaps }
   selected?: boolean
   locked?: boolean
@@ -62,6 +64,23 @@ const isStart = computed(() => props.data.type === 'START')
 const isEnd = computed(() => props.data.type === 'END')
 const branchHandles = computed(() => props.data.schema?.branchHandles || [])
 
+// 从 VueFlow 内部 store 读取连线，用于判断输出点是否已被占用
+const { edges } = useVueFlow()
+const multipleOutputs = computed(() => Boolean(props.data.schema?.multipleOutputs))
+
+/** 指定输出点是否还能新增连线：多输出节点不限制，单输出节点每个输出点最多一条 */
+function canAddFromHandle(handleId: string) {
+  return multipleOutputs.value || !hasOutgoingEdge(edges.value, props.id, handleId)
+}
+
+/** 是否存在可用输出点，决定“按住 Ctrl 添加节点”提示是否展示 */
+const canAddAnyOutput = computed(() => {
+  if (isEnd.value) return false
+  if (multipleOutputs.value) return true
+  const handleIds = branchHandles.value.length ? branchHandles.value.map((item) => item.id) : ['output']
+  return handleIds.some((handleId) => !hasOutgoingEdge(edges.value, props.id, handleId))
+})
+
 onMounted(() => {
   window.addEventListener('keydown', updateAddModifier)
   window.addEventListener('keyup', updateAddModifier)
@@ -82,7 +101,7 @@ onBeforeUnmount(() => {
     @mouseenter="hovered = true"
     @mouseleave="hovered = false"
   >
-    <div v-if="hovered && !locked && !isEnd" class="node-operation-hint">按住 Ctrl 添加节点</div>
+    <div v-if="hovered && !locked && canAddAnyOutput" class="node-operation-hint">按住 Ctrl 添加节点</div>
     <Handle
       v-if="!isStart"
       type="target"
@@ -123,7 +142,7 @@ onBeforeUnmount(() => {
           class="node-handle branch-handle"
         />
         <button
-          v-if="hovered && addModifierPressed && !locked"
+          v-if="hovered && addModifierPressed && !locked && canAddFromHandle(handle.id)"
           type="button"
           class="handle-add-button"
           :aria-label="`从 ${handle.label || handle.id} 分支添加节点`"
@@ -143,7 +162,7 @@ onBeforeUnmount(() => {
         id="output"
       />
       <button
-        v-if="hovered && addModifierPressed && !locked"
+        v-if="hovered && addModifierPressed && !locked && canAddFromHandle('output')"
         type="button"
         class="handle-add-button"
         aria-label="添加下一个节点"

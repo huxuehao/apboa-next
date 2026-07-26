@@ -8,10 +8,9 @@ import VariableSelector from './VariableSelector.vue'
 import type { WorkflowFlowEdge, WorkflowFlowNode, WorkflowInputConfig, ConstantType } from '@/types/workflow'
 
 const sourceTypeOptions = [
-  { label: '常量', value: 'CONSTANT' as const, description: '直接填写固定值，支持字符串或 JSON 格式' },
-  { label: '变量', value: 'VARIABLE' as const, description: '引用工作流全局变量，运行时动态注入' },
+  { label: '固定值', value: 'CONSTANT' as const, description: '直接填写固定值，支持字符串或 JSON 格式' },
   { label: '节点输出', value: 'NODE_OUTPUT' as const, description: '引用其他节点的输出结果，构建节点间数据流' },
-  { label: '表达式', value: 'EXPRESSION' as const, description: '使用 GroovyShell 表达式动态计算值' },
+  { label: '全局变量', value: 'VARIABLE' as const, description: '引用工作流全局变量，运行时动态注入' },
 ]
 
 const constantTypeOptions: { label: string; value: ConstantType }[] = [
@@ -182,16 +181,9 @@ function removeBinding(index: number) {
         @clear="update(index, { nodeId: undefined, outputName: undefined })"
       />
 
-      <ATextarea
-        v-else
-        :rows="1"
-        :value="binding.value"
-        placeholder="支持编写GroovyShell表单式"
-        @update:value="(value: string) => update(index, { value })"
-      />
     </div>
 
-    <AButton v-if="!props.maxBindings || bindings.length < props.maxBindings" block size="small" class="add-binding" @click="addBinding">添加输入绑定</AButton>
+    <AButton v-if="!props.maxBindings || bindings.length < props.maxBindings" block class="add-binding" @click="addBinding">添加输入绑定</AButton>
   </div>
 </template>
 

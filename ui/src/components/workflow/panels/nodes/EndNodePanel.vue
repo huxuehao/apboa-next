@@ -56,8 +56,6 @@ const formatterOptions = [
       :nodes="nodes"
       :edges="edges"
       :current-node-id="node.id"
-      :max-bindings="1"
-      :readonly-name="true"
       @update:model-value="(value) => updateNode({ inputConfigs: value })"
     />
 

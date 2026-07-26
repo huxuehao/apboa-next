@@ -52,6 +52,7 @@ public class WorkflowDefinitionCompiler {
         bind(NodeType.STRING_TEMPLATE, com.hxh.apboa.node.string.template.StringTemplateNode.class, com.hxh.apboa.node.string.template.Config.class);
         bind(NodeType.UNSERIALIZE, com.hxh.apboa.node.unserialize.UnserializeNode.class, com.hxh.apboa.node.unserialize.Config.class);
         bind(NodeType.VARIABLE_AGG, com.hxh.apboa.node.variable.agg.VariableAggNode.class, com.hxh.apboa.node.variable.agg.Config.class);
+        bind(NodeType.CONSTANT, com.hxh.apboa.node.constant.ConstantNode.class, com.hxh.apboa.node.constant.Config.class);
         bind(NodeType.TOOL_EXECUTE, com.hxh.apboa.node.toolexecute.ToolExecuteNode.class, com.hxh.apboa.node.toolexecute.Config.class);
         bind(NodeType.MCP_CALL, com.hxh.apboa.node.mcp.McpNode.class, com.hxh.apboa.node.mcp.Config.class);
         bind(NodeType.EMAIL_SEND, com.hxh.apboa.node.channel.email.EmailSendNode.class, com.hxh.apboa.node.channel.email.Config.class);

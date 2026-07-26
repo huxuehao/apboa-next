@@ -120,6 +120,10 @@ public enum NodeType {
      */
     VARIABLE_AGG,
     /**
+     * 常量节点（Groovy 表达式动态计算值）
+     */
+    CONSTANT,
+    /**
      * 分类节点（作用和 switch-case 一样）
      */
     CLASSIFY,

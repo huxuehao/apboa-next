@@ -60,9 +60,6 @@ const currentYear = new Date().getFullYear()
         </div>
       </div>
       <div class="auth-brand-bottom">
-        <div class="auth-brand-decoration">
-          <div class="deco-shape"></div>
-        </div>
         <div class="auth-brand-footer">
           &copy; {{ currentYear }} Apboa Next. All rights reserved. Powered by Huxuehao
         </div>

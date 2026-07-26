@@ -28,6 +28,7 @@ export const nodeIconMap: Record<string, IconName> = {
   SERIALIZE: 'nodeserialize',
   UNSERIALIZE: 'nodeunserialize',
   VARIABLE_AGG: 'nodevariable_agg',
+  CONSTANT: 'nodevariable',
   NON_EMPTY_SELECT: 'nodenon_empty_select',
   MATCH_RESULT: 'nodematch_result',
   AGENT: 'nodellm',

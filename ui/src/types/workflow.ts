@@ -209,6 +209,8 @@ export interface WorkflowNodeSchema {
   inputConfigs: WorkflowInputConfig[]
   outputConfigs: WorkflowOutputConfig[]
   branchHandles?: Array<{ id: string; label: string }>
+  /** 是否允许同一输出点引出多条连线，默认 false。仅分支路由类节点（条件分支、结果匹配、意图识别）为 true */
+  multipleOutputs?: boolean
 }
 
 export interface WorkflowResourceMaps {

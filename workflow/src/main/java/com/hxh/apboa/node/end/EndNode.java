@@ -41,12 +41,12 @@ public class EndNode extends EnhancedNode implements EndableNode {
     /**
      * 创建成功输出
      * @param output 节点输出
-     * @param variables 变量
+     * @param inputs 输入变量
      * @return 节点输出
      */
-    private NodeOutput successNodeOutput(NodeOutput output, Map<String, Object> variables) {
+    private NodeOutput successNodeOutput(NodeOutput output, Map<String, Object> inputs) {
         TemplateFormatter formatter = TemplateFormatterFactory.createFormatter(config.getFormatterType());
-        Object formatRes = formatter.format(config.getResponseTemplate(), variables);
+        Object formatRes = formatter.format(config.getResponseTemplate(), inputs);
         output.addOutput(NodeConst.DEFAULT_OUTPUT_NAME, formatRes);
         output.markComplete();
         return output;

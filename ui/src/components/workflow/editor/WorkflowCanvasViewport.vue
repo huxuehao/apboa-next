@@ -2,9 +2,11 @@
 import { Background } from '@vue-flow/background'
 import { MiniMap } from '@vue-flow/minimap'
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { message } from 'ant-design-vue'
 import { VueFlow, useVueFlow, type Connection, type GraphNode } from '@vue-flow/core'
 import WorkflowGraphEdge from '@/components/workflow/edge/WorkflowGraphEdge.vue'
 import WorkflowGraphNode from '@/components/workflow/node/WorkflowGraphNode.vue'
+import { validateOutputEdge } from '@/utils/workflow/edgeRules'
 import type { WorkflowFlowEdge, WorkflowFlowNode } from '@/types/workflow'
 
 import '@vue-flow/core/dist/style.css'
@@ -158,7 +160,7 @@ function deduplicateGuides(guides: AlignGuide[]): AlignGuide[] {
   })
 }
 
-function onNodeDragStart({ node }: { node: GraphNode }) {
+function onNodeDragStart() {
   // if (props.readonly) return
   // emit('selectNode', node.id)
 }
@@ -242,7 +244,17 @@ function onConnect(connection: Connection) {
       (edge.sourceHandle || 'output') === sourceHandle &&
       (edge.targetHandle || 'input') === targetHandle,
   )
-  if (edgeExists) return
+  if (edgeExists) {
+    message.warning('这两个节点之间已存在相同连线')
+    return
+  }
+  // 单输出节点的输出点已有连线时拒绝新增，并告知用户原因
+  const sourceNode = nodes.value.find((item) => item.id === connection.source)
+  const rule = validateOutputEdge(sourceNode, edges.value, sourceHandle)
+  if (!rule.ok) {
+    message.warning(rule.reason)
+    return
+  }
   flow.addEdges([
     {
       id: `edge-${connection.source}-${sourceHandle}-${connection.target}-${Date.now()}`,
@@ -316,11 +328,22 @@ function getViewport() {
   return { ...viewport.value }
 }
 
+/** 返回各节点渲染后的真实尺寸，供自动布局按实际卡片高度对齐连接点 */
+function getNodeDimensions() {
+  const map: Record<string, { width: number; height: number }> = {}
+  flow.getNodes.value.forEach((node) => {
+    if (node.dimensions.width > 0 && node.dimensions.height > 0) {
+      map[node.id] = { width: node.dimensions.width, height: node.dimensions.height }
+    }
+  })
+  return map
+}
+
 function restoreViewport(vp: { x: number; y: number; zoom: number }) {
   flow.setViewport(vp, { duration: 0 })
 }
 
-defineExpose({ addAtCenter, fitAll, zoomInCanvas, zoomOutCanvas, resetZoom, fitNode, getViewport, restoreViewport })
+defineExpose({ addAtCenter, fitAll, zoomInCanvas, zoomOutCanvas, resetZoom, fitNode, getViewport, restoreViewport, getNodeDimensions })
 </script>
 
 <template>

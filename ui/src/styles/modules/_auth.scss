@@ -110,37 +110,6 @@
   line-height: 1.5;
 }
 
-.auth-brand-decoration {
-  position: absolute;
-  bottom: 80px;
-  right: 20px;
-  width: 260px;
-  height: 220px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.auth-brand-decoration .deco-shape {
-  width: 160px;
-  height: 160px;
-  border-radius: 32px;
-  background: linear-gradient(135deg, rgba(79, 110, 247, 0.15), rgba(139, 92, 246, 0.1));
-  transform: rotate(15deg);
-  position: relative;
-}
-
-.auth-brand-decoration .deco-shape::after {
-  content: '';
-  position: absolute;
-  top: 20px;
-  left: 20px;
-  right: 20px;
-  bottom: 20px;
-  border-radius: 20px;
-  background: linear-gradient(135deg, rgba(79, 110, 247, 0.1), rgba(139, 92, 246, 0.08));
-}
-
 .auth-brand-footer {
   font-size: 13px;
   color: #aaa;
