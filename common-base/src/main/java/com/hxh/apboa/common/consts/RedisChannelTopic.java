@@ -30,4 +30,9 @@ public class RedisChannelTopic {
 
     /** 技能文件同步频道（通知 runner-file 节点增量同步） */
     public static final String SKILL_FILE_SYNC_CHANNEL = "apboa:skill:file:sync";
+
+    /** 网关集群同步频道（应用/API/客户端变更广播，网关节点按消息类型刷新本地路由状态） */
+    public static final String GATEWAY_SYNC_CHANNEL = "apboa:gateway:cluster:sync";
+    /** 工作流发布/下线频道（发布、回滚、删除后广播工作流ID，订阅者刷新编译缓存并重注册关联API） */
+    public static final String WORKFLOW_PUBLISHED_CHANNEL = "apboa:workflow:published";
 }

@@ -1,0 +1,117 @@
+/**
+ * API服务管理子页面公共样式（网关应用、访问客户端、访问日志）
+ *
+ * @author huxuehao
+ */
+
+.api-app-page,
+.api-client-page,
+.api-logs-page {
+  padding: var(--spacing-lg);
+  min-height: 100%;
+
+  .intro-section {
+    margin-bottom: var(--spacing-lg);
+
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 13px;
+      color: var(--color-text-secondary);
+      cursor: pointer;
+      user-select: none;
+      margin-bottom: var(--spacing-sm);
+
+      &:hover {
+        font-weight: 600;
+      }
+    }
+
+    .intro-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: var(--spacing-sm);
+    }
+
+    .intro-title {
+      font-size: var(--font-size-2xl);
+      font-weight: 600;
+      color: var(--color-text-primary);
+      margin: 0;
+    }
+
+    .intro-desc {
+      font-size: var(--font-size-base);
+      line-height: 1.6;
+      max-width: 900px;
+    }
+  }
+
+  .list-section {
+    min-height: 400px;
+  }
+
+  .list-empty {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 400px;
+  }
+
+  .list-container {
+    background-color: #ffffff;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .item-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .item-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .item-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--color-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .item-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--color-text-secondary);
+  }
+
+  .item-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .actions-divider {
+    width: 1px;
+    height: 16px;
+    background-color: #e8e8e8;
+    margin: 0 2px;
+  }
+}
+
+.text-secondary {
+  color: var(--color-text-secondary);
+}

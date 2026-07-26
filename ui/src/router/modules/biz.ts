@@ -199,6 +199,60 @@ const bizRoutes: AppRouteRecordRaw[] = [
           hidden: true
         },
       },
+      {
+        path: RoutePaths.API_SERVICE,
+        name: RouteNames.API_SERVICE,
+        component: () => import('@/views/ApiService/index.vue'),
+        meta: {
+          title: 'API服务',
+          hidden: false
+        },
+      },
+      {
+        path: '/api-service/logs',
+        name: 'ApiServiceLogs',
+        component: () => import('@/views/ApiService/Logs.vue'),
+        meta: {
+          title: 'API访问日志',
+          hidden: true
+        },
+      },
+      {
+        path: '/api-service/new',
+        name: 'ApiServiceNew',
+        component: () => import('@/views/ApiService/Editor.vue'),
+        meta: {
+          title: '新增API',
+          hidden: true
+        },
+      },
+      {
+        path: '/api-service/:id/edit',
+        name: 'ApiServiceEdit',
+        component: () => import('@/views/ApiService/Editor.vue'),
+        meta: {
+          title: '编辑API',
+          hidden: true
+        },
+      },
+      {
+        path: '/api-service/apps',
+        name: 'ApiServiceApps',
+        component: () => import('@/views/ApiService/Apps.vue'),
+        meta: {
+          title: '网关应用',
+          hidden: true
+        },
+      },
+      {
+        path: '/api-service/clients',
+        name: 'ApiServiceClients',
+        component: () => import('@/views/ApiService/Clients.vue'),
+        meta: {
+          title: '访问客户端',
+          hidden: true
+        },
+      },
       // 设置管理
       {
         path: RoutePaths.SETTINGS_ACCOUNT,
