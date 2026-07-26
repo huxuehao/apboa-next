@@ -23,17 +23,7 @@ public class GatewaySyncPublisher {
      * 广播同步消息（事务提交后发送）
      */
     public void publish(GatewaySyncType type, List<Long> ids) {
-        publish(new GatewaySyncMessage(type, ids));
-    }
-
-    /**
-     * 广播同步消息（事务提交后发送，携带客户端编号）
-     */
-    public void publish(GatewaySyncType type, List<Long> ids, List<String> codes) {
-        publish(new GatewaySyncMessage(type, ids, codes));
-    }
-
-    private void publish(GatewaySyncMessage message) {
+        GatewaySyncMessage message = new GatewaySyncMessage(type, ids);
         messagePublisher.publishAfterCommit(RedisChannelTopic.GATEWAY_SYNC_CHANNEL, JsonUtils.toJsonStr(message));
     }
 }

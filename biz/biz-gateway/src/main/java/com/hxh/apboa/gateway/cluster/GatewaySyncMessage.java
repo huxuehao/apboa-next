@@ -20,22 +20,12 @@ public class GatewaySyncMessage {
      */
     private GatewaySyncType type;
     /**
-     * 关联的实体ID集合（应用/API/客户端）
+     * 关联的实体ID集合（应用/API）
      */
     private List<Long> ids;
-    /**
-     * 关联的客户端编号集合（CLIENT_REMOVE时使用，删除后无法回查）
-     */
-    private List<String> codes;
 
     public GatewaySyncMessage(GatewaySyncType type, List<Long> ids) {
         this.type = type;
         this.ids = ids;
-    }
-
-    public GatewaySyncMessage(GatewaySyncType type, List<Long> ids, List<String> codes) {
-        this.type = type;
-        this.ids = ids;
-        this.codes = codes;
     }
 }

@@ -10,7 +10,7 @@ export type GatewayParamPosition = 'PATH' | 'QUERY' | 'HEADER' | 'BODY'
 /** 参数类型 */
 export type GatewayParamType = 'STRING' | 'INTEGER' | 'LONG' | 'DOUBLE' | 'BOOLEAN' | 'OBJECT' | 'ARRAY'
 
-/** 鉴权类型 */
+/** 鉴权类型（TOKEN：平台鉴权，解析Authorization请求头；NONE：免鉴权） */
 export type GatewayAuthType = 'TOKEN' | 'NONE'
 
 /** 限流类型 */
@@ -33,7 +33,6 @@ export interface GatewayApiParam {
 /** API配置 */
 export interface GatewayApiConfig {
   authType: GatewayAuthType
-  authHeaderName: string
   limitType: GatewayLimitType
   routeTimes?: number
   ipTimes?: number
@@ -84,21 +83,6 @@ export interface GatewayApi {
   workflowStatus?: string
 }
 
-/** 网关客户端 */
-export interface GatewayClient {
-  id?: string
-  code: string
-  name: string
-  consumer?: string
-  expireAt?: string | null
-  tokenSecret?: string
-  tokenTtl?: number
-  online?: number
-  createdAt?: string
-  apiIds?: string[]
-  apiCount?: number
-}
-
 /** 访问日志 */
 export interface GatewayAccessLog {
   id: string
@@ -118,16 +102,6 @@ export interface GatewayAccessLog {
   error?: string
   startTime?: number
   endTime?: number
-  createdAt?: string
-}
-
-/** Token颁发日志 */
-export interface GatewayTokenLog {
-  id: string
-  clientCode?: string
-  accessIp?: string
-  status?: number
-  error?: string
   createdAt?: string
 }
 

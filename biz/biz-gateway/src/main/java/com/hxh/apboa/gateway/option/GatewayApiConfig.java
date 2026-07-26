@@ -16,13 +16,9 @@ import java.util.List;
 @Setter
 public class GatewayApiConfig {
     /**
-     * 鉴权类型
+     * 鉴权类型（TOKEN：解析Authorization请求头，复用平台登录token与SK；NONE：免鉴权）
      */
     private GatewayAuthType authType = GatewayAuthType.TOKEN;
-    /**
-     * 携带Token的请求头名称
-     */
-    private String authHeaderName = "X-Apboa-Token";
 
     /**
      * 访问限制类型

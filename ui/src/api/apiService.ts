@@ -3,9 +3,7 @@ import type { ApiResponse } from '@/types'
 import type {
   GatewayApp,
   GatewayApi,
-  GatewayClient,
   GatewayAccessLog,
-  GatewayTokenLog,
   GatewayPageResult
 } from '@/types/apiService'
 
@@ -92,46 +90,9 @@ export function getCategories() {
   return request.get<ApiResponse<string[]>>('/api/gateway/api/categories')
 }
 
-/** 查询API简要列表（客户端授权用） */
+/** 查询API简要列表（日志筛选用） */
 export function getBriefApis() {
   return request.get<ApiResponse<GatewayApi[]>>('/api/gateway/api/brief')
-}
-
-// ==================== 客户端 ====================
-
-/** 分页查询客户端 */
-export function pageClients(params: { page: number; size: number; name?: string; code?: string }) {
-  return request.get<ApiResponse<GatewayPageResult<GatewayClient>>>('/api/gateway/client/page', { params })
-}
-
-/** 客户端详情（含授权API与密钥） */
-export function getClient(id: string) {
-  return request.get<ApiResponse<GatewayClient>>(`/api/gateway/client/${id}`)
-}
-
-/** 新增客户端 */
-export function addClient(client: GatewayClient) {
-  return request.post<ApiResponse<boolean>>('/api/gateway/client', client)
-}
-
-/** 更新客户端 */
-export function updateClient(client: GatewayClient) {
-  return request.put<ApiResponse<boolean>>('/api/gateway/client', client)
-}
-
-/** 删除客户端 */
-export function deleteClients(ids: string[]) {
-  return request.delete<ApiResponse<boolean>>('/api/gateway/client', { data: ids })
-}
-
-/** 客户端上下线 */
-export function toggleClientOnline(id: string, v: number) {
-  return request.put<ApiResponse<boolean>>(`/api/gateway/client/${id}/online/${v}`)
-}
-
-/** 重新生成Token密钥 */
-export function regenerateSecret(id: string) {
-  return request.put<ApiResponse<string>>(`/api/gateway/client/${id}/secret`)
 }
 
 // ==================== 访问日志 ====================
@@ -155,16 +116,4 @@ export function getAccessLog(id: string) {
 /** 删除访问日志 */
 export function deleteAccessLogs(ids: string[]) {
   return request.delete<ApiResponse<boolean>>('/api/gateway/access-log', { data: ids })
-}
-
-// ==================== Token日志 ====================
-
-/** 分页查询Token颁发日志 */
-export function pageTokenLogs(params: { page: number; size: number; clientCode?: string }) {
-  return request.get<ApiResponse<GatewayPageResult<GatewayTokenLog>>>('/api/gateway/token-log/page', { params })
-}
-
-/** 删除Token颁发日志 */
-export function deleteTokenLogs(ids: string[]) {
-  return request.delete<ApiResponse<boolean>>('/api/gateway/token-log', { data: ids })
 }

@@ -17,9 +17,5 @@ public enum GatewaySyncType {
     /** API下线 */
     API_OFFLINE,
     /** API配置变更（先卸载后重挂载） */
-    API_RESET,
-    /** 客户端新增/变更（刷新鉴权缓存） */
-    CLIENT_REFRESH,
-    /** 客户端删除（移除鉴权缓存） */
-    CLIENT_REMOVE
+    API_RESET
 }

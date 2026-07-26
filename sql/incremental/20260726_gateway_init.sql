@@ -62,45 +62,6 @@ KEY `idx_gateway_api_workflow_tenant_wf` (`tenant_id`, `workflow_id`),
 KEY `idx_gateway_api_workflow_wf` (`workflow_id`)
 ) COMMENT='网关API与已发布工作流绑定关系（n:1）';
 
-DROP TABLE IF EXISTS `gateway_client`;
-CREATE TABLE `gateway_client` (
-`id` bigint NOT NULL COMMENT '主键',
-`tenant_id` bigint NOT NULL COMMENT '租户ID',
-`code` varchar(64) NOT NULL COMMENT '客户端编码（用于请求令牌）',
-`name` varchar(100) NOT NULL COMMENT '客户端名称',
-`consumer` varchar(100) DEFAULT NULL COMMENT '消费者（客户端所有者）',
-`expire_at` datetime DEFAULT NULL COMMENT '客户端过期时间',
-`token_secret` varchar(128) NOT NULL COMMENT '令牌签名密钥（HMAC256）',
-`token_ttl` bigint NOT NULL DEFAULT 7200000 COMMENT '令牌有效期（毫秒）',
-`online` tinyint(1) NOT NULL DEFAULT 1 COMMENT '在线状态：1在线，0离线',
-`enabled` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否启用',
-`created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-`updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-`created_by` bigint DEFAULT NULL COMMENT '创建人',
-`updated_by` bigint DEFAULT NULL COMMENT '更新人',
-PRIMARY KEY (`id`),
-UNIQUE KEY `uk_gateway_client_code` (`code`),
-KEY `idx_gateway_client_tenant_enabled` (`tenant_id`, `enabled`),
-KEY `idx_gateway_client_tenant_name` (`tenant_id`, `name`)
-) COMMENT='网关令牌客户端';
-
-DROP TABLE IF EXISTS `gateway_client_api`;
-CREATE TABLE `gateway_client_api` (
-`id` bigint NOT NULL COMMENT '主键',
-`tenant_id` bigint NOT NULL COMMENT '租户ID',
-`client_id` bigint NOT NULL COMMENT '网关客户端ID',
-`api_id` bigint NOT NULL COMMENT '网关API ID',
-`enabled` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否启用',
-`created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-`updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-`created_by` bigint DEFAULT NULL COMMENT '创建人',
-`updated_by` bigint DEFAULT NULL COMMENT '更新人',
-PRIMARY KEY (`id`),
-UNIQUE KEY `uk_gateway_client_api` (`client_id`, `api_id`),
-KEY `idx_gateway_client_api_tenant` (`tenant_id`, `client_id`),
-KEY `idx_gateway_client_api_api` (`api_id`)
-) COMMENT='网关客户端与API授权关系';
-
 DROP TABLE IF EXISTS `gateway_access_log`;
 CREATE TABLE `gateway_access_log` (
 `id` bigint NOT NULL COMMENT '主键',
@@ -132,21 +93,3 @@ KEY `idx_gateway_access_log_tenant_app` (`tenant_id`, `app_id`),
 KEY `idx_gateway_access_log_tenant_status` (`tenant_id`, `status`),
 KEY `idx_gateway_access_log_created` (`created_at`)
 ) COMMENT='网关API访问日志';
-
-DROP TABLE IF EXISTS `gateway_token_log`;
-CREATE TABLE `gateway_token_log` (
-`id` bigint NOT NULL COMMENT '主键',
-`tenant_id` bigint NOT NULL COMMENT '租户ID',
-`client_code` varchar(64) NOT NULL COMMENT '客户端编码',
-`access_ip` varchar(64) DEFAULT NULL COMMENT '访问IP',
-`status` tinyint(1) NOT NULL DEFAULT 1 COMMENT '颁发状态：1成功，0失败',
-`error` varchar(500) DEFAULT NULL COMMENT '错误信息',
-`enabled` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否启用',
-`created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-`updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-`created_by` bigint DEFAULT NULL COMMENT '创建人',
-`updated_by` bigint DEFAULT NULL COMMENT '更新人',
-PRIMARY KEY (`id`),
-KEY `idx_gateway_token_log_tenant_code` (`tenant_id`, `client_code`),
-KEY `idx_gateway_token_log_created` (`created_at`)
-) COMMENT='网关令牌颁发日志';

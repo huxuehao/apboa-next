@@ -244,15 +244,6 @@ const bizRoutes: AppRouteRecordRaw[] = [
           hidden: true
         },
       },
-      {
-        path: '/api-service/clients',
-        name: 'ApiServiceClients',
-        component: () => import('@/views/ApiService/Clients.vue'),
-        meta: {
-          title: '访问客户端',
-          hidden: true
-        },
-      },
       // 设置管理
       {
         path: RoutePaths.SETTINGS_ACCOUNT,

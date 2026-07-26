@@ -7,7 +7,7 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { PlusOutlined, SearchOutlined, AppstoreOutlined, KeyOutlined, FileTextOutlined } from '@ant-design/icons-vue'
+import { PlusOutlined, SearchOutlined, AppstoreOutlined, FileTextOutlined } from '@ant-design/icons-vue'
 import type { GatewayApi, GatewayApp } from '@/types/apiService'
 import * as apiServiceApi from '@/api/apiService'
 import ApiServiceItem from '@/components/api-service/ApiServiceItem.vue'
@@ -172,10 +172,6 @@ function goApps() {
   router.push('/api-service/apps')
 }
 
-function goClients() {
-  router.push('/api-service/clients')
-}
-
 function goLogs() {
   router.push('/api-service/logs')
 }
@@ -197,7 +193,7 @@ onMounted(() => {
       <h3 class="intro-title">API服务</h3>
       <p class="intro-desc text-secondary">
         API服务模块基于异步非阻塞网关，将已发布的工作流暴露为标准HTTP API。<br/>
-        通过网关应用管理服务端口，通过访问客户端与Token体系控制调用权限，请求参数将自动转换为工作流的输入参数。
+        鉴权复用平台统一凭证体系：请求携带 Authorization 请求头（平台登录Token或已注册的SK）即可调用，请求参数将自动转换为工作流的输入参数。
       </p>
     </section>
 
@@ -250,11 +246,6 @@ onMounted(() => {
         <AButton @click="goApps">
           <template #icon><AppstoreOutlined /></template>
           网关应用
-        </AButton>
-
-        <AButton @click="goClients">
-          <template #icon><KeyOutlined /></template>
-          访问客户端
         </AButton>
 
         <AButton

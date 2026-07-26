@@ -58,7 +58,6 @@ const wholeBodyParam = ref<string>('')
 
 // 鉴权与限流
 const authType = ref<'TOKEN' | 'NONE'>('TOKEN')
-const authHeaderName = ref('X-Apboa-Token')
 const limitType = ref<'NONE' | 'MINUTE' | 'HOUR' | 'DAY'>('NONE')
 const routeTimes = ref<number | null>(null)
 const ipTimes = ref<number | null>(null)
@@ -255,7 +254,6 @@ async function loadApiData() {
 
     const config = api.config || ({} as GatewayApiConfig)
     authType.value = config.authType || 'TOKEN'
-    authHeaderName.value = config.authHeaderName || 'X-Apboa-Token'
     limitType.value = config.limitType || 'NONE'
     routeTimes.value = config.routeTimes ?? null
     ipTimes.value = config.ipTimes ?? null
@@ -311,10 +309,6 @@ async function handleSave() {
       return
     }
   }
-  if (authType.value === 'TOKEN' && !authHeaderName.value.trim()) {
-    message.warning('请填写Token请求头名称')
-    return
-  }
   if (limitType.value !== 'NONE' && !(routeTimes.value || ipTimes.value)) {
     message.warning('已开启访问限制，请至少填写一项限制次数')
     return
@@ -324,7 +318,6 @@ async function handleSave() {
   try {
     const config: GatewayApiConfig = {
       authType: authType.value,
-      authHeaderName: authHeaderName.value.trim(),
       limitType: limitType.value,
       routeTimes: routeTimes.value ?? undefined,
       ipTimes: ipTimes.value ?? undefined,
@@ -579,19 +572,21 @@ onMounted(async () => {
                   <ASegmented
                     v-model:value="authType"
                     :options="[
-                      { label: 'Token鉴权', value: 'TOKEN' },
+                      { label: '平台鉴权', value: 'TOKEN' },
                       { label: '免鉴权', value: 'NONE' }
                     ]"
                   />
                 </div>
               </div>
-              <div class="form-row" v-if="authType === 'TOKEN'">
-                <div class="form-label">Token请求头名称</div>
-                <div class="form-control">
-                  <AInput v-model:value="authHeaderName" placeholder="X-Apboa-Token" :maxlength="64" />
-                </div>
-              </div>
             </div>
+
+            <AAlert
+              v-if="authType === 'TOKEN'"
+              type="info"
+              show-icon
+              style="margin-bottom: 24px"
+              message="平台鉴权复用统一凭证体系：调用时在 Authorization 请求头携带平台登录Token（Bearer xxx）或已注册的SK（sk-xxx），且凭证需与本API属于同一租户。SK可在 设置 - API Keys 中创建。"
+            />
 
             <div class="form-row">
               <div class="form-label">访问限制（固定时间窗）</div>

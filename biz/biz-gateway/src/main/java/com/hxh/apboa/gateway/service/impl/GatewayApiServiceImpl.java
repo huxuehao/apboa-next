@@ -14,12 +14,10 @@ import com.hxh.apboa.gateway.cluster.GatewaySyncType;
 import com.hxh.apboa.gateway.entity.GatewayApi;
 import com.hxh.apboa.gateway.entity.GatewayApiWorkflow;
 import com.hxh.apboa.gateway.entity.GatewayApp;
-import com.hxh.apboa.gateway.entity.GatewayClientApi;
 import com.hxh.apboa.gateway.enums.GatewayParamPosition;
 import com.hxh.apboa.gateway.mapper.GatewayApiMapper;
 import com.hxh.apboa.gateway.mapper.GatewayApiWorkflowMapper;
 import com.hxh.apboa.gateway.mapper.GatewayAppMapper;
-import com.hxh.apboa.gateway.mapper.GatewayClientApiMapper;
 import com.hxh.apboa.gateway.option.GatewayApiConfig;
 import com.hxh.apboa.gateway.option.GatewayApiParam;
 import com.hxh.apboa.gateway.service.GatewayApiService;
@@ -54,7 +52,6 @@ public class GatewayApiServiceImpl extends ServiceImpl<GatewayApiMapper, Gateway
 
     private final GatewayAppMapper gatewayAppMapper;
     private final GatewayApiWorkflowMapper apiWorkflowMapper;
-    private final GatewayClientApiMapper clientApiMapper;
     private final WorkflowMapper workflowMapper;
     private final GatewaySyncPublisher syncPublisher;
 
@@ -128,7 +125,6 @@ public class GatewayApiServiceImpl extends ServiceImpl<GatewayApiMapper, Gateway
         boolean removed = removeByIds(ids);
         if (removed) {
             apiWorkflowMapper.delete(new LambdaQueryWrapper<GatewayApiWorkflow>().in(GatewayApiWorkflow::getApiId, ids));
-            clientApiMapper.delete(new LambdaQueryWrapper<GatewayClientApi>().in(GatewayClientApi::getApiId, ids));
             if (!onlineIds.isEmpty()) {
                 syncPublisher.publish(GatewaySyncType.API_OFFLINE, onlineIds);
             }

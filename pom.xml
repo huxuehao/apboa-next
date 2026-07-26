@@ -15,12 +15,13 @@
     <module>biz</module>
     <!-- 引擎层 -->
     <module>engine</module>
+    <!-- 网关层 -->
+    <module>gateway</module>
     <!-- 调度层 -->
     <module>scheduler</module>
     <!-- 应用层 -->
     <module>runner-console</module>
     <module>runner-runtime</module>
-    <module>runner-gateway</module>
     <module>runner-proxy</module>
     <module>runner-file</module>
     <module>runner-websocket</module>
@@ -270,6 +271,11 @@
       <dependency>
         <groupId>com.hxh.apboa.next</groupId>
         <artifactId>biz-gateway</artifactId>
+        <version>1.0-SNAPSHOT</version>
+      </dependency>
+      <dependency>
+        <groupId>com.hxh.apboa.next</groupId>
+        <artifactId>gateway</artifactId>
         <version>1.0-SNAPSHOT</version>
       </dependency>
     </dependencies>

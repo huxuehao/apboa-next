@@ -71,8 +71,5 @@ public class TableConst {
     public static final String GATEWAY_APP = "gateway_app";
     public static final String GATEWAY_API = "gateway_api";
     public static final String GATEWAY_API_WORKFLOW = "gateway_api_workflow";
-    public static final String GATEWAY_CLIENT = "gateway_client";
-    public static final String GATEWAY_CLIENT_API = "gateway_client_api";
     public static final String GATEWAY_ACCESS_LOG = "gateway_access_log";
-    public static final String GATEWAY_TOKEN_LOG = "gateway_token_log";
 }

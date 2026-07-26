@@ -46,7 +46,7 @@ const methodColor = computed(() => {
 
 /** 鉴权标签 */
 const authLabel = computed(() => {
-  return props.data.config?.authType === 'NONE' ? '免鉴权' : 'Token鉴权'
+  return props.data.config?.authType === 'NONE' ? '免鉴权' : '平台鉴权'
 })
 
 /**
