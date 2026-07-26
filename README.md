@@ -18,6 +18,8 @@
   <img src="https://img.shields.io/badge/License-MIT-green" alt="MIT License"/>
 </p>
 
+> **仓库镜像**：本项目的官方主站为 [https://gitee.com/studioustiger/apboa-next](https://gitee.com/studioustiger/apboa-next)，最新代码将优先发布在主站上，并定期同步至 [https://github.com/huxuehao/apboa-next](https://github.com/huxuehao/apboa-next)。推荐通过 Gitee 主站获取最新版本。
+
 Apboa Next 是基于ReAct理念的智能体开发与管理平台，旨在简化AI智能体的构建流程，帮助用户快速打造专属数字助手。平台整合了敏感词过滤、提示词管理、多模型接入、工具集成、知识库和智能体编排等核心功能，形成一站式解决方案，架构清晰，易于使用。
 
 ## 目录
