@@ -347,13 +347,13 @@ const goToForgotPassword = () => {
         <div class="auth-divider">Apboa Next 项目仓库地址</div>
         <div class="auth-social-login">
           <div class="auth-social-icon">
-            <a href="https://github.com/huxuehao/apboa-next" target="_blank" rel="noopener noreferrer">
-              <img src="https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/github.svg" alt="GitHub" width="24">
+            <a href="https://gitee.com/studioustiger/apboa-next" target="_blank" rel="noopener noreferrer">
+              <img src="https://gitee.com/static/images/logo-en.svg" alt="Gitee" width="24">
             </a>
           </div>
           <div class="auth-social-icon">
-            <a href="https://gitee.com/studioustiger/apboa-next" target="_blank" rel="noopener noreferrer">
-              <img src="https://gitee.com/static/images/logo-en.svg" alt="Gitee" width="24">
+            <a href="https://github.com/huxuehao/apboa-next" target="_blank" rel="noopener noreferrer">
+              <img src="https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/github.svg" alt="GitHub" width="24">
             </a>
           </div>
         </div>
