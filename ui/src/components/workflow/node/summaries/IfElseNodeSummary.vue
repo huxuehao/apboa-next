@@ -32,13 +32,6 @@ function branchLabel(index: number) {
   return index === 0 ? 'IF' : 'ELSE IF'
 }
 
-function branchDetail(branch: BranchLike) {
-  if (branch.symbol === 'EXPRESSION') {
-    return branch.conditionExpression || '表达式未配置'
-  }
-  return branch.symbol || '?'
-}
-
 const elseConfigured = computed(() => {
   const value = props.config.elseNextNodeId || props.config.falseNextNodeId
   return Boolean(value)
@@ -53,10 +46,10 @@ const elseConfigured = computed(() => {
       :icon="index === 0 ? 'nodeif_else' : undefined"
       :icon-color="index === 0 ? schema.color : undefined"
     >
-      {{ branchLabel(index) }} · {{ branchDetail(branch) }}
+      {{ branchLabel(index) }}
     </SummaryRow>
     <SummaryRow v-if="hiddenCount > 0">等 {{ branches.length }} 个分支</SummaryRow>
-    <SummaryRow>ELSE: {{ elseConfigured ? '已配置' : '未配置' }}</SummaryRow>
+    <SummaryRow>ELSE{{ elseConfigured ? '' : ': 未配置' }}</SummaryRow>
   </div>
 </template>
 

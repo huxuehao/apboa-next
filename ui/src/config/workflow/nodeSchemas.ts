@@ -7,14 +7,14 @@ import type {
 export const WORKFLOW_GROUPS = [
   { key: 'basic', title: '基础' },
   { key: 'logic', title: '逻辑' },
+  { key: 'transform', title: '转换' },
+  { key: 'list', title: '列表' },
+  { key: 'variable', title: '变量' },
   { key: 'data', title: '数据' },
   { key: 'cache', title: '缓存' },
   { key: 'message', title: '消息' },
   { key: 'integration', title: '集成' },
-  { key: 'channel', title: '渠道' },
-  { key: 'transform', title: '转换' },
-  { key: 'list', title: '列表' },
-  { key: 'variable', title: '变量' },
+  { key: 'channel', title: '通知' },
   { key: 'business', title: '业务' },
 ] as const
 
@@ -40,20 +40,20 @@ export const workflowNodeSchemas: WorkflowNodeSchema[] = [
     showSummary: false,
   }),
   schema({
-    type: 'NO_OPERATION', title: '空操作', group: 'basic',
-    description: '不执行任何操作，仅用于桥接两个节点。',
-    icon: 'noOperation', color: '#8E58DA', panelComponent: 'NoOperationNodePanel',
-    defaultConfig: {},
-    inputConfigs: [], outputConfigs: [],
-    showSummary: false,
-  }),
-  schema({
     type: 'END', title: '结束', group: 'basic',
     description: '工作流结束节点，按模板生成最终响应。',
     icon: 'stop', color: '#8c8c8c', panelComponent: 'EndNodePanel',
     defaultConfig: { responseTemplate: '${input}', formatterType: 'STRING' },
     inputConfigs: input(), outputConfigs: output(),
     summaryComponent: 'EndNodeSummary',
+    showSummary: false,
+  }),
+  schema({
+    type: 'NO_OPERATION', title: '空操作', group: 'basic',
+    description: '不执行任何操作，仅用于桥接两个节点。',
+    icon: 'noOperation', color: '#8E58DA', panelComponent: 'NoOperationNodePanel',
+    defaultConfig: {},
+    inputConfigs: [], outputConfigs: [],
     showSummary: false,
   }),
   schema({
@@ -68,6 +68,7 @@ export const workflowNodeSchemas: WorkflowNodeSchema[] = [
     inputConfigs: input(), outputConfigs: output('String'),
     summaryComponent: 'IfElseNodeSummary',
     showSummary: true,
+    multipleOutputs: true,
   }),
   schema({
     type: 'ITERATE', title: '迭代处理', group: 'logic',
@@ -128,6 +129,7 @@ public class DataProcess implements IteratorExecutor {
     inputConfigs: input(), outputConfigs: output(),
     summaryComponent: 'MatchResultNodeSummary',
     showSummary: true,
+    multipleOutputs: true,
   }),
   schema({
     type: 'CACHE_FETCH', title: '读取缓存', group: 'cache',
@@ -231,6 +233,7 @@ public class DataProcess implements IteratorExecutor {
     outputConfigs: [{ name: 'intent', type: 'String', description: '匹配到的意图名称' }],
     summaryComponent: 'IntentRecognitionNodeSummary',
     showSummary: true,
+    multipleOutputs: true,
   }),
   schema({
     type: 'TOOL_EXECUTE', title: '工具执行', group: 'integration',
@@ -341,12 +344,21 @@ public class CodeExecute implements CodeExecutor {
     showSummary: true,
   }),
   schema({
-    type: 'VARIABLE_AGG', title: '变量聚合', group: 'variable',
+    type: 'VARIABLE_AGG', title: '聚合操作', group: 'variable',
     description: '将多个输入聚合为数组、Map 或字符串。',
     icon: 'aggregate', color: '#faad14', panelComponent: 'VariableAggNodePanel',
     defaultConfig: { strategy: 'MAP', excludeNull: false, splicingSymbol: '' },
     inputConfigs: input(), outputConfigs: output(),
     summaryComponent: 'VariableAggNodeSummary',
+    showSummary: true,
+  }),
+  schema({
+    type: 'CONSTANT', title: '定义常量', group: 'variable',
+    description: '用 Groovy 表达式对上游节点输出与全局变量动态计算，结果作为常量输出供下游使用。',
+    icon: 'nodevariable', color: '#faad14', panelComponent: 'ConstantNodePanel',
+    defaultConfig: { evaluatorType: 'GROOVY', expression: '' },
+    inputConfigs: input(), outputConfigs: output(),
+    summaryComponent: 'ConstantNodeSummary',
     showSummary: true,
   }),
   // ========== 渠道 ==========

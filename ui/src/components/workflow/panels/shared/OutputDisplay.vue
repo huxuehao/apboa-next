@@ -79,7 +79,7 @@ defineProps<{
 }
 
 .output-empty {
-  padding: 14px;
+  padding: 6px;
   border: 1px dashed #d9d9d9;
   border-radius: 8px;
   color: #bfbfbf;

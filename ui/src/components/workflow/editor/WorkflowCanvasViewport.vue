@@ -2,9 +2,11 @@
 import { Background } from '@vue-flow/background'
 import { MiniMap } from '@vue-flow/minimap'
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { message } from 'ant-design-vue'
 import { VueFlow, useVueFlow, type Connection, type GraphNode } from '@vue-flow/core'
 import WorkflowGraphEdge from '@/components/workflow/edge/WorkflowGraphEdge.vue'
 import WorkflowGraphNode from '@/components/workflow/node/WorkflowGraphNode.vue'
+import { validateOutputEdge } from '@/utils/workflow/edgeRules'
 import type { WorkflowFlowEdge, WorkflowFlowNode } from '@/types/workflow'
 
 import '@vue-flow/core/dist/style.css'
@@ -242,7 +244,17 @@ function onConnect(connection: Connection) {
       (edge.sourceHandle || 'output') === sourceHandle &&
       (edge.targetHandle || 'input') === targetHandle,
   )
-  if (edgeExists) return
+  if (edgeExists) {
+    message.warning('这两个节点之间已存在相同连线')
+    return
+  }
+  // 单输出节点的输出点已有连线时拒绝新增，并告知用户原因
+  const sourceNode = nodes.value.find((item) => item.id === connection.source)
+  const rule = validateOutputEdge(sourceNode, edges.value, sourceHandle)
+  if (!rule.ok) {
+    message.warning(rule.reason)
+    return
+  }
   flow.addEdges([
     {
       id: `edge-${connection.source}-${sourceHandle}-${connection.target}-${Date.now()}`,

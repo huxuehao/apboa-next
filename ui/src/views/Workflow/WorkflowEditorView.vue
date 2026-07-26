@@ -24,6 +24,7 @@ import {
   getWorkflowNodeSchema,
 } from '@/config/workflow/nodeSchemas'
 import { createDefaultWorkflowDefinition, ensureWorkflowDefinition } from '@/utils/workflow/defaultDefinition'
+import { validateOutputEdge } from '@/utils/workflow/edgeRules'
 import type {
   Workflow,
   WorkflowDefinition,
@@ -431,11 +432,20 @@ function addNode(schema: WorkflowNodeSchema) {
     insertNodeOnEdge(schema, pendingEdgeId.value)
     return
   }
-  snapshot()
-  const id = `${schema.type.toLowerCase()}-${Date.now()}`
   const sourceId = pendingSourceNodeId.value
   const sourceHandle = pendingSourceHandle.value || 'output'
   const sourceNode = sourceId ? nodes.value.find((n) => n.id === sourceId) : null
+  // 兜底校验：弹出节点库期间源节点输出点可能已被占用，单输出节点不允许再建连线
+  if (sourceNode) {
+    const rule = validateOutputEdge(sourceNode, edges.value, sourceHandle)
+    if (!rule.ok) {
+      message.warning(rule.reason)
+      closeLibrary()
+      return
+    }
+  }
+  snapshot()
+  const id = `${schema.type.toLowerCase()}-${Date.now()}`
   const position = resolveNodePosition(
     sourceNode
       ? { x: sourceNode.position.x + 320, y: sourceNode.position.y }
@@ -929,6 +939,13 @@ function toggleLibrary() {
 
 function openLibraryFromNode(payload: { sourceNodeId: string; sourceHandle: string; x: number; y: number }) {
   if (readonly.value) return
+  // 单输出节点的输出点已有连线时，直接拒绝唤起节点库并提示原因
+  const sourceNode = nodes.value.find((n) => n.id === payload.sourceNodeId)
+  const rule = validateOutputEdge(sourceNode, edges.value, payload.sourceHandle || 'output')
+  if (!rule.ok) {
+    message.warning(rule.reason)
+    return
+  }
   pendingSourceNodeId.value = payload.sourceNodeId
   pendingSourceHandle.value = payload.sourceHandle || 'output'
   pendingEdgeId.value = null

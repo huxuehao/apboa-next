@@ -56,6 +56,7 @@ export const ICON_DEFS: IconDef[] = [
   { name: 'nodeprocessOutput', label: '过程输出', unicode: '\\e633' },
   { name: 'nodeintentRecognition', label: '意图识别', unicode: '\\e604' },
   { name: 'nodenoOperation', label: '空操作', unicode: '\\e69c' },
+  { name: 'nodebusiness', label: '常量节点', unicode: '\\e608' },
 ]
 
 /**

@@ -135,7 +135,7 @@ function updateString(index: number, value: string) {
 
     <div v-else class="array-empty">暂无数据</div>
 
-    <AButton block size="small" class="add-row" @click="addRow">
+    <AButton block class="add-row" @click="addRow">
       <template #icon><PlusOutlined /></template>
       添加一项
     </AButton>
