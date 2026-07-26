@@ -172,7 +172,7 @@ public class WorkflowTool implements AgentTool {
         params.forEach(param -> {
             String name = param.getName();
             Object value = inputs.get(name);
-            if (value != null) {
+            if (value == null) {
                 value = param.getValue();
             }
 
