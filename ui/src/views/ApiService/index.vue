@@ -197,6 +197,9 @@ onMounted(() => {
       <p class="intro-desc text-secondary">
         API服务模块基于异步非阻塞网关，将已发布的工作流暴露为标准HTTP API。<br/>
         鉴权复用平台统一凭证体系：请求携带 Authorization 请求头（平台登录Token或已注册的SK）即可调用，请求参数将自动转换为工作流的输入参数。
+        <span class="intro-notice">
+        注意：Docker 部署下暂不支持访问 API 服务。网关应用监听的端口在容器内动态开启，无法映射到宿主机，外部请求无法到达，统一访问入口方案正在建设中。
+      </span>
       </p>
     </section>
 

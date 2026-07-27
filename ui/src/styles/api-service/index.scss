@@ -23,6 +23,15 @@
       line-height: 1.6;
       max-width: 900px;
     }
+
+    // Docker 部署限制提示，橘色醒目展示
+    .intro-notice {
+      font-size: var(--font-size-base);
+      line-height: 1.6;
+      max-width: 900px;
+      margin-top: var(--spacing-xs);
+      color: #fa8c16;
+    }
   }
 
   .filter-section {

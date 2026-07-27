@@ -27,24 +27,9 @@ public class AccessLogInitHandler implements Handler<RoutingContext> {
         accessLog.setApiId(api.getId());
         accessLog.setMethod(ctx.request().method().name());
         accessLog.setPath(ctx.request().path());
-        accessLog.setAccessIp(resolveIp(ctx));
+        accessLog.setAccessIp(RequestIpResolver.resolve(ctx));
         accessLog.setStartTime(System.currentTimeMillis());
         ctx.put(GatewayContextKeys.ACCESS_LOG, accessLog);
         ctx.next();
-    }
-
-    /**
-     * 解析访问IP，优先取代理透传头
-     */
-    private String resolveIp(RoutingContext ctx) {
-        String forwarded = ctx.request().getHeader("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isBlank()) {
-            return forwarded.split(",")[0].trim();
-        }
-        String realIp = ctx.request().getHeader("X-Real-IP");
-        if (realIp != null && !realIp.isBlank()) {
-            return realIp;
-        }
-        return ctx.request().remoteAddress() == null ? null : ctx.request().remoteAddress().host();
     }
 }

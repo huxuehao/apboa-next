@@ -1,20 +1,29 @@
 package com.hxh.apboa.gateway.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.hxh.apboa.common.util.JsonUtils;
 import com.hxh.apboa.gateway.cluster.GatewaySyncPublisher;
 import com.hxh.apboa.gateway.cluster.GatewaySyncType;
 import com.hxh.apboa.gateway.entity.GatewayApi;
 import com.hxh.apboa.gateway.entity.GatewayApp;
 import com.hxh.apboa.gateway.mapper.GatewayApiMapper;
 import com.hxh.apboa.gateway.mapper.GatewayAppMapper;
+import com.hxh.apboa.gateway.option.GatewayAppConfig;
+import com.hxh.apboa.gateway.option.GatewayAppWhitelistItem;
 import com.hxh.apboa.gateway.service.GatewayAppService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.net.InetAddress;
+import java.net.UnknownHostException;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * 描述：网关应用服务实现
@@ -24,6 +33,9 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 public class GatewayAppServiceImpl extends ServiceImpl<GatewayAppMapper, GatewayApp> implements GatewayAppService {
+    private static final Pattern IPV4_PATTERN =
+            Pattern.compile("^((25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.){3}(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)$");
+
     private final GatewayApiMapper gatewayApiMapper;
     private final GatewaySyncPublisher syncPublisher;
 
@@ -61,7 +73,7 @@ public class GatewayAppServiceImpl extends ServiceImpl<GatewayAppMapper, Gateway
                     .set(GatewayApp::getPort, app.getPort())
                     .set(GatewayApp::getConfig, app.getConfig() == null
                             ? null
-                            : com.hxh.apboa.common.util.JsonUtils.toJsonStr(app.getConfig()))
+                            : JsonUtils.toJsonStr(app.getConfig()))
                     .update();
         } catch (DuplicateKeyException e) {
             throw new RuntimeException("端口 " + app.getPort() + " 已被其他应用占用");
@@ -111,7 +123,7 @@ public class GatewayAppServiceImpl extends ServiceImpl<GatewayAppMapper, Gateway
             syncPublisher.publish(GatewaySyncType.APP_ONLINE, List.of(id));
         } else {
             // 应用下线时级联下线其下所有在线API，数据面卸载应用时会一并卸载路由
-            gatewayApiMapper.update(null, new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<GatewayApi>()
+            gatewayApiMapper.update(null, new LambdaUpdateWrapper<GatewayApi>()
                     .eq(GatewayApi::getAppId, id)
                     .eq(GatewayApi::getOnline, 1)
                     .set(GatewayApi::getOnline, 0));
@@ -129,6 +141,60 @@ public class GatewayAppServiceImpl extends ServiceImpl<GatewayAppMapper, Gateway
         }
         if (app.getPort() == null || app.getPort() < 1024 || app.getPort() > 65535) {
             throw new RuntimeException("端口必须在 1024-65535 之间");
+        }
+        validateWhitelist(app.obtainConfig());
+    }
+
+    /**
+     * 白名单校验：IP必填且格式合法、不允许重复、描述长度受限
+     */
+    private void validateWhitelist(GatewayAppConfig config) {
+        List<GatewayAppWhitelistItem> whitelist = config.getWhitelist();
+        if (whitelist == null || whitelist.isEmpty()) {
+            return;
+        }
+        Set<String> seen = new HashSet<>();
+        for (GatewayAppWhitelistItem item : whitelist) {
+            String ip = item.getIp() == null ? "" : item.getIp().trim();
+            if (ip.isEmpty()) {
+                throw new RuntimeException("白名单IP不能为空");
+            }
+            if (!isValidIp(ip)) {
+                throw new RuntimeException("白名单IP格式不合法：" + ip);
+            }
+            // 用归一化值去重，避免IPv6缩写与完整展开形式绕过重复检测
+            if (!seen.add(normalizeIp(ip))) {
+                throw new RuntimeException("白名单IP重复：" + ip);
+            }
+            if (item.getRemark() != null && item.getRemark().length() > 200) {
+                throw new RuntimeException("白名单描述长度不能超过200字符");
+            }
+        }
+    }
+
+    /**
+     * IP格式校验：IPv4走正则，含冒号视为IPv6字面量由InetAddress解析校验
+     */
+    private boolean isValidIp(String ip) {
+        if (ip.contains(":")) {
+            try {
+                InetAddress.getByName(ip);
+                return true;
+            } catch (UnknownHostException e) {
+                return false;
+            }
+        }
+        return IPV4_PATTERN.matcher(ip).matches();
+    }
+
+    /**
+     * IP归一化，与数据面WhitelistHandler的匹配口径保持一致
+     */
+    private String normalizeIp(String ip) {
+        try {
+            return InetAddress.getByName(ip).getHostAddress();
+        } catch (UnknownHostException e) {
+            return ip;
         }
     }
 }

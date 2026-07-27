@@ -37,4 +37,8 @@ public class GatewayAppConfig {
      * 请求体最大长度（字节，小于等于0表示不限制）
      */
     private Long contentLength = 2L * 1024 * 1024;
+    /**
+     * 访问白名单（空表示不限制来源IP）
+     */
+    private List<GatewayAppWhitelistItem> whitelist;
 }

@@ -41,6 +41,12 @@ export interface GatewayApiConfig {
   wholeBodyParam?: string
 }
 
+/** 网关应用访问白名单条目 */
+export interface GatewayAppWhitelistItem {
+  ip: string
+  remark?: string
+}
+
 /** 应用配置 */
 export interface GatewayAppConfig {
   corsOpen?: boolean
@@ -49,6 +55,7 @@ export interface GatewayAppConfig {
   maxAgeSeconds?: number
   allowedMethods?: string[]
   contentLength?: number
+  whitelist?: GatewayAppWhitelistItem[]
 }
 
 /** 网关应用 */

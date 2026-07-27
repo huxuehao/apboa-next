@@ -10,6 +10,7 @@ import com.hxh.apboa.gateway.handler.AuthHandler;
 import com.hxh.apboa.gateway.handler.GatewayFailureHandler;
 import com.hxh.apboa.gateway.handler.ParamCheckHandler;
 import com.hxh.apboa.gateway.handler.RateLimitHandler;
+import com.hxh.apboa.gateway.handler.WhitelistHandler;
 import com.hxh.apboa.gateway.handler.WorkflowInvokeHandler;
 import com.hxh.apboa.gateway.log.GatewayLogWriter;
 import io.vertx.core.http.HttpMethod;
@@ -56,10 +57,12 @@ public class DeployedApp {
     }
 
     /**
-     * 初始化应用级路由（CORS与404兜底）
+     * 初始化应用级路由（白名单、CORS与404兜底）
      */
     public void initAppRoutes() {
         GatewayAppConfig config = appOption.getConfig();
+        // 白名单作为全应用第一道关卡，先于CORS注册
+        router.route().handler(new WhitelistHandler(config));
         if (Boolean.TRUE.equals(config.getCorsOpen())) {
             router.route().handler(buildCorsHandler(config));
         }
