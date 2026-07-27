@@ -199,6 +199,26 @@ Apboa 自动化模块将定时调度与 AI 能力深度整合，让用户可以�
 
 > 调度引擎基于 Quartz + Redis 分布式锁，后端由 [AgentScheduler](scheduler/src/main/java/com/hxh/apboa/scheduler/scheduler/AgentScheduler.java) 和 [WorkflowScheduler](scheduler/src/main/java/com/hxh/apboa/scheduler/scheduler/WorkflowScheduler.java) 实现。
 
+### 🌐 API 服务网关
+
+**将已发布的工作流一键暴露为标准 HTTP API，对外提供服务。**
+
+基于 Vert.x 异步非阻塞网关，用户可创建监听独立端口的网关应用，并将已发布的工作流注册为应用下的 HTTP API。请求参数自动转换为工作流输入，同步返回执行结果，配合统一鉴权与访问控制，快速完成 AI 能力的服务化输出。
+
+**核心亮点：**
+
+| 特性 | 说明 |
+|------|------|
+| **独立端口应用** | 一个应用对应一个监听端口，应用间完全隔离，支持 CORS 与请求体大小限制 |
+| **动态路由** | 应用与 API 上下线实时挂载/卸载路由，无需重启服务 |
+| **统一鉴权** | 复用平台凭证体系，携带平台登录 Token 或已注册 SK 即可调用 |
+| **IP 访问白名单** | 应用级白名单，基于 TCP 层真实来源判定防伪造，IPv4 / IPv6 归一化匹配，留空不限制 |
+| **限流控制** | API 级限流策略，超限请求快速失败 |
+| **访问日志** | 全链路访问日志异步落库，支持按应用 / API 检索 |
+| **多节点同步** | 配置变更经 Redis 广播至所有网关节点自动重新部署，集群状态一致 |
+
+> 数据面由 [GatewayLifecycleManager](gateway/src/main/java/com/hxh/apboa/gateway/core/GatewayLifecycleManager.java) 管理应用生命周期。
+
 ---
 
 ## 系统架构
@@ -276,6 +296,7 @@ PgVector / Milvus / Elasticsearch / Qdrant / Weaviate——修改 `VECTOR_STORE_
 - **可视化工作流（Workflow）** — 30+ 节点类型、拖拽编排、实时调试、模板引擎、子工作流、桥接解耦
 - **自动化定时任务（Automation）** — Cron 可视化配置、预设模板、启用/禁用开关、手动触发、执行记录追踪
 - **集群调度** — Quartz 调度引擎 + Redis 分布式锁 + 执行历史负载均衡 + 节点心跳存活检测
+- **API 服务网关（Gateway）** — 工作流一键暴露为 HTTP API，独立端口应用 + 动态路由 + 统一鉴权 + IP 白名单 + 访问日志（尝鲜）
 
 ---
 
@@ -343,7 +364,7 @@ bash start-execute.sh       # 分布式部署，Runtime 可独立扩容
 apboa-next/
 ├── common-base/          # 基础层：枚举、常量、工具类、加密
 ├── common/               # 公共层：Entity、DTO、VO、Wrapper
-├── biz/                  # 业务层（16 个扁平化模块）
+├── biz/                  # 业务层（22 个扁平化模块）
 │   ├── biz-agent/        #   智能体定义 + 会话管理
 │   ├── biz-account/      #   账号 + 租户 + 审批
 │   ├── biz-mcp/          #   MCP 服务管理 + 运行时降级
@@ -359,10 +380,18 @@ apboa-next/
 │   ├── biz-a2a/          #   A2A 协议配置
 │   ├── biz-studio/       #   Studio 集成
 │   ├── biz-sk/           #   密钥管理
+│   ├── biz-workflow/     #   工作流定义 + 运行记录 + 资源绑定
+│   ├── biz-datasource/   #   数据源配置（工作流 DB 节点）
+│   ├── biz-cache/        #   缓存配置（工作流缓存节点）
+│   ├── biz-mq/           #   消息队列配置（工作流 MQ 节点）
+│   ├── biz-channel/      #   消息渠道配置（工作流渠道节点）
+│   ├── biz-gateway/      #   网关应用 + API 定义 + 访问日志
 │   └── biz-longterm/     #   长期记忆配置
 ├── engine/               # 引擎层
 │   ├── agent/            #   ReAct / A2A 智能体工厂
+│   ├── agui/             #   AG-UI 协议智能体装配与注册
 │   ├── model/            #   多模型供应商适配
+│   ├── formatter/        #   模型消息格式化器
 │   ├── tool/             #   工具系统 + 动态加载
 │   ├── skill/            #   VEP / APIP 内置技能
 │   ├── knowledge/        #   多后端知识库工厂
@@ -373,10 +402,14 @@ apboa-next/
 │   ├── prompt/           #   提示词工程
 │   ├── security/         #   脚本安全扫描引擎
 │   ├── workspace/        #   工作空间 + 安全校验
+│   ├── log/              #   对话日志异步生产消费
+│   ├── studio/           #   Studio 运行时集成
+│   ├── controller/       #   引擎内置接口（文件访问）
 │   └── mpatch/           #   代码增量更新器
 ├── workflow/             # 工作流引擎层
 │   ├── node/             #   30+ 节点实现（base/cache/code/condition/db/http/loop/mcp/mq/...）
 │   └── workflow/         #   工作流核心（Workflow/Edge/RunWorkflow）
+├── gateway/              # API 服务网关数据面（Vert.x 动态路由 + 鉴权 + 白名单 + 限流）
 ├── scheduler/            # 调度层：Quartz + 分布式锁
 ├── heartbeat/            # 基础设施：心跳监控
 ├── runner-console/       # 应用：管理控制台（36 个 Controller）
