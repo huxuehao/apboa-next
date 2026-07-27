@@ -44,19 +44,23 @@ public class WorkflowInvoker {
             String tenantCode = tenantCodeRegistry.codeOf(api.getTenantId());
             // 恢复租户上下文，保证工作流内部的数据访问带租户隔离
             TenantUtils.setCurrentTenant(api.getTenantId(), tenantCode);
+            try {
+                // 鉴权API以凭证用户身份执行，与平台内直接运行工作流的体验一致
+                UserDetail userDetail = authUser != null ? authUser : UserDetail.builder()
+                        .id(api.getCreatedBy())
+                        .name("gateway")
+                        .username("gateway")
+                        .tenantId(api.getTenantId())
+                        .tenantCode(tenantCode)
+                        .build();
 
-            // 鉴权API以凭证用户身份执行，与平台内直接运行工作流的体验一致
-            UserDetail userDetail = authUser != null ? authUser : UserDetail.builder()
-                    .id(api.getCreatedBy())
-                    .name("gateway")
-                    .username("gateway")
-                    .tenantId(api.getTenantId())
-                    .tenantCode(tenantCode)
-                    .build();
-
-            WorkflowRunRequest request = new WorkflowRunRequest();
-            request.setParams(params);
-            return workflowRunService.run(api.getWorkflowId(), request, userDetail);
+                WorkflowRunRequest request = new WorkflowRunRequest();
+                request.setParams(params);
+                return workflowRunService.run(api.getWorkflowId(), request, userDetail);
+            } finally {
+                // 清理租户上下文
+                TenantUtils.clear();
+            }
         }, executor);
     }
 

@@ -2,6 +2,7 @@ package com.hxh.apboa.workflowbiz.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.hxh.apboa.common.consts.RedisChannelTopic;
 import com.hxh.apboa.common.consts.TableConst;
 import com.hxh.apboa.common.entity.AgentDefinition;
 import com.hxh.apboa.common.entity.Workflow;
@@ -139,7 +140,7 @@ public class WorkflowServiceImpl extends ServiceImpl<WorkflowMapper, Workflow> i
      */
     private void publishWorkflowEvent(Long workflowId, String action) {
         messagePublisher.publishAfterCommit(
-                com.hxh.apboa.common.consts.RedisChannelTopic.WORKFLOW_PUBLISHED_CHANNEL,
+                RedisChannelTopic.WORKFLOW_PUBLISHED_CHANNEL,
                 "{\"workflowId\":" + workflowId + ",\"action\":\"" + action + "\"}");
     }
 

@@ -61,10 +61,6 @@ export function workflowVersions(id: string) {
   return request.get<ApiResponse<WorkflowVersion[]>>(`/api/workflow/${id}/versions`)
 }
 
-export function workflowRollback(id: string, version: string) {
-  return request.post<ApiResponse<Workflow>>(`/api/workflow/${id}/versions/${version}/rollback`)
-}
-
 export function workflowDeleteVersion(id: string, version: string) {
   return request.delete<ApiResponse<boolean>>(`/api/workflow/${id}/versions/${version}`)
 }
