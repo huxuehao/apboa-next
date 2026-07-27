@@ -6,7 +6,7 @@
  * @author huxuehao
  */
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, defineComponent } from 'vue'
+import { ref, computed, onMounted, watch, nextTick, defineComponent } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons-vue'
@@ -61,11 +61,14 @@ const authType = ref<'TOKEN' | 'NONE'>('TOKEN')
 const limitType = ref<'NONE' | 'MINUTE' | 'HOUR' | 'DAY'>('NONE')
 const routeTimes = ref<number | null>(null)
 const ipTimes = ref<number | null>(null)
+const limitInputsRef = ref<HTMLElement | null>(null)
 
 // 数据源
 const apps = ref<GatewayApp[]>([])
 const categories = ref<string[]>([])
 const newCategoryName = ref('')
+// 是否存在已发布的工作流（用于空态引导）
+const hasPublishedWorkflow = ref(true)
 
 const methodOptions = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'ALL'].map(m => ({ label: m, value: m }))
 const positionOptions = [
@@ -116,16 +119,18 @@ function addCategory(e: Event) {
 }
 
 /**
- * 加载数据源（应用与分类）
+ * 加载数据源（应用与分类），并探测是否存在已发布工作流
  */
 async function loadOptions() {
   try {
-    const [appRes, categoryRes] = await Promise.all([
+    const [appRes, categoryRes, workflowRes] = await Promise.all([
       apiServiceApi.listApps(),
-      apiServiceApi.getCategories()
+      apiServiceApi.getCategories(),
+      workflowApi.workflowPage({ page: 1, size: 1, status: 'PUBLISHED' })
     ])
     apps.value = appRes.data.data || []
     categories.value = categoryRes.data.data || []
+    hasPublishedWorkflow.value = (workflowRes.data.data?.total || 0) > 0
   } catch (e) {
     console.error('加载数据源失败:', e)
   }
@@ -280,6 +285,15 @@ watch(selectedWorkflow, (target) => {
 })
 
 /**
+ * 开启访问限制后，滚动到新出现的次数限制输入区域，避免用户感知不到
+ */
+watch(limitType, async (val) => {
+  if (loadingApiData.value || val === 'NONE') return
+  await nextTick()
+  limitInputsRef.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+})
+
+/**
  * 保存API
  */
 async function handleSave() {
@@ -355,6 +369,20 @@ function handleBack() {
   router.push('/api-service')
 }
 
+/**
+ * 跳转到网关应用管理页，引导用户新建应用
+ */
+function goCreateApp() {
+  router.push('/api-service/apps')
+}
+
+/**
+ * 跳转到工作流列表页，引导用户创建并发布工作流
+ */
+function goCreateWorkflow() {
+  router.push('/workflow')
+}
+
 onMounted(async () => {
   await loadOptions()
   if (isEdit.value) {
@@ -389,7 +417,7 @@ onMounted(async () => {
           <div class="card-body">
             <div class="form-row-inline">
               <div class="form-row">
-                <div class="form-label">API名称</div>
+                <div class="form-label required-field">API名称</div>
                 <div class="form-control">
                   <AInput v-model:value="apiName" placeholder="填写API名称" :maxlength="100" />
                 </div>
@@ -432,13 +460,23 @@ onMounted(async () => {
             </div>
 
             <div class="form-row">
-              <div class="form-label">所属应用（服务端口）</div>
+              <div class="form-label required-field">所属应用（服务端口）</div>
               <div class="form-control">
                 <ASelect v-model:value="appId" placeholder="选择网关应用" style="width: 100%">
                   <ASelectOption v-for="app in apps" :key="app.id" :value="app.id">
                     {{ app.name }}（:{{ app.port }}）
                   </ASelectOption>
+                  <template #notFoundContent>
+                    <div class="app-empty-guide">
+                      <span>暂无网关应用</span>
+                      <AButton type="link" size="small" @click="goCreateApp">去新建应用</AButton>
+                    </div>
+                  </template>
                 </ASelect>
+                <div v-if="apps.length === 0" class="app-empty-hint">
+                  暂无可用的网关应用，请先
+                  <AButton type="link" size="small" @click="goCreateApp">新建网关应用</AButton>
+                </div>
               </div>
             </div>
 
@@ -450,7 +488,7 @@ onMounted(async () => {
                 </div>
               </div>
               <div class="form-row">
-                <div class="form-label">路由路径（支持 :param 路径参数，如 /order/:orderId）</div>
+                <div class="form-label required-field">路由路径（支持 :param 路径参数，如 /order/:orderId）</div>
                 <div class="form-control">
                   <AInput v-model:value="path" placeholder="/example/:id" :maxlength="255" />
                 </div>
@@ -467,22 +505,20 @@ onMounted(async () => {
           </div>
           <div class="card-body">
             <div class="form-row">
-              <div class="form-label">选择已发布的工作流</div>
+              <div class="form-label required-field">选择已发布的工作流</div>
               <div class="form-control">
-                <TargetSelector target-type="WORKFLOW" v-model="selectedWorkflow" />
-              </div>
-            </div>
-            <div v-if="selectedWorkflow" class="form-row">
-              <div class="form-label">工作流输入参数</div>
-              <div class="form-control">
-                <ApboaSpin :spinning="workflowConfigLoading">
-                  <template v-if="workflowParams.length > 0">
-                    <ATag v-for="wp in workflowParams" :key="wp.name" style="margin-bottom: 4px">
-                      {{ wp.name }}（{{ wp.type }}{{ wp.required ? '，必填' : '' }}）
-                    </ATag>
+                <TargetSelector target-type="WORKFLOW" v-model="selectedWorkflow">
+                  <template #empty>
+                    <div class="app-empty-guide">
+                      <span>暂无已发布的工作流</span>
+                      <AButton type="link" size="small" @click="goCreateWorkflow">去创建工作流</AButton>
+                    </div>
                   </template>
-                  <span v-else class="param-empty">该工作流未定义输入参数</span>
-                </ApboaSpin>
+                </TargetSelector>
+                <div v-if="!hasPublishedWorkflow" class="app-empty-hint">
+                  暂无已发布的工作流，请先
+                  <AButton type="link" size="small" @click="goCreateWorkflow">创建并发布工作流</AButton>
+                </div>
               </div>
             </div>
           </div>
@@ -595,7 +631,7 @@ onMounted(async () => {
               </div>
             </div>
 
-            <div class="form-row-inline" v-if="limitType !== 'NONE'">
+            <div class="form-row-inline" v-if="limitType !== 'NONE'" ref="limitInputsRef">
               <div class="form-row">
                 <div class="form-label">API总访问次数上限（0或留空不限制）</div>
                 <div class="form-control">

@@ -187,13 +187,9 @@ onMounted(() => {
         </div>
         <div v-else class="list-container">
           <div v-for="app in list" :key="app.id" class="app-item">
-            <div class="item-icon">
-              <AppstoreOutlined />
-            </div>
             <div class="item-main">
               <div class="item-header">
-                <span class="item-name">{{ app.name }}</span>
-                <ATag class="item-port">:{{ app.port }}</ATag>
+                <span class="item-name">{{ app.name }}（:{{ app.port }}）</span>
               </div>
               <div class="item-meta">
                 <span>{{ app.config?.corsOpen ? '已开启跨域' : '未开启跨域' }}</span>

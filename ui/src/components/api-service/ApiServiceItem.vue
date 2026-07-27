@@ -32,18 +32,6 @@ const emit = defineEmits<{
 
 const isOnline = computed(() => props.data.online === 1)
 
-/** 请求方法徽标颜色 */
-const methodColor = computed(() => {
-  switch (props.data.method) {
-    case 'GET': return '#2f9e44'
-    case 'POST': return '#1971c2'
-    case 'PUT': return '#e8590c'
-    case 'DELETE': return '#e03131'
-    case 'PATCH': return '#9c36b5'
-    default: return '#495057'
-  }
-})
-
 /** 鉴权标签 */
 const authLabel = computed(() => {
   return props.data.config?.authType === 'NONE' ? '免鉴权' : '平台鉴权'
@@ -111,17 +99,11 @@ function handleDelete() {
 
 <template>
   <div class="api-service-item">
-    <!-- 方法徽标 -->
-    <div class="item-method" :style="{ color: methodColor, borderColor: methodColor }">
-      {{ data.method }}
-    </div>
-
     <!-- 主信息区 -->
     <div class="item-main">
       <div class="item-header">
-        <span class="item-name">{{ data.name }}</span>
-        <span class="item-path">{{ data.path }}</span>
-        <ATag v-if="data.category" class="item-tag">{{ data.category }}</ATag>
+        <span class="item-name">{{ data.name }}（{{ data.method }}）</span>
+        <span class="item-path">:{{ data.appPort }}{{ data.path }}</span>
       </div>
       <div class="item-meta">
         <span v-if="data.appName">{{ data.appName }}（:{{ data.appPort }}）</span>
@@ -132,6 +114,8 @@ function handleDelete() {
         </span>
         <span>·</span>
         <span>{{ authLabel }}</span>
+        <span v-if="data.category">·</span>
+        <span v-if="data.category">{{ data.category }}</span>
         <span v-if="formattedTime">·</span>
         <span v-if="formattedTime">创建于 {{ formattedTime }}</span>
       </div>
@@ -178,15 +162,20 @@ function handleDelete() {
   }
 }
 
-.item-method {
+.item-avatar-wrapper {
   flex-shrink: 0;
-  width: 64px;
-  text-align: center;
-  font-size: 12px;
-  font-weight: 600;
-  border: 1px solid;
-  border-radius: 4px;
-  padding: 2px 0;
+}
+
+.item-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
 }
 
 .item-main {

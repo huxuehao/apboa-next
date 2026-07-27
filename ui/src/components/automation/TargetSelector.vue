@@ -239,7 +239,9 @@ onUnmounted(() => {
 
         <div class="dropdown-body">
           <div v-if="list.length === 0 && !loading && !isFirstLoad" class="dropdown-empty">
-            <AEmpty description="暂无数据" />
+            <slot name="empty">
+              <AEmpty description="暂无数据" />
+            </slot>
           </div>
 
           <div v-else class="dropdown-list">

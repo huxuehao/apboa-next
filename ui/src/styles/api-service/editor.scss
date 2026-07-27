@@ -134,6 +134,30 @@
   background-color: #F2F4F7;
 }
 
+/* 无网关应用时的引导提示 */
+.app-empty-hint {
+  display: flex;
+  align-items: center;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--color-text-secondary, #999);
+
+  .ant-btn-link {
+    padding: 0 4px;
+    font-size: 12px;
+  }
+}
+
+.app-empty-guide {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 0;
+  font-size: 13px;
+  color: var(--color-text-secondary, #999);
+}
+
 /* 参数映射表 */
 .param-table {
   display: flex;

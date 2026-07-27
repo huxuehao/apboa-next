@@ -24,6 +24,8 @@ const infiniteLoadingKey = ref(0)
 
 const categories = ref<string[]>([])
 const apps = ref<GatewayApp[]>([])
+// 应用列表是否已加载完成（避免加载中误显空态红点）
+const appsLoaded = ref(false)
 const selectedCategory = ref<string | null>(null)
 const selectedAppId = ref<string | null>(null)
 const keyword = ref('')
@@ -146,6 +148,7 @@ async function loadFilters() {
     ])
     categories.value = categoryRes.data.data || []
     apps.value = appRes.data.data || []
+    appsLoaded.value = true
   } catch (e) {
     console.error('加载筛选数据失败:', e)
   }
@@ -190,7 +193,7 @@ onMounted(() => {
   <div class="api-service-page">
     <!-- 页面标题区 -->
     <section class="intro-section">
-      <h3 class="intro-title">API服务</h3>
+      <h3 class="intro-title">API服务（尝鲜，非正式发布）</h3>
       <p class="intro-desc text-secondary">
         API服务模块基于异步非阻塞网关，将已发布的工作流暴露为标准HTTP API。<br/>
         鉴权复用平台统一凭证体系：请求携带 Authorization 请求头（平台登录Token或已注册的SK）即可调用，请求参数将自动转换为工作流的输入参数。
@@ -243,10 +246,19 @@ onMounted(() => {
           </AButton>
         </ATooltip>
 
-        <AButton @click="goApps">
-          <template #icon><AppstoreOutlined /></template>
-          网关应用
-        </AButton>
+        <ATooltip :title="!appsLoaded ? undefined : apps.length === 0 ? '暂无网关应用，请先新建应用' : `共 ${apps.length} 个网关应用`">
+          <ABadge
+            :dot="appsLoaded && apps.length === 0"
+            :count="apps.length"
+            show-zero
+            :number-style="apps.length === 0 ? { backgroundColor: '#8c8c8c' } : undefined"
+          >
+            <AButton @click="goApps">
+              <template #icon><AppstoreOutlined /></template>
+              网关应用
+            </AButton>
+          </ABadge>
+        </ATooltip>
 
         <AButton
           type="primary"

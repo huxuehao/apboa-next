@@ -204,11 +204,8 @@ onMounted(() => {
       </div>
       <div v-else class="list-container">
         <div v-for="log in list" :key="log.id" class="log-item" @click="handleDetail(log)">
-          <div class="log-method" :style="{ color: methodColor(log.method), borderColor: methodColor(log.method) }">
-            {{ log.method }}
-          </div>
           <div class="log-main">
-            <div class="log-path">{{ log.path }}</div>
+            <div class="log-path">{{ log.method }} <span>·</span> {{ log.path }}</div>
             <div class="log-meta">
               <span class="log-ip">{{ log.accessIp || '-' }}</span>
               <span>·</span>
@@ -218,7 +215,7 @@ onMounted(() => {
             </div>
           </div>
           <div class="log-status">
-            <ATag :color="log.status === 1 ? 'success' : 'error'">
+            <ATag :color="log.status === 1 ? 'processing' : 'error'" :bordered="false">
               {{ log.httpStatus }} {{ log.status === 1 ? '成功' : '失败' }}
             </ATag>
           </div>
@@ -245,7 +242,7 @@ onMounted(() => {
             <ADescriptionsItem label="请求路径">{{ detail.path }}</ADescriptionsItem>
             <ADescriptionsItem label="访问IP">{{ detail.accessIp || '-' }}</ADescriptionsItem>
             <ADescriptionsItem label="状态">
-              <ATag :color="detail.status === 1 ? 'success' : 'error'">
+              <ATag :color="detail.status === 1 ? 'processing' : 'error'" :bordered="false">
                 {{ detail.httpStatus }} {{ detail.status === 1 ? '成功' : '失败' }}
               </ATag>
             </ADescriptionsItem>
@@ -296,6 +293,11 @@ export default {
 .filter-section {
   margin-bottom: var(--spacing-lg);
   gap: var(--spacing-md);
+  position: sticky;
+  top: 0;
+  background-color: var(--color-bg);
+  padding: var(--spacing-base) 0;
+  z-index: 10;
 }
 
 .log-item {
@@ -316,11 +318,10 @@ export default {
 
 .log-method {
   flex-shrink: 0;
-  width: 60px;
+  width: 50px;
   text-align: center;
-  font-size: 12px;
+  font-size: 16px;
   font-weight: 600;
-  border: 1px solid;
   border-radius: 4px;
   padding: 2px 0;
 }
@@ -335,7 +336,7 @@ export default {
 
 .log-path {
   font-size: 13px;
-  font-family: monospace;
+  // font-family: monospace;
   color: var(--color-text);
   white-space: nowrap;
   overflow: hidden;
@@ -350,9 +351,9 @@ export default {
   color: var(--color-text-secondary);
 }
 
-.log-ip {
-  font-family: monospace;
-}
+// .log-ip {
+//   font-family: monospace;
+// }
 
 .log-status {
   flex-shrink: 0;
@@ -383,7 +384,7 @@ export default {
   background-color: #F2F4F7;
   border-radius: 6px;
   font-size: 12px;
-  font-family: monospace;
+  // font-family: monospace;
   white-space: pre-wrap;
   word-break: break-all;
   max-height: 300px;
