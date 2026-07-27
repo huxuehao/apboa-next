@@ -11,6 +11,7 @@ import chatBotAvatar from '@/assets/avatar/chat-bot.png'
 import agentAvatar from '@/assets/avatar/agent.png'
 import workflowAvatar from '@/assets/avatar/workflow.png'
 import automationAvatar from '@/assets/avatar/automation.png'
+import apiServiceAvatar from '@/assets/avatar/api-service.png'
 import knowledgebaseAvatar from '@/assets/avatar/knowledgebase.png'
 import modelProviderAvatar from '@/assets/avatar/model-provider.png'
 import skillAvatar from '@/assets/avatar/skill.png'
@@ -92,6 +93,13 @@ const menuConfig: MenuItem[] = [
     label: '自动化',
     avatar: automationAvatar,
     path: '/automation',
+    type: 'menu'
+  },
+  {
+    key: 'api-service',
+    label: 'API服务',
+    avatar: apiServiceAvatar,
+    path: '/api-service',
     type: 'menu'
   },
   {

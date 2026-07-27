@@ -15,6 +15,8 @@
     <module>biz</module>
     <!-- 引擎层 -->
     <module>engine</module>
+    <!-- 网关层 -->
+    <module>gateway</module>
     <!-- 调度层 -->
     <module>scheduler</module>
     <!-- 应用层 -->
@@ -44,6 +46,7 @@
     <aws.version>1.11.543</aws.version>
     <commons-net.version>3.6</commons-net.version>
     <hutool.version>5.8.4</hutool.version>
+    <vertx.version>4.5.10</vertx.version>
     <junit.version>3.8.1</junit.version>
   </properties>
 
@@ -96,6 +99,17 @@
         <groupId>io.jsonwebtoken</groupId>
         <artifactId>jjwt</artifactId>
         <version>${jjwt.version}</version>
+      </dependency>
+      <!-- vertx异步非阻塞网关数据面 -->
+      <dependency>
+        <groupId>io.vertx</groupId>
+        <artifactId>vertx-core</artifactId>
+        <version>${vertx.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.vertx</groupId>
+        <artifactId>vertx-web</artifactId>
+        <version>${vertx.version}</version>
       </dependency>
       <!-- aws -->
       <dependency>
@@ -252,6 +266,16 @@
       <dependency>
         <groupId>com.hxh.apboa.next</groupId>
         <artifactId>biz-workflow</artifactId>
+        <version>1.0-SNAPSHOT</version>
+      </dependency>
+      <dependency>
+        <groupId>com.hxh.apboa.next</groupId>
+        <artifactId>biz-gateway</artifactId>
+        <version>1.0-SNAPSHOT</version>
+      </dependency>
+      <dependency>
+        <groupId>com.hxh.apboa.next</groupId>
+        <artifactId>gateway</artifactId>
         <version>1.0-SNAPSHOT</version>
       </dependency>
     </dependencies>

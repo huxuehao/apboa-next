@@ -91,8 +91,12 @@ instance.interceptors.response.use(
       window.location.href = '/#/login';
       window.location.reload();
       return Promise.reject(msg);
+    } else if (code === 510) {
+      console.error(msg)
+      AMessage.error(msg).then(() => {})
+      return Promise.reject(msg);
     } else {
-      console.error('系统异常，请稍后再试：', msg)
+      console.error(msg)
       AMessage.error('系统异常，请稍后再试').then(() => {})
       return Promise.reject(msg);
     }

@@ -37,6 +37,10 @@
             <groupId>com.hxh.apboa.next</groupId>
             <artifactId>biz-channel</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.hxh.apboa.next</groupId>
+            <artifactId>biz-gateway</artifactId>
+        </dependency>
         <!-- 心跳模块：仅使用 HeartbeatPayload DTO，optional 避免传递依赖 -->
         <dependency>
             <groupId>com.hxh.apboa.next</groupId>

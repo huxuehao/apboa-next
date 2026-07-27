@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import BlurInput from '../shared/BlurInput.vue'
 import NodeOutputSelector from '@/components/workflow/bindings/NodeOutputSelector.vue'
 import NextNodeSelector from '@/components/workflow/bindings/NextNodeSelector.vue'
+import ConditionSymbolGuideModal from '../shared/ConditionSymbolGuideModal.vue'
 import { CaretRightOutlined } from '@ant-design/icons-vue'
 import type { WorkflowFlowNode, WorkflowFlowEdge } from '@/types/workflow'
 
@@ -95,7 +96,7 @@ function onCompareClear() {
 <template>
   <div class="branch-editor">
     <div class="config-row">
-      <span class="config-row-label">运算符</span>
+      <span class="config-row-label">运算符 <ConditionSymbolGuideModal /></span>
       <ASelect
         show-search
         :value="branch.symbol || 'EQ'"
@@ -108,10 +109,10 @@ function onCompareClear() {
       <span class="config-row-label" style="margin-right: 10px">条件表达式</span>
       <ATextarea
         :rows="1"
-        :model-value="String(branch.conditionExpression || '')"
+        :value="String(branch.conditionExpression || '')"
         :placeholder="`Groovy 表达式，变量名 ${inputName || '未知'}`"
         class="expression-input"
-        @update:model-value="(v: any) => patchBranch({ conditionExpression: v })"
+        @update:value="(v: any) => patchBranch({ conditionExpression: v })"
       />
     </div>
     <div v-else class="config-row compare-full-row">

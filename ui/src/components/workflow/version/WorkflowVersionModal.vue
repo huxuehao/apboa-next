@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { DeleteOutlined, DownloadOutlined, HistoryOutlined, ReloadOutlined, FlagOutlined } from '@ant-design/icons-vue'
 import { message, Modal } from 'ant-design-vue'
 import * as workflowApi from '@/api/workflow'
-import type { Workflow, WorkflowStatus, WorkflowVersion } from '@/types/workflow'
+import type { WorkflowStatus, WorkflowVersion } from '@/types/workflow'
 
 const open = defineModel<boolean>('open', { default: false })
 
@@ -15,7 +15,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  loaded: [workflow: Workflow]
+  loaded: [version: WorkflowVersion]
 }>()
 
 const loading = ref(false)
@@ -66,18 +66,18 @@ function nodeCount(item: WorkflowVersion) {
   return Array.isArray(item.config?.nodes) ? item.config.nodes.length : 0
 }
 
+// 载入仅替换当前编辑区画布内容，不请求后端，需用户手动保存才会生效
 function handleLoad(item: WorkflowVersion) {
   if (!props.workflowId) return
   Modal.confirm({
     title: `载入 v${item.version}`,
-    content: '载入后会用该历史版本覆盖当前草稿。当前未发布修改将被替换，请确认已经保存需要保留的内容。',
+    content: '载入后当前编辑区内容将被替换为该版本，未保存的修改将丢失。载入结果不会自动保存，需手动保存后才会生效。',
     okText: '载入版本',
     cancelText: '取消',
     icon: null,
-    onOk: async () => {
-      const response = await workflowApi.workflowRollback(props.workflowId!, item.version)
+    onOk: () => {
       message.success(`已载入 v${item.version}`)
-      emit('loaded', response.data.data)
+      emit('loaded', item)
       open.value = false
     },
   })

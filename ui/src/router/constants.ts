@@ -21,6 +21,7 @@ export const RouteNames = {
   HOME: 'Home',
   DASHBOARD: 'Dashboard',
   AUTOMATION: 'Automation',
+  API_SERVICE: 'ApiService',
   CHAT_CLUSTER: 'ChatCluster',
 
   // Agent管理
@@ -103,6 +104,7 @@ export const RoutePaths = {
   HOME: '/home',
   DASHBOARD: '/dashboard',
   AUTOMATION: '/automation',
+  API_SERVICE: '/api-service',
   CHAT_CLUSTER: '/chat-cluster',
 
   // Agent管理

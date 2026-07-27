@@ -17,6 +17,7 @@ COPY common-base/pom.xml ./common-base/
 COPY common/pom.xml ./common/
 COPY heartbeat/pom.xml ./heartbeat/
 COPY engine/pom.xml ./engine/
+COPY gateway/pom.xml ./gateway/
 COPY scheduler/pom.xml ./scheduler/
 COPY workflow/pom.xml ./workflow/
 COPY runner-console/pom.xml ./runner-console/
@@ -44,6 +45,7 @@ COPY biz/biz-tool/pom.xml ./biz/biz-tool/
 COPY biz/biz-workflow/pom.xml ./biz/biz-workflow/
 COPY biz/biz-cache/pom.xml ./biz/biz-cache/
 COPY biz/biz-datasource/pom.xml ./biz/biz-datasource/
+COPY biz/biz-gateway/pom.xml ./biz/biz-gateway/
 COPY biz/biz-mq/pom.xml ./biz/biz-mq/
 COPY biz/biz-channel/pom.xml ./biz/biz-channel/
 

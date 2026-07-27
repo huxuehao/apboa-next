@@ -33,5 +33,6 @@
         <module>biz-datasource</module>
         <module>biz-channel</module>
         <module>biz-workflow</module>
+        <module>biz-gateway</module>
     </modules>
 </project>

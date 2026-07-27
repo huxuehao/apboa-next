@@ -71,15 +71,41 @@ const isFormBody = computed(() => {
   return ct === 'FORM_URLENCODED' || ct === 'FORM_DATA'
 })
 
-const bodyPlaceholder = computed(() =>
-  isFormBody.value
-    ? 'key1=value1&key2=value2'
-    : '支持 ${输入绑定名} 模板语法，如 {\"id\":\"${input.id}\"}',
-)
+// JSON 类型使用 json 语言（支持格式化），其余类型用纯文本
+const bodyLanguage = computed(() => (getRequest().contentType === 'JSON' ? 'json' : 'txt'))
 
+const bodyPlaceholder = computed(() => {
+  switch (getRequest().contentType) {
+    case 'XML':
+      return '<user><id>${input.id}</id></user>'
+    case 'TEXT_PLAIN':
+      return '纯文本内容，支持 ${输入绑定名} 模板语法'
+    case 'OCTET_STREAM':
+      return '内容将以字节流形式发送，支持 ${输入绑定名} 模板语法'
+    default:
+      return '支持 ${输入绑定名} 模板语法，如 {\"id\":\"${input.id}\"}'
+  }
+})
+
+// 表单类 body 存储为 "k1=v1&k2=v2" 字符串，与后端解析规则一致（按 & 与首个 = 切分）
+const formBodyPairs = computed(() => {
+  const raw = stringifyBody(getRequest().body)
+  if (!raw) return []
+  return raw.split('&').map((pair) => {
+    const idx = pair.indexOf('=')
+    return idx >= 0
+      ? { key: pair.slice(0, idx), value: pair.slice(idx + 1) }
+      : { key: pair, value: '' }
+  })
+})
+function updateFormBodyPairs(pairs: Array<{ key?: string; value?: string }>) {
+  updateRequest('body', pairs.map((p) => `${p.key ?? ''}=${p.value ?? ''}`).join('&'))
+}
+
+// 与后端 HttpMethod.permitsBody 对齐：仅 GET/HEAD 不支持请求体
 const showBody = computed(() => {
   const m = getRequest().method
-  return m === 'POST' || m === 'PUT' || m === 'DELETE' || m === 'PATCH'
+  return m !== 'GET' && m !== 'HEAD'
 })
 
 // 方法切换时如果 Body 不可用则切回 Headers
@@ -182,9 +208,21 @@ const queryCount = computed(() => {
           />
         </div>
         <div v-if="activeTab === 'body' && showBody">
+          <!-- 表单类型：键值对编辑，底层仍以 k1=v1&k2=v2 字符串存储 -->
+          <template v-if="isFormBody">
+            <WorkflowArrayEditors
+              :model-value="formBodyPairs"
+              type="keyValue"
+              @update:model-value="(v: any) => updateFormBodyPairs(v)"
+            />
+            <div class="body-hint">
+              表单项将按 key=value 编码提交，Key/Value 均支持 ${输入绑定名} 模板语法
+            </div>
+          </template>
           <ConfigCodeEditor
+            v-else
             :model-value="stringifyBody(getRequest().body)"
-            language="txt"
+            :language="bodyLanguage"
             :placeholder="bodyPlaceholder"
             :maximize-target="panelRoot"
             height="200px"
@@ -221,11 +259,11 @@ const queryCount = computed(() => {
               :value="getRequest().contentType || 'JSON'"
               :options="[
                 { label: 'JSON', value: 'JSON' },
-                { label: 'Form', value: 'FORM_URLENCODED' },
-                { label: 'Form Data', value: 'FORM_DATA' },
+                { label: 'Form-Urlencoded', value: 'FORM_URLENCODED' },
+                { label: 'Form-Data', value: 'FORM_DATA' },
                 { label: 'XML', value: 'XML' },
-                { label: 'Text', value: 'TEXT_PLAIN' },
-                { label: 'Binary', value: 'OCTET_STREAM' },
+                { label: 'Text-Plain', value: 'TEXT_PLAIN' },
+                { label: 'Octet-Stream', value: 'OCTET_STREAM' },
               ]"
               style="width: 140px"
               @update:value="(v: any) => updateRequest('contentType', v)"
@@ -431,6 +469,14 @@ const queryCount = computed(() => {
 
 .tab-content {
   margin-bottom: 8px;
+}
+
+// 表单类 Body 的提交格式提示
+.body-hint {
+  margin-top: 6px;
+  color: #8c8c8c;
+  font-size: 12px;
+  line-height: 1.6;
 }
 
 // ④ Format Row

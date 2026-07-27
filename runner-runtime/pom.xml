@@ -29,6 +29,11 @@
             <groupId>com.hxh.apboa.next</groupId>
             <artifactId>biz-sk</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.hxh.apboa.next</groupId>
+            <artifactId>gateway</artifactId>
+        </dependency>
+
         <!-- 心跳上报模块 -->
         <dependency>
             <groupId>com.hxh.apboa.next</groupId>

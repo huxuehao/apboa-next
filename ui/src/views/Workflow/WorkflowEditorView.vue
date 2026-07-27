@@ -36,6 +36,7 @@ import type {
   WorkflowRunRequest,
   WorkflowValidationResult,
   WorkflowVariable,
+  WorkflowVersion,
 } from '@/types/workflow'
 import { useAccountStore } from '@/stores'
 import { getToken } from '@/utils/auth'
@@ -894,15 +895,16 @@ function showVersions() {
   versionModalOpen.value = true
 }
 
-async function handleVersionLoaded(nextWorkflow: Workflow) {
-  workflow.value = nextWorkflow
-  workflow.value.config = ensureWorkflowDefinition(workflow.value.config)
+// 载入历史版本仅替换当前编辑区画布，不请求后端、不改变工作流状态，需手动保存才会生效
+async function handleVersionLoaded(version: WorkflowVersion) {
+  if (readonly.value) {
+    message.warning('当前工作流为只读模式，无法载入历史版本')
+    return
+  }
+  workflow.value.config = ensureWorkflowDefinition(version.config)
   loadDefinition(workflow.value.config)
-  captureSavedDraft('idle')
   await nextTick()
   canvasRef.value?.fitAll()
-  store.upsertWorkflow(workflow.value)
-  store.markListDirty()
 }
 
 function openContextMenu(payload: { nodeId: string; x: number; y: number }) {

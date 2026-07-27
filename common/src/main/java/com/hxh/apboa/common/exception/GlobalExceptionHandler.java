@@ -221,6 +221,18 @@ public class GlobalExceptionHandler {
         return R.fail(400, errorMsg.toString());
     }
 
+    @ExceptionHandler(RuntimeException.class)
+    public R<?> runtimeExceptionHandler(RuntimeException e) {
+        log.error("系统异常: {}", e.getMessage(), e);
+
+        String errorMsg = "系统异常，请稍后重试";
+        if (e.getMessage() != null) {
+            errorMsg = e.getMessage();
+        }
+
+        return R.fail(510, errorMsg);
+    }
+
     // ================ 通用异常处理 ================
 
     @ExceptionHandler(Exception.class)

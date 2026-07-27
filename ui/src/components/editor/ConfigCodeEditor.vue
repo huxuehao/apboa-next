@@ -184,7 +184,10 @@ async function getLanguageExtension(lang: string): Promise<CMExtension> {
 }
 
 // ── placeholder：用绝对定位 DOM 覆盖，空文档 + 失焦时显示 ──
-async function buildPlaceholderExtension(text: string): Promise<CMExtension> {
+// 持有 placeholder DOM 引用，供 props.placeholder 变化时直接更新文本
+const placeholderDom = shallowRef<HTMLElement | null>(null)
+
+async function buildPlaceholderExtension(): Promise<CMExtension> {
   const { ViewPlugin } = await import('@codemirror/view')
 
   return ViewPlugin.fromClass(
@@ -192,22 +195,25 @@ async function buildPlaceholderExtension(text: string): Promise<CMExtension> {
       dom: HTMLElement | null = null
       constructor(readonly view: CMEditorView) {
         this.dom = document.createElement('div')
-        this.dom.textContent = text
+        this.dom.textContent = props.placeholder
         this.dom.style.cssText =
           'position:absolute;top:4px;left:38px;color:#bfbfbf;font-style:italic;pointer-events:none;user-select:none;font-size:13px;line-height:1.65;font-family:inherit;white-space:nowrap;'
         this.view.dom.appendChild(this.dom)
+        placeholderDom.value = this.dom
         this.sync()
       }
       sync() {
         if (!this.dom) return
         const empty = this.view.state.doc.length === 0
         const focused = this.view.hasFocus
-        this.dom.style.display = empty && !focused ? '' : 'none'
+        const hasText = !!this.dom.textContent
+        this.dom.style.display = hasText && empty && !focused ? '' : 'none'
       }
       update(update: CMEditorView) {
         if (update.docChanged || update.focusChanged) this.sync()
       }
       destroy() {
+        if (placeholderDom.value === this.dom) placeholderDom.value = null
         this.dom?.remove()
         this.dom = null
       }
@@ -226,10 +232,8 @@ async function createEditor() {
   const { EditorState, EditorView } = m
 
   const langExt = await getLanguageExtension(props.language)
-  let phExt: CMExtension = []
-  if (props.placeholder) {
-    phExt = await buildPlaceholderExtension(props.placeholder)
-  }
+  // placeholder 扩展始终装载，文本为空时自行隐藏，便于后续动态更新
+  const phExt = await buildPlaceholderExtension()
 
   const extensions = [
     m.history(),
@@ -317,6 +321,20 @@ watch(
     view.dispatch({
       effects: modules.value.EditorState.reconfigure.of(langExt ? [langExt] : []),
     })
+  },
+)
+
+// ── placeholder 切换：直接更新覆盖层 DOM 文本，空文档且失焦时立即生效 ──
+watch(
+  () => props.placeholder,
+  (text) => {
+    const dom = placeholderDom.value
+    const view = editorView.value
+    if (!dom || !view) return
+    dom.textContent = text
+    const empty = view.state.doc.length === 0
+    const focused = view.hasFocus
+    dom.style.display = text && empty && !focused ? '' : 'none'
   },
 )
 

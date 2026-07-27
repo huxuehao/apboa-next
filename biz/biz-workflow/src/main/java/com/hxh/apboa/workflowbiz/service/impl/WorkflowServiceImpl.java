@@ -2,6 +2,7 @@ package com.hxh.apboa.workflowbiz.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.hxh.apboa.common.consts.RedisChannelTopic;
 import com.hxh.apboa.common.consts.TableConst;
 import com.hxh.apboa.common.entity.AgentDefinition;
 import com.hxh.apboa.common.entity.Workflow;
@@ -45,6 +46,7 @@ public class WorkflowServiceImpl extends ServiceImpl<WorkflowMapper, Workflow> i
     private final AgentWorkflowService agentWorkflowService;
     private final RedisUtils redisUtils;
     private final JdbcTemplate jdbcTemplate;
+    private final com.hxh.apboa.common.cluster.core.MessagePublisher messagePublisher;
 
     @Override
     public WorkflowDetailVO detail(Long id) {
@@ -108,13 +110,38 @@ public class WorkflowServiceImpl extends ServiceImpl<WorkflowMapper, Workflow> i
                 List<Object> agentNames = usedWithAgent(ids);
                 throw new RuntimeException("workflow is used by agents: " + agentNames + ", please unbind first");
             }
+            // 被网关API绑定的工作流不允许直接删除，避免在线API执行时找不到工作流
+            checkGatewayBinding(ids);
         }
         ids.forEach(id -> {
             resourceBindingService.removeWorkflow(String.valueOf(id));
             workflowVersionMapper.delete(new LambdaQueryWrapper<WorkflowVersion>().eq(WorkflowVersion::getWorkflowId, String.valueOf(id)));
             RunWorkflowCache.remove(String.valueOf(id));
+            // 通知网关节点下线绑定该工作流的API
+            publishWorkflowEvent(id, "REMOVED");
         });
         return removeByIds(ids);
+    }
+
+    /**
+     * 校验工作流是否被网关API绑定
+     */
+    private void checkGatewayBinding(List<Long> ids) {
+        String subSql = ids.stream().map(String::valueOf).collect(Collectors.joining(","));
+        Long bindCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM gateway_api_workflow WHERE workflow_id IN (" + subSql + ")", Long.class);
+        if (bindCount != null && bindCount > 0) {
+            throw new RuntimeException("workflow is bound to gateway APIs, please unbind first");
+        }
+    }
+
+    /**
+     * 广播工作流发布/删除事件，网关节点据此刷新编译缓存并重注册关联API
+     */
+    private void publishWorkflowEvent(Long workflowId, String action) {
+        messagePublisher.publishAfterCommit(
+                RedisChannelTopic.WORKFLOW_PUBLISHED_CHANNEL,
+                "{\"workflowId\":" + workflowId + ",\"action\":\"" + action + "\"}");
     }
 
     @Override
@@ -232,6 +259,8 @@ public class WorkflowServiceImpl extends ServiceImpl<WorkflowMapper, Workflow> i
         updateById(workflow);
         resourceBindingService.sync(String.valueOf(id), workflow.getConfig());
         RunWorkflowCache.set(compiler.compile(String.valueOf(id), workflow.getConfig()));
+        // 发布后广播，网关节点失效旧编译缓存并重新挂载绑定该工作流的在线API
+        publishWorkflowEvent(id, "PUBLISHED");
         return version;
     }
 
