@@ -4,14 +4,13 @@
  *
  * @author huxuehao
  */
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { EditOutlined } from '@ant-design/icons-vue'
 import { useDashboardStore } from '@/stores'
 import { registerBuiltinPanels } from '@/components/dashboard/panels'
 import DashboardGrid from '@/components/dashboard/DashboardGrid.vue'
-import FilterBar from '@/components/dashboard/filter/FilterBar.vue'
-import { buildFilterParams, initFilterValues, type FilterValues } from '@/components/dashboard/filter/filterParams'
+import DashboardEmpty from '@/components/dashboard/DashboardEmpty.vue'
 import { RouteNames } from '@/router/constants'
 
 registerBuiltinPanels()
@@ -21,16 +20,6 @@ const dashboardStore = useDashboardStore()
 
 const dsl = computed(() => dashboardStore.portal?.config || null)
 const hasPanels = computed(() => (dsl.value?.panels?.length || 0) > 0)
-const filters = computed(() => dsl.value?.filters || [])
-
-const filterValues = ref<FilterValues>({})
-watch(
-  () => dsl.value?.filters,
-  (f) => {
-    filterValues.value = initFilterValues(f || [])
-  },
-)
-const globalParams = computed(() => buildFilterParams(filters.value, filterValues.value))
 
 function goDesigner() {
   router.push({ name: RouteNames.DASHBOARD_DESIGN })
@@ -58,7 +47,7 @@ export default {
         </p>
       </div>
       <div class="portal-actions">
-        <a-button type="primary" @click="goDesigner">
+        <a-button type="text" @click="goDesigner">
           <template #icon><EditOutlined /></template>
           设计器
         </a-button>
@@ -68,10 +57,9 @@ export default {
     <div class="portal-body">
       <a-spin v-if="dashboardStore.loading" />
       <template v-else-if="dsl && hasPanels">
-        <FilterBar v-model="filterValues" :filters="filters" class="portal-filter" />
-        <DashboardGrid :dsl="dsl" :global-params="globalParams" />
+        <DashboardGrid :dsl="dsl" />
       </template>
-      <a-empty v-else description="还没有面板，进入设计器开始搭建" />
+      <DashboardEmpty v-else @create="goDesigner" />
     </div>
   </div>
 </template>
@@ -116,13 +104,6 @@ export default {
 }
 
 .portal-body {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  padding: 16px 24px;
-}
-
-.portal-filter {
-  margin: 0 12px 0;
+  padding: 16px 10px;
 }
 </style>

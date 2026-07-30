@@ -13,9 +13,10 @@ import {
   LeftOutlined,
   RightOutlined,
   RedoOutlined,
-  ReloadOutlined,
+  HistoryOutlined,
+  LayoutOutlined,
+  ClearOutlined,
   SaveOutlined,
-  FilterOutlined,
   UndoOutlined,
   UnorderedListOutlined,
 } from '@ant-design/icons-vue'
@@ -25,17 +26,14 @@ import PanelLibrary from '@/components/dashboard/PanelLibrary.vue'
 import PanelConfigDrawer from '@/components/dashboard/PanelConfigDrawer.vue'
 import DatasetPanel from '@/components/dashboard/DatasetPanel.vue'
 import DatasetHelp from '@/components/dashboard/DatasetHelp.vue'
-import FilterBar from '@/components/dashboard/filter/FilterBar.vue'
-import FilterConfigModal from '@/components/dashboard/filter/FilterConfigModal.vue'
-import {
-  buildFilterParams,
-  initFilterValues,
-  type FilterValues,
-} from '@/components/dashboard/filter/filterParams'
+import SaveVersionModal from '@/components/dashboard/SaveVersionModal.vue'
+import HistoryDrawer from '@/components/dashboard/HistoryDrawer.vue'
+import AutoLayoutModal from '@/components/dashboard/AutoLayoutModal.vue'
+import { applyAutoLayout, type AutoLayoutMode } from '@/components/dashboard/autoLayout'
 import {
   dashboardPortal,
   dashboardSavePersonal,
-  dashboardResetPersonal,
+  dashboardSaveVersion,
   datasetList,
 } from '@/api/dashboard'
 import { RouteNames } from '@/router/constants'
@@ -51,18 +49,10 @@ const selectedId = ref<string | null>(null)
 const datasets = ref<DashboardDatasetEntity[]>([])
 const saving = ref(false)
 
-// ── 全局筛选器 ──
-const filterConfigOpen = ref(false)
-const filterValues = ref<FilterValues>({})
-const filters = computed(() => dsl.value?.filters || [])
-const globalParams = computed(() => buildFilterParams(filters.value, filterValues.value))
-
-function onSaveFilters(newFilters: typeof filters.value) {
-  if (!dsl.value) return
-  dsl.value.filters = newFilters
-  filterValues.value = initFilterValues(newFilters)
-  commit()
-}
+// 栅格分辨率：目标细粒度(48列/20行高，比基准 24/40 细 2 倍)；基准用于面板 defaultDsl 缩放与存量迁移
+const GRID_TARGET = { cols: 48, rowHeight: 20, margin: [12, 12] as [number, number], responsive: true }
+const AUTHOR_COLS = 24
+const AUTHOR_ROW_HEIGHT = 40
 
 // ── 悬浮面板：左侧可隐藏，右侧可拖拽调宽 ──
 const RIGHT_MIN = 310
@@ -71,6 +61,12 @@ const datasetPanelOpen = ref(false)
 const rightWidth = ref(RIGHT_MIN)
 const dragging = ref(false)
 const maxRightWidth = computed(() => Math.max(RIGHT_MIN, Math.floor(window.innerWidth * 0.45)))
+
+// 数据集面板停靠在配置面板左侧（固定宽度）
+const DATASET_WIDTH = 380
+const canvasPaddingRight = computed(() =>
+  datasetPanelOpen.value ? rightWidth.value + DATASET_WIDTH + 12 : rightWidth.value + 5,
+)
 
 function beginResize(event: MouseEvent) {
   dragging.value = true
@@ -140,17 +136,27 @@ function addPanel(type: string) {
   const base = def.defaultDsl()
   const id = 'p-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
   const maxY = dsl.value.panels.reduce((m, p) => Math.max(m, p.layout.y + p.layout.h), 0)
+  // 面板 defaultDsl 的 w/h 按基准分辨率(24/40)编写，按当前栅格等比缩放以保持视觉尺寸
+  const g = dsl.value.grid
+  const wScale = (g?.cols || GRID_TARGET.cols) / AUTHOR_COLS
+  const hScale = AUTHOR_ROW_HEIGHT / (g?.rowHeight || GRID_TARGET.rowHeight)
   const panel: PanelDsl = {
     id,
     type,
     title: def.name,
     showTitle: true,
+    showHeader: true,
     dataset: null,
     fieldMapping: base.fieldMapping || {},
     options: base.options || {},
     style: {},
     refresh: { enabled: false, interval: 60 },
-    layout: { x: 0, y: maxY, w: base.layout?.w || 8, h: base.layout?.h || 6 },
+    layout: {
+      x: 0,
+      y: maxY,
+      w: Math.max(1, Math.round((base.layout?.w || 8) * wScale)),
+      h: Math.max(1, Math.round((base.layout?.h || 6) * hScale)),
+    },
   }
   dsl.value.panels.push(panel)
   selectedId.value = id
@@ -203,7 +209,6 @@ async function loadPortal() {
   const portal = resp.data.data
   dashboardId.value = portal.dashboardId
   dsl.value = normalizeDsl(portal.config)
-  filterValues.value = initFilterValues(dsl.value.filters)
   selectedId.value = null
   resetHistory()
 }
@@ -211,18 +216,32 @@ async function loadPortal() {
 function normalizeDsl(config: DashboardDsl | null): DashboardDsl {
   const base: DashboardDsl = {
     version: 1,
-    grid: { cols: 24, rowHeight: 40, margin: [12, 12], responsive: true },
+    grid: { ...GRID_TARGET },
     refresh: { enabled: false, interval: 60 },
-    filters: [],
     panels: [],
   }
   if (!config) return base
+  const grid = config.grid || { ...GRID_TARGET }
+  let panels = config.panels || []
+  // 细粒度栅格迁移：存量分辨率与目标不一致时等比缩放面板坐标，保持视觉布局不变
+  if (grid.cols !== GRID_TARGET.cols || grid.rowHeight !== GRID_TARGET.rowHeight) {
+    const ws = GRID_TARGET.cols / (grid.cols || GRID_TARGET.cols)
+    const hs = (grid.rowHeight || GRID_TARGET.rowHeight) / GRID_TARGET.rowHeight
+    panels = panels.map((p) => ({
+      ...p,
+      layout: {
+        x: Math.round(p.layout.x * ws),
+        y: Math.round(p.layout.y * hs),
+        w: Math.max(1, Math.round(p.layout.w * ws)),
+        h: Math.max(1, Math.round(p.layout.h * hs)),
+      },
+    }))
+  }
   return {
     version: config.version || 1,
-    grid: config.grid || base.grid,
+    grid: { ...grid, cols: GRID_TARGET.cols, rowHeight: GRID_TARGET.rowHeight },
     refresh: config.refresh || base.refresh,
-    filters: config.filters || [],
-    panels: config.panels || [],
+    panels,
   }
 }
 
@@ -231,22 +250,64 @@ async function loadDatasets() {
   datasets.value = resp.data.data || []
 }
 
-async function save() {
+// 保存模态与历史版本
+const saveModalOpen = ref(false)
+const historyOpen = ref(false)
+// 自动排版：重排后需强制重建画布(改变存量面板坐标，新增/删除以外不会触发内部 layout 重建)
+const autoLayoutOpen = ref(false)
+const canvasKey = ref(0)
+// 防碰撞开关（默认开启：面板只能拖到空位）
+const preventCollision = ref(true)
+
+function onAutoLayout(mode: AutoLayoutMode) {
+  if (!dsl.value) return
+  applyAutoLayout(dsl.value.panels, dsl.value.grid?.cols || 48, mode)
+  selectedId.value = null
+  canvasKey.value++
+  commit()
+  message.success('已自动排版')
+}
+
+/** 一键清空所有面板（可撤销） */
+function clearAll() {
+  if (!dsl.value) return
+  dsl.value.panels = []
+  selectedId.value = null
+  canvasKey.value++
+  commit()
+  message.success('已清空')
+}
+
+async function doDirectSave() {
   if (!dashboardId.value || !dsl.value) return
   saving.value = true
   try {
     await dashboardSavePersonal(dashboardId.value, dsl.value)
+    saveModalOpen.value = false
     message.success('已保存')
   } finally {
     saving.value = false
   }
 }
 
-async function resetDefault() {
-  if (!dashboardId.value) return
-  await dashboardResetPersonal(dashboardId.value)
-  await loadPortal()
-  message.success('已恢复默认')
+async function doSaveVersion(note: string) {
+  if (!dashboardId.value || !dsl.value) return
+  saving.value = true
+  try {
+    await dashboardSaveVersion(dashboardId.value, dsl.value, note)
+    saveModalOpen.value = false
+    message.success('已保存为历史版本')
+  } finally {
+    saving.value = false
+  }
+}
+
+/** 回滚后重载画布（后端已落地当前配置） */
+function onRolledback(config: DashboardDsl) {
+  dsl.value = normalizeDsl(config)
+  selectedId.value = null
+  canvasKey.value++
+  resetHistory()
 }
 
 function goDatasets() {
@@ -276,8 +337,25 @@ onBeforeUnmount(() => {
           <template #icon><ArrowLeftOutlined /></template>
           返回
         </a-button>
+        <a-button type="text" @click="autoLayoutOpen = true">
+          <template #icon><LayoutOutlined /></template>
+          自动排版
+        </a-button>
+        <a-popconfirm title="清空当前所有面板？可撤销" ok-text="清空" @confirm="clearAll">
+          <a-button type="text" danger>
+            <template #icon><ClearOutlined /></template>
+            清空
+          </a-button>
+        </a-popconfirm>
       </div>
       <div class="toolbar-right">
+        <a-tooltip title="开启后面板只能拖到空位；关闭后可拖到任意位置、其他面板自动归位">
+          <span class="toolbar-toggle">
+            <span class="toggle-label">防碰撞</span>
+            <a-switch v-model:checked="preventCollision" size="small" />
+          </span>
+        </a-tooltip>
+        <span class="toolbar-divider" />
         <a-tooltip title="撤销">
           <a-button type="text" :disabled="!canUndo" @click="undo">
             <template #icon><UndoOutlined /></template>
@@ -289,21 +367,15 @@ onBeforeUnmount(() => {
           </a-button>
         </a-tooltip>
         <span class="toolbar-divider" />
-        <a-button @click="filterConfigOpen = true">
-          <template #icon><FilterOutlined /></template>
-          筛选器
-        </a-button>
         <a-button @click="goDatasets">
           <template #icon><UnorderedListOutlined /></template>
           数据集
         </a-button>
-        <a-popconfirm title="恢复为租户默认模板？当前个人修改将丢失" @confirm="resetDefault">
-          <a-button>
-            <template #icon><ReloadOutlined /></template>
-            恢复默认
-          </a-button>
-        </a-popconfirm>
-        <a-button type="primary" :loading="saving" @click="save">
+        <a-button @click="historyOpen = true">
+          <template #icon><HistoryOutlined /></template>
+          历史版本
+        </a-button>
+        <a-button type="primary" :loading="saving" @click="saveModalOpen = true">
           <template #icon><SaveOutlined /></template>
           保存
         </a-button>
@@ -313,15 +385,15 @@ onBeforeUnmount(() => {
     <div class="designer-body">
       <main
         class="designer-canvas"
-        :style="{ paddingLeft: (libraryOpen ? 232 : 20) + 'px', paddingRight: (rightWidth + 12) + 'px' }"
+        :style="{ paddingLeft: (libraryOpen ? 232 : 0) + 'px', paddingRight: canvasPaddingRight + 'px' }"
         @click.self="selectedId = null"
       >
-        <FilterBar v-model="filterValues" :filters="filters" class="designer-filter" />
         <DashboardCanvas
           v-if="dsl"
+          :key="canvasKey"
           :dsl="dsl"
           :selected-id="selectedId"
-          :global-params="globalParams"
+          :prevent-collision="preventCollision"
           @select="selectedId = $event"
           @remove="removePanel"
           @change="commitDebounced"
@@ -348,17 +420,11 @@ onBeforeUnmount(() => {
         </div>
       </Transition>
 
-      <!-- 右侧悬浮面板（可拖拽调宽）：数据集面板与配置面板二选一 -->
+      <!-- 右侧悬浮面板配置（可拖拽调宽） -->
       <aside class="floating-panel right" :class="{ dragging }" :style="{ width: rightWidth + 'px' }">
         <div class="resize-handle" @mousedown.prevent="beginResize" />
         <div class="floating-body">
-          <DatasetPanel
-            v-if="datasetPanelOpen"
-            @close="datasetPanelOpen = false"
-            @changed="loadDatasets"
-          />
           <PanelConfigDrawer
-            v-else
             :panel="selectedPanel"
             :datasets="datasets"
             @update="onUpdatePanel"
@@ -366,11 +432,35 @@ onBeforeUnmount(() => {
         </div>
       </aside>
 
+      <!-- 数据集面板：停靠在配置面板左侧 -->
+      <Transition name="lib-slide">
+        <aside
+          v-show="datasetPanelOpen"
+          class="floating-panel dataset"
+          :style="{ right: (rightWidth + 20) + 'px', width: DATASET_WIDTH + 'px' }"
+        >
+          <div class="floating-body">
+            <DatasetPanel @close="datasetPanelOpen = false" @changed="loadDatasets" />
+          </div>
+        </aside>
+      </Transition>
+
       <!-- 右下角可拖拽数据集帮助悬浮球 -->
       <DatasetHelp />
     </div>
 
-    <FilterConfigModal v-model:open="filterConfigOpen" :filters="filters" @save="onSaveFilters" />
+    <SaveVersionModal
+      v-model:open="saveModalOpen"
+      :saving="saving"
+      @save="doDirectSave"
+      @save-version="doSaveVersion"
+    />
+    <HistoryDrawer
+      v-model:open="historyOpen"
+      :dashboard-id="dashboardId"
+      @rolledback="onRolledback"
+    />
+    <AutoLayoutModal v-model:open="autoLayoutOpen" @apply="onAutoLayout" />
   </div>
 </template>
 
@@ -404,6 +494,17 @@ onBeforeUnmount(() => {
   margin: 0 4px;
 }
 
+.toolbar-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.toggle-label {
+  font-size: 13px;
+  color: #595959;
+}
+
 .designer-body {
   position: relative;
   flex: 1;
@@ -416,10 +517,6 @@ onBeforeUnmount(() => {
   padding: 0;
   background: #f7f8fa;
   transition: padding 0.28s ease;
-}
-
-.designer-filter {
-  margin: 12px 12px 0;
 }
 
 /* 悬浮卡片：圆角、边框、微阴影 */
@@ -444,6 +541,10 @@ onBeforeUnmount(() => {
 .floating-panel.right {
   right: 12px;
   min-width: 300px;
+}
+
+.floating-panel.dataset {
+  z-index: 9;
 }
 
 .floating-panel.right.dragging {

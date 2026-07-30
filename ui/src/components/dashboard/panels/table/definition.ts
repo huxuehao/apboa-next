@@ -14,7 +14,7 @@ export const tablePanelDefinition: PanelDefinition = {
   category: '表格',
   icon: markRaw(TableOutlined),
   component: markRaw(TablePanel),
-  dataRequirement: { needsDataset: true },
+  dataRequirement: { needsDataset: true, supportsPanelFilters: true },
   defaultDsl: () => ({
     layout: { x: 0, y: 0, w: 12, h: 6 },
     options: { pageSize: 10, showHeader: true, size: 'small' },

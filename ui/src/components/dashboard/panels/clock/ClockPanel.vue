@@ -5,6 +5,7 @@
  * @author huxuehao
  */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import FlipDigit from './FlipDigit.vue'
 import type { DatasetExecuteResult, PanelDsl } from '@/types/dashboard'
 
 const props = defineProps<{
@@ -56,7 +57,16 @@ function isDigit(ch: string): boolean {
 const hourAngle = computed(() => (now.value.getHours() % 12) * 30 + now.value.getMinutes() * 0.5)
 const minuteAngle = computed(() => now.value.getMinutes() * 6 + now.value.getSeconds() * 0.1)
 const secondAngle = computed(() => now.value.getSeconds() * 6)
-const ticks = Array.from({ length: 12 }, (_, i) => i * 30)
+// 表盘刻度：60 分钟刻度（去除整点）+ 12 整点粗刻度
+const minuteTicks = Array.from({ length: 60 }, (_, i) => i * 6).filter((d) => d % 30 !== 0)
+const hourTicks = Array.from({ length: 12 }, (_, i) => i * 30)
+// 四个方位数字时标
+const cardinals = [
+  { t: '12', x: 50, y: 16 },
+  { t: '3', x: 84, y: 50 },
+  { t: '6', x: 50, y: 84 },
+  { t: '9', x: 16, y: 50 },
+]
 </script>
 
 <template>
@@ -70,9 +80,10 @@ const ticks = Array.from({ length: 12 }, (_, i) => i * 30)
     <!-- 翻牌时钟 -->
     <template v-else-if="style === 'flip'">
       <div class="clock-flip">
-        <span v-for="(ch, i) in chars" :key="i" :class="isDigit(ch) ? 'cf-digit' : 'cf-sep'">
-          {{ ch }}
-        </span>
+        <template v-for="(ch, i) in chars" :key="i">
+          <FlipDigit v-if="isDigit(ch)" :value="ch" />
+          <span v-else class="cf-sep">{{ ch }}</span>
+        </template>
       </div>
       <div v-if="showDate" class="clock-date">{{ dateStr }}</div>
     </template>
@@ -86,22 +97,57 @@ const ticks = Array.from({ length: 12 }, (_, i) => i * 30)
     <!-- 模拟时钟 -->
     <template v-else>
       <svg class="clock-analog" viewBox="0 0 100 100">
-        <circle cx="50" cy="50" r="46" fill="#fff" stroke="#e8e8e8" stroke-width="2" />
+        <circle cx="50" cy="50" r="47" fill="#fff" stroke="#eceef1" stroke-width="1.5" />
+        <circle cx="50" cy="50" r="43" fill="none" stroke="#f5f6f7" stroke-width="1" />
+        <!-- 分钟细刻度 -->
         <line
-          v-for="t in ticks"
-          :key="t"
+          v-for="m in minuteTicks"
+          :key="'m' + m"
           x1="50"
-          y1="8"
+          y1="7"
           x2="50"
-          y2="13"
-          stroke="#d9d9d9"
-          stroke-width="1.5"
-          :transform="`rotate(${t} 50 50)`"
+          y2="10"
+          stroke="#e2e5ea"
+          stroke-width="0.8"
+          :transform="`rotate(${m} 50 50)`"
         />
-        <line x1="50" y1="50" x2="50" y2="28" stroke="#262626" stroke-width="3" stroke-linecap="round" :transform="`rotate(${hourAngle} 50 50)`" />
-        <line x1="50" y1="50" x2="50" y2="18" stroke="#262626" stroke-width="2" stroke-linecap="round" :transform="`rotate(${minuteAngle} 50 50)`" />
-        <line v-if="showSeconds" x1="50" y1="54" x2="50" y2="14" stroke="#1677ff" stroke-width="1" stroke-linecap="round" :transform="`rotate(${secondAngle} 50 50)`" />
-        <circle cx="50" cy="50" r="2.5" fill="#262626" />
+        <!-- 整点粗刻度 -->
+        <line
+          v-for="h in hourTicks"
+          :key="'h' + h"
+          x1="50"
+          y1="7"
+          x2="50"
+          y2="12"
+          stroke="#c2c7cf"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          :transform="`rotate(${h} 50 50)`"
+        />
+        <!-- 方位数字 -->
+        <text
+          v-for="c in cardinals"
+          :key="c.t"
+          :x="c.x"
+          :y="c.y"
+          text-anchor="middle"
+          dominant-baseline="central"
+          font-size="8"
+          font-weight="600"
+          fill="#8c8c8c"
+        >{{ c.t }}</text>
+        <!-- 时针（带尾） -->
+        <line x1="50" y1="55" x2="50" y2="31" stroke="#262626" stroke-width="3.4" stroke-linecap="round" :transform="`rotate(${hourAngle} 50 50)`" />
+        <!-- 分针（带尾） -->
+        <line x1="50" y1="57" x2="50" y2="19" stroke="#262626" stroke-width="2.4" stroke-linecap="round" :transform="`rotate(${minuteAngle} 50 50)`" />
+        <!-- 秒针 + 尾配重 -->
+        <g v-if="showSeconds" :transform="`rotate(${secondAngle} 50 50)`">
+          <line x1="50" y1="60" x2="50" y2="14" stroke="#1677ff" stroke-width="1" stroke-linecap="round" />
+          <circle cx="50" cy="60" r="2" fill="#1677ff" />
+        </g>
+        <!-- 中心轴帽 -->
+        <circle cx="50" cy="50" r="3.4" fill="#262626" />
+        <circle cx="50" cy="50" r="1.4" fill="#fff" />
       </svg>
     </template>
   </div>
@@ -119,9 +165,9 @@ const ticks = Array.from({ length: 12 }, (_, i) => i * 30)
 
 .clock-digital {
   font-family: 'JetBrains Mono', Menlo, Consolas, monospace;
-  font-size: 34px;
-  font-weight: 700;
-  color: #1a1a1a;
+  font-size: var(--dash-text-size, 34px);
+  font-weight: var(--dash-text-weight, 700);
+  color: var(--dash-text-color, #1a1a1a);
   line-height: 1.1;
 }
 
@@ -132,34 +178,21 @@ const ticks = Array.from({ length: 12 }, (_, i) => i * 30)
 
 .clock-date-lg {
   font-size: 15px;
-  color: #595959;
+  color: var(--dash-text-color, #595959);
 }
 
 .clock-flip {
   display: flex;
   align-items: center;
-  gap: 4px;
-}
-
-.cf-digit {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 26px;
-  padding: 6px 4px;
-  border-radius: 4px;
-  background: #262626;
-  color: #fff;
-  font-family: 'JetBrains Mono', Menlo, Consolas, monospace;
-  font-size: 26px;
-  font-weight: 700;
-  line-height: 1;
+  gap: 5px;
+  perspective: 320px;
 }
 
 .cf-sep {
-  color: #262626;
-  font-size: 24px;
+  color: #595959;
+  font-size: 28px;
   font-weight: 700;
+  padding: 0 1px;
 }
 
 .clock-analog {

@@ -4,7 +4,7 @@
  *
  * @author huxuehao
  */
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
@@ -40,11 +40,30 @@ const props = defineProps<{
   error?: string | null
 }>()
 
-const option = computed(() => buildChartOption(props.panel, props.data))
+// 测量容器尺寸，供图表自适应（字号/间距/符号大小按尺寸档位调整）
+const wrap = ref<HTMLElement | null>(null)
+const size = reactive({ w: 0, h: 0 })
+let ro: ResizeObserver | null = null
+
+onMounted(() => {
+  if (wrap.value) {
+    ro = new ResizeObserver((entries) => {
+      const cr = entries[0]?.contentRect
+      if (cr) {
+        size.w = cr.width
+        size.h = cr.height
+      }
+    })
+    ro.observe(wrap.value)
+  }
+})
+onBeforeUnmount(() => ro?.disconnect())
+
+const option = computed(() => buildChartOption(props.panel, props.data, { width: size.w, height: size.h }))
 </script>
 
 <template>
-  <div class="chart-panel">
+  <div ref="wrap" class="chart-panel">
     <div v-if="error" class="chart-error">{{ error }}</div>
     <v-chart v-else class="chart" :option="option" :loading="loading" autoresize />
   </div>

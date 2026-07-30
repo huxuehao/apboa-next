@@ -14,7 +14,8 @@ export const kpiPanelDefinition: PanelDefinition = {
   category: '指标',
   icon: markRaw(RiseOutlined),
   component: markRaw(KpiPanel),
-  dataRequirement: { needsDataset: true },
+  dataRequirement: { needsDataset: true, supportsPanelFilters: true },
+  styleGroups: ['card', 'header', 'text'],
   defaultDsl: () => ({
     layout: { x: 0, y: 0, w: 6, h: 4 },
     options: { label: '指标名称', unit: '' },

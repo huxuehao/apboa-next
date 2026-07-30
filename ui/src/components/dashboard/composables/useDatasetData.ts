@@ -13,14 +13,20 @@ export function useDatasetData() {
   const error = ref<string | null>(null)
 
   /**
-   * 按数据集 ID 取数
+   * 按数据集 ID 取数。
+   * @param silent 静默刷新：不置 loading（定时后台刷新用），避免遮罩闪烁；旧数据保留至新数据到达
    */
-  async function load(datasetId?: string | null, params?: Record<string, unknown>, limit?: number) {
+  async function load(
+    datasetId?: string | null,
+    params?: Record<string, unknown>,
+    limit?: number,
+    silent?: boolean,
+  ) {
     if (!datasetId) {
       result.value = null
       return
     }
-    loading.value = true
+    if (!silent) loading.value = true
     error.value = null
     try {
       const resp = await datasetQuery(datasetId, { params, limit })
@@ -28,7 +34,7 @@ export function useDatasetData() {
     } catch (e: unknown) {
       error.value = typeof e === 'string' ? e : (e as Error)?.message || '取数失败'
     } finally {
-      loading.value = false
+      if (!silent) loading.value = false
     }
   }
 

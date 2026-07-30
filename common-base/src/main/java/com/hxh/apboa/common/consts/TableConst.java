@@ -75,4 +75,5 @@ public class TableConst {
     public static final String DASHBOARD = "dashboard";
     public static final String DASHBOARD_USER = "dashboard_user";
     public static final String DASHBOARD_DATASET = "dashboard_dataset";
+    public static final String DASHBOARD_HISTORY = "dashboard_history";
 }

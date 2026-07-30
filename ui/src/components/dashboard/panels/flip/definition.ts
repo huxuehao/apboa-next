@@ -15,6 +15,7 @@ export const flipNumberPanelDefinition: PanelDefinition = {
   icon: markRaw(FieldNumberOutlined),
   component: markRaw(FlipNumberPanel),
   dataRequirement: { needsDataset: true },
+  styleGroups: ['card', 'header'],
   defaultDsl: () => ({
     layout: { x: 0, y: 0, w: 6, h: 4 },
     options: { value: '0', precision: 0, thousand: true },

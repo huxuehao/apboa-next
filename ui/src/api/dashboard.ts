@@ -3,6 +3,7 @@ import type { ApiResponse, PageResult, PageParams } from '@/types/common'
 import type {
   DashboardDatasetEntity,
   DashboardEntity,
+  DashboardHistoryEntity,
   DashboardUserEntity,
   DatasetExecuteResult,
   PortalDashboard,
@@ -68,8 +69,25 @@ export function dashboardSavePersonal(id: string, config: unknown) {
   return request.put<ApiResponse<boolean>>(`/api/dashboard/${id}/personal`, config)
 }
 
-export function dashboardResetPersonal(id: string) {
-  return request.delete<ApiResponse<boolean>>(`/api/dashboard/${id}/personal`)
+// ── 历史版本 ──
+export function dashboardSaveVersion(id: string, config: unknown, note?: string) {
+  return request.post<ApiResponse<boolean>>(`/api/dashboard/${id}/history`, { config, note })
+}
+
+export function dashboardHistoryList(id: string) {
+  return request.get<ApiResponse<DashboardHistoryEntity[]>>(`/api/dashboard/${id}/history`)
+}
+
+export function dashboardRollback(
+  id: string,
+  historyId: string,
+  payload: { snapshotCurrent: boolean; note?: string },
+) {
+  return request.post<ApiResponse<unknown>>(`/api/dashboard/${id}/history/${historyId}/rollback`, payload)
+}
+
+export function dashboardDeleteHistory(id: string, historyId: string) {
+  return request.delete<ApiResponse<boolean>>(`/api/dashboard/${id}/history/${historyId}`)
 }
 
 // ── 数据集 ──

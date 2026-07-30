@@ -15,6 +15,7 @@ export const markdownPanelDefinition: PanelDefinition = {
   icon: markRaw(FileMarkdownOutlined),
   component: markRaw(MarkdownPanel),
   dataRequirement: { needsDataset: false, supportsDataset: false },
+  styleGroups: ['card', 'header', 'text'],
   defaultDsl: () => ({
     layout: { x: 0, y: 0, w: 8, h: 5 },
     options: { content: '## 标题\n\n- 列表项\n- **加粗**、[链接](https://example.com)' },

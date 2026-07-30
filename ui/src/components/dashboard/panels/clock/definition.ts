@@ -15,6 +15,7 @@ export const clockPanelDefinition: PanelDefinition = {
   icon: markRaw(ClockCircleOutlined),
   component: markRaw(ClockPanel),
   dataRequirement: { needsDataset: false, supportsDataset: false },
+  styleGroups: ['card', 'header', 'text'],
   defaultDsl: () => ({
     layout: { x: 0, y: 0, w: 6, h: 4 },
     options: { style: 'digital', showSeconds: true, showDate: true },

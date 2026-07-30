@@ -55,7 +55,7 @@ const menuConfig: MenuItem[] = [
   },
   {
     key: 'dashboard',
-    label: '总览',
+    label: '工作台',
     avatar: homeAvatar,
     path: '/dashboard',
     type: 'menu'

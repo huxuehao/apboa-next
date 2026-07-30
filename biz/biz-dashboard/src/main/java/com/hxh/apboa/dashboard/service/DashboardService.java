@@ -2,6 +2,7 @@ package com.hxh.apboa.dashboard.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.hxh.apboa.common.entity.Dashboard;
+import com.hxh.apboa.common.entity.DashboardHistory;
 import com.hxh.apboa.common.entity.DashboardUser;
 import com.hxh.apboa.dashboard.vo.PortalDashboardVO;
 
@@ -54,7 +55,22 @@ public interface DashboardService extends IService<Dashboard> {
     boolean savePersonal(Long dashboardId, Object config);
 
     /**
-     * 恢复默认（删除个人副本回退到模板）
+     * 保存为历史版本：更新当前副本并新增一条快照（保留最近若干条）
      */
-    boolean resetPersonal(Long dashboardId);
+    boolean saveVersion(Long dashboardId, Object config, String note);
+
+    /**
+     * 列出当前用户在指定看板下的历史版本（按时间倒序）
+     */
+    List<DashboardHistory> listHistory(Long dashboardId);
+
+    /**
+     * 回滚到指定历史版本；snapshotCurrent 为真时先将当前配置存为历史版本，返回回滚后配置
+     */
+    Object rollback(Long dashboardId, Long historyId, boolean snapshotCurrent, String note);
+
+    /**
+     * 删除指定历史版本
+     */
+    boolean deleteHistory(Long dashboardId, Long historyId);
 }

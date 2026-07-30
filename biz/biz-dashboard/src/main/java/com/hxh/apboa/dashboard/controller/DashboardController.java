@@ -2,6 +2,7 @@ package com.hxh.apboa.dashboard.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.hxh.apboa.common.entity.Dashboard;
+import com.hxh.apboa.common.entity.DashboardHistory;
 import com.hxh.apboa.common.entity.DashboardUser;
 import com.hxh.apboa.common.mp.support.MP;
 import com.hxh.apboa.common.mp.support.PageParams;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 描述：Dashboard 模板与门户接口
@@ -88,7 +90,7 @@ public class DashboardController {
     }
 
     /**
-     * 保存当前用户的个人副本 DSL
+     * 保存当前用户的个人副本 DSL（直接保存）
      */
     @PutMapping("/{id}/personal")
     public R<Boolean> savePersonal(@PathVariable("id") Long id, @RequestBody Object config) {
@@ -96,10 +98,38 @@ public class DashboardController {
     }
 
     /**
-     * 恢复默认（删除个人副本）
+     * 保存为历史版本（更新当前并新增快照）
      */
-    @DeleteMapping("/{id}/personal")
-    public R<Boolean> resetPersonal(@PathVariable("id") Long id) {
-        return R.data(dashboardService.resetPersonal(id));
+    @PostMapping("/{id}/history")
+    public R<Boolean> saveVersion(@PathVariable("id") Long id, @RequestBody Map<String, Object> body) {
+        Object note = body.get("note");
+        return R.data(dashboardService.saveVersion(id, body.get("config"), note == null ? null : note.toString()));
+    }
+
+    /**
+     * 历史版本列表（当前用户）
+     */
+    @GetMapping("/{id}/history")
+    public R<List<DashboardHistory>> historyList(@PathVariable("id") Long id) {
+        return R.data(dashboardService.listHistory(id));
+    }
+
+    /**
+     * 回滚到指定历史版本，返回回滚后配置
+     */
+    @PostMapping("/{id}/history/{hid}/rollback")
+    public R<Object> rollback(@PathVariable("id") Long id, @PathVariable("hid") Long hid,
+                              @RequestBody Map<String, Object> body) {
+        boolean snapshot = Boolean.TRUE.equals(body.get("snapshotCurrent"));
+        Object note = body.get("note");
+        return R.data(dashboardService.rollback(id, hid, snapshot, note == null ? null : note.toString()));
+    }
+
+    /**
+     * 删除指定历史版本
+     */
+    @DeleteMapping("/{id}/history/{hid}")
+    public R<Boolean> deleteHistory(@PathVariable("id") Long id, @PathVariable("hid") Long hid) {
+        return R.data(dashboardService.deleteHistory(id, hid));
     }
 }

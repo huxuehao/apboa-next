@@ -131,9 +131,9 @@ const dashOffset = computed(() => CIRCUMFERENCE * (1 - fillPct.value / 100))
 }
 
 .pr-percent {
-  font-size: 24px;
+  font-size: var(--dash-text-size, 24px);
   font-weight: 600;
-  color: #1a1a1a;
+  color: var(--dash-text-color, #1a1a1a);
 }
 
 .pr-label {
@@ -153,9 +153,9 @@ const dashOffset = computed(() => CIRCUMFERENCE * (1 - fillPct.value / 100))
 }
 
 .pr-percent-sm {
-  font-size: 14px;
+  font-size: var(--dash-text-size, 14px);
   font-weight: 600;
-  color: #1a1a1a;
+  color: var(--dash-text-color, #1a1a1a);
 }
 
 .pr-bar-track {

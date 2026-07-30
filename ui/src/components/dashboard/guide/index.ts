@@ -77,7 +77,7 @@ export function registerBuiltinGuides() {
   })
   registerGuide({
     key: 'filter',
-    title: '全局筛选器',
+    title: '面板私有筛选器',
     panelTypes: [],
     component: markRaw(FilterDatasetGuide),
   })

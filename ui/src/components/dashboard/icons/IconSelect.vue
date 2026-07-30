@@ -8,7 +8,7 @@ import { computed, ref } from 'vue'
 import { CloseOutlined } from '@ant-design/icons-vue'
 import { listIcons, resolveIcon } from './iconRegistry'
 
-const props = defineProps<{ value?: string }>()
+const props = defineProps<{ value?: string; disabled?: boolean }>()
 const emit = defineEmits<{ (e: 'update:value', v: string | undefined): void }>()
 
 const open = ref(false)
@@ -34,7 +34,7 @@ function clear() {
 
 <template>
   <div class="icon-select">
-    <a-popover v-model:open="open" trigger="click" placement="bottomLeft">
+    <a-popover v-model:open="open" trigger="click" placement="bottomLeft" :disabled="disabled">
       <template #content>
         <div class="icon-pop">
           <a-input v-model:value="keyword" placeholder="搜索图标" allow-clear size="small" />
@@ -52,12 +52,12 @@ function clear() {
           </div>
         </div>
       </template>
-      <button class="icon-trigger">
+      <button class="icon-trigger" :class="{ disabled }" :disabled="disabled">
         <component :is="current" v-if="current" />
         <span v-else class="icon-placeholder">选择图标</span>
       </button>
     </a-popover>
-    <a-button v-if="value" type="text" size="small" title="清除" @click="clear">
+    <a-button v-if="value && !disabled" type="text" size="small" title="清除" @click="clear">
       <template #icon><CloseOutlined /></template>
     </a-button>
   </div>
@@ -88,6 +88,18 @@ function clear() {
 .icon-trigger:hover {
   border-color: #1677ff;
   color: #1677ff;
+}
+
+.icon-trigger.disabled {
+  cursor: not-allowed;
+  background: #f5f5f5;
+  color: #bfbfbf;
+  border-color: #e8e8e8;
+}
+
+.icon-trigger.disabled:hover {
+  border-color: #e8e8e8;
+  color: #bfbfbf;
 }
 
 .icon-placeholder {

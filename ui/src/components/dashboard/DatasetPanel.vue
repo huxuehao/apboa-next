@@ -7,7 +7,15 @@
 import { onMounted, reactive, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import { debounce } from 'lodash-es'
-import { CloseOutlined, PlayCircleOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons-vue'
+import {
+  CloseOutlined,
+  DeleteOutlined,
+  EditOutlined,
+  PauseCircleOutlined,
+  PlayCircleOutlined,
+  PlusOutlined,
+  SearchOutlined,
+} from '@ant-design/icons-vue'
 import ConfigCodeEditor from '@/components/editor/ConfigCodeEditor.vue'
 import {
   datasetPage,
@@ -214,10 +222,13 @@ onMounted(loadList)
               </div>
               <div class="ds-remark">{{ d.remark || '无描述' }}</div>
               <div class="ds-card-actions">
-                <a @click="openEdit(d)">编辑</a>
-                <a @click="toggleEnable(d)">{{ d.enabled ? '停用' : '启用' }}</a>
+                <a @click="openEdit(d)"><EditOutlined /> 编辑</a>
+                <a @click="toggleEnable(d)">
+                  <component :is="d.enabled ? PauseCircleOutlined : PlayCircleOutlined" />
+                  {{ d.enabled ? '停用' : '启用' }}
+                </a>
                 <a-popconfirm title="确认删除该数据集？" @confirm="remove(d)">
-                  <a class="danger">删除</a>
+                  <a class="danger"><DeleteOutlined /> 删除</a>
                 </a-popconfirm>
               </div>
             </div>
@@ -253,7 +264,7 @@ onMounted(loadList)
         <div class="form-item full">
           <div class="sql-header">
             <span class="form-label">查询语句（仅 SELECT）</span>
-            <a-button size="small" :loading="previewLoading" @click="runPreview">
+            <a-button size="small"  type="text" :loading="previewLoading" @click="runPreview">
               <template #icon><PlayCircleOutlined /></template>
               运行预览
             </a-button>
@@ -386,11 +397,15 @@ onMounted(loadList)
 .ds-card-actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 16px;
   font-size: 13px;
 }
 
 .ds-card-actions a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   cursor: pointer;
 }
 

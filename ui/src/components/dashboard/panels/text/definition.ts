@@ -15,6 +15,7 @@ export const textPanelDefinition: PanelDefinition = {
   icon: markRaw(FontSizeOutlined),
   component: markRaw(TextPanel),
   dataRequirement: { needsDataset: false, supportsDataset: false },
+  styleGroups: ['card', 'header', 'text'],
   defaultDsl: () => ({
     layout: { x: 0, y: 0, w: 6, h: 3 },
     options: { content: '', align: 'left' },

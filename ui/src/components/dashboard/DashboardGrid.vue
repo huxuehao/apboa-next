@@ -4,12 +4,18 @@
  *
  * @author huxuehao
  */
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { GridLayout, GridItem } from 'grid-layout-plus'
 import PanelRenderer from './PanelRenderer.vue'
 import type { DashboardDsl, PanelDsl } from '@/types/dashboard'
 
-const props = defineProps<{ dsl: DashboardDsl; globalParams?: Record<string, unknown> }>()
+const props = defineProps<{ dsl: DashboardDsl }>()
+
+// 首帧禁用进入过渡：避免容器宽度未测量时卡片从左上角“缩放展开”
+const ready = ref(false)
+onMounted(() => {
+  requestAnimationFrame(() => requestAnimationFrame(() => (ready.value = true)))
+})
 
 const layout = computed(() =>
   (props.dsl.panels || []).map((p) => ({
@@ -25,13 +31,14 @@ const panelMap = computed<Record<string, PanelDsl>>(() =>
   Object.fromEntries((props.dsl.panels || []).map((p) => [p.id, p])),
 )
 
-const colNum = computed(() => props.dsl.grid?.cols || 24)
-const rowHeight = computed(() => props.dsl.grid?.rowHeight || 40)
+const colNum = computed(() => props.dsl.grid?.cols || 48)
+const rowHeight = computed(() => props.dsl.grid?.rowHeight || 20)
 const margin = computed(() => props.dsl.grid?.margin || [12, 12])
 </script>
 
 <template>
   <GridLayout
+    :class="{ 'grid-booting': !ready }"
     :layout="layout"
     :col-num="colNum"
     :row-height="rowHeight"
@@ -49,7 +56,18 @@ const margin = computed(() => props.dsl.grid?.margin || [12, 12])
       :h="item.h"
       :i="item.i"
     >
-      <PanelRenderer :panel="panelMap[item.i]!" :global-refresh="dsl.refresh" :global-params="globalParams" />
+      <PanelRenderer :panel="panelMap[item.i]!" :global-refresh="dsl.refresh" :interactive="true" />
     </GridItem>
   </GridLayout>
 </template>
+
+<style scoped lang="scss">
+/* 首帧：隐藏并禁用 item 过渡，避免从左上角缩放展开；ready 后瞬间显示、恢复拖拽过渡 */
+.grid-booting {
+  opacity: 0;
+}
+
+.grid-booting :deep(.vgl-item) {
+  transition: none !important;
+}
+</style>

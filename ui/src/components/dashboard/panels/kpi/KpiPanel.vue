@@ -139,9 +139,9 @@ function formatNumber(v: unknown): string {
 }
 
 .kpi-value {
-  font-size: 30px;
-  font-weight: 600;
-  color: #1a1a1a;
+  font-size: var(--dash-text-size, 30px);
+  font-weight: var(--dash-text-weight, 600);
+  color: var(--dash-text-color, #1a1a1a);
   line-height: 1.2;
 }
 

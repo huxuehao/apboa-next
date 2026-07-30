@@ -38,8 +38,14 @@ export interface PanelDsl {
   id: string
   type: string
   title?: string
-  /** 是否显示标题栏，默认 true */
+  /** 标题图标（Outlined 图标名，样式跟随标题文本） */
+  titleIcon?: string
+  /** 是否显示标题文本，默认 true */
   showTitle?: boolean
+  /** 是否显示整个标题栏，默认 true */
+  showHeader?: boolean
+  /** 面板私有筛选器配置（仅 supportsPanelFilters 的面板生效） */
+  panelFilter?: PanelFilterConfig
   layout: PanelLayout
   dataset?: DatasetRef | null
   fieldMapping?: Record<string, unknown>
@@ -53,15 +59,13 @@ export interface DashboardDsl {
   version: number
   grid: GridConfig
   refresh?: RefreshConfig
-  /** 全局筛选器（改变后联动刷新所有面板） */
-  filters?: DashboardFilter[]
   panels: PanelDsl[]
 }
 
-/** 全局筛选器类型 */
-export type DashboardFilterType = 'dateRange' | 'select' | 'text'
+/** 筛选器类型 */
+export type DashboardFilterType = 'dateRange' | 'date' | 'month' | 'year' | 'select' | 'text'
 
-/** 全局筛选器定义 */
+/** 筛选器定义（面板私有） */
 export interface DashboardFilter {
   id: string
   type: DashboardFilterType
@@ -72,6 +76,20 @@ export interface DashboardFilter {
   options?: { label: string; value: string }[]
   /** 默认值 */
   default?: unknown
+}
+
+/** 面板私有筛选器配置 */
+export interface PanelFilterConfig {
+  /** 是否启用（可关闭） */
+  enabled: boolean
+  /** 位置：标题栏右侧 / 内容区四角（左上、右上、左下、右下） */
+  position: 'header' | 'contentTopLeft' | 'contentTopRight' | 'contentBottomLeft' | 'contentBottomRight'
+  /** 控件尺寸 */
+  size: 'large' | 'middle' | 'small'
+  /** 是否显示筛选项名称（整栏统一） */
+  showLabel: boolean
+  /** 筛选项（以裸参数名注入本面板取数请求） */
+  items: DashboardFilter[]
 }
 
 /** 结果列信息 */
@@ -122,6 +140,15 @@ export interface DashboardUserEntity {
   basedVersion?: string
 }
 
+/** 个人历史版本 */
+export interface DashboardHistoryEntity {
+  id: string
+  dashboardId: string
+  config: DashboardDsl
+  note?: string
+  createdAt?: string
+}
+
 /** 门户解析结果 */
 export interface PortalDashboard {
   dashboardId: string
@@ -160,7 +187,12 @@ export interface PanelDataRequirement {
   needsDataset: boolean
   /** 是否支持绑定数据集（默认 true）；快捷方式等纯展示面板设为 false 以隐藏数据集配置 */
   supportsDataset?: boolean
+  /** 是否支持面板私有筛选器（默认 false，注册表驱动） */
+  supportsPanelFilters?: boolean
 }
+
+/** 样式覆盖分组：card/header 由 PanelRenderer 统一渲染全员支持，text 由文字类面板显式声明 */
+export type PanelStyleGroup = 'card' | 'header' | 'text'
 
 /** 面板描述符（注册表契约） */
 export interface PanelDefinition {
@@ -172,4 +204,6 @@ export interface PanelDefinition {
   defaultDsl: () => Partial<PanelDsl>
   configSchema: PanelConfigField[]
   dataRequirement: PanelDataRequirement
+  /** 样式覆盖分组：缺省 ['card','header']；文字类面板需额外声明 'text' */
+  styleGroups?: PanelStyleGroup[]
 }

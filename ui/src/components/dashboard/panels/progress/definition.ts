@@ -15,6 +15,7 @@ export const progressPanelDefinition: PanelDefinition = {
   icon: markRaw(PieChartOutlined),
   component: markRaw(ProgressPanel),
   dataRequirement: { needsDataset: true },
+  styleGroups: ['card', 'header', 'text'],
   defaultDsl: () => ({
     layout: { x: 0, y: 0, w: 5, h: 5 },
     options: { label: '完成率', style: 'ring', max: 100, value: 0 },

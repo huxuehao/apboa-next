@@ -3,17 +3,19 @@ package com.hxh.apboa.dashboard.service;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.hxh.apboa.common.entity.Dashboard;
+import com.hxh.apboa.common.entity.DashboardHistory;
 import com.hxh.apboa.common.entity.DashboardUser;
 import com.hxh.apboa.common.enums.dashboard.DashboardStatus;
 import com.hxh.apboa.common.util.UserUtils;
+import com.hxh.apboa.dashboard.mapper.DashboardHistoryMapper;
 import com.hxh.apboa.dashboard.mapper.DashboardMapper;
 import com.hxh.apboa.dashboard.mapper.DashboardUserMapper;
 import com.hxh.apboa.dashboard.support.DashboardPermission;
-import com.hxh.apboa.dashboard.support.DashboardSeedLoader;
 import com.hxh.apboa.dashboard.vo.PortalDashboardVO;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
 import java.util.List;
 
 /**
@@ -23,12 +25,16 @@ import java.util.List;
  **/
 @Service
 public class DashboardServiceImpl extends ServiceImpl<DashboardMapper, Dashboard> implements DashboardService {
-    private final DashboardUserMapper dashboardUserMapper;
-    private final DashboardSeedLoader seedLoader;
+    /** 历史版本保留上限（每用户每看板） */
+    private static final int MAX_HISTORY = 30;
 
-    public DashboardServiceImpl(DashboardUserMapper dashboardUserMapper, DashboardSeedLoader seedLoader) {
+    private final DashboardUserMapper dashboardUserMapper;
+    private final DashboardHistoryMapper dashboardHistoryMapper;
+
+    public DashboardServiceImpl(DashboardUserMapper dashboardUserMapper,
+                                DashboardHistoryMapper dashboardHistoryMapper) {
         this.dashboardUserMapper = dashboardUserMapper;
-        this.seedLoader = seedLoader;
+        this.dashboardHistoryMapper = dashboardHistoryMapper;
     }
 
     @Override
@@ -130,11 +136,78 @@ public class DashboardServiceImpl extends ServiceImpl<DashboardMapper, Dashboard
     }
 
     @Override
-    public boolean resetPersonal(Long dashboardId) {
+    @Transactional(rollbackFor = Exception.class)
+    public boolean saveVersion(Long dashboardId, Object config, String note) {
+        savePersonal(dashboardId, config);
+        DashboardHistory history = new DashboardHistory();
+        history.setDashboardId(dashboardId);
+        history.setConfig(config);
+        history.setNote(note);
+        dashboardHistoryMapper.insert(history);
+        pruneHistory(dashboardId, UserUtils.getId());
+        return true;
+    }
+
+    @Override
+    public List<DashboardHistory> listHistory(Long dashboardId) {
+        return dashboardHistoryMapper.selectList(Wrappers.<DashboardHistory>lambdaQuery()
+                .eq(DashboardHistory::getDashboardId, dashboardId)
+                .eq(DashboardHistory::getCreatedBy, UserUtils.getId())
+                .orderByDesc(DashboardHistory::getCreatedAt)
+                .orderByDesc(DashboardHistory::getId));
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Object rollback(Long dashboardId, Long historyId, boolean snapshotCurrent, String note) {
         Long userId = UserUtils.getId();
-        return dashboardUserMapper.delete(Wrappers.<DashboardUser>lambdaQuery()
-                .eq(DashboardUser::getDashboardId, dashboardId)
-                .eq(DashboardUser::getCreatedBy, userId)) >= 0;
+        DashboardHistory target = dashboardHistoryMapper.selectOne(Wrappers.<DashboardHistory>lambdaQuery()
+                .eq(DashboardHistory::getId, historyId)
+                .eq(DashboardHistory::getDashboardId, dashboardId)
+                .eq(DashboardHistory::getCreatedBy, userId)
+                .last("limit 1"));
+        if (target == null) {
+            return null;
+        }
+        // 回滚前可选将当前配置存为历史版本，避免误回滚丢失
+        if (snapshotCurrent) {
+            DashboardUser current = findPersonal(dashboardId, userId);
+            if (current != null && current.getConfig() != null) {
+                DashboardHistory snapshot = new DashboardHistory();
+                snapshot.setDashboardId(dashboardId);
+                snapshot.setConfig(current.getConfig());
+                snapshot.setNote(note == null || note.isBlank() ? "回滚前自动备份" : note);
+                dashboardHistoryMapper.insert(snapshot);
+            }
+        }
+        savePersonal(dashboardId, target.getConfig());
+        pruneHistory(dashboardId, userId);
+        return target.getConfig();
+    }
+
+    @Override
+    public boolean deleteHistory(Long dashboardId, Long historyId) {
+        return dashboardHistoryMapper.delete(Wrappers.<DashboardHistory>lambdaQuery()
+                .eq(DashboardHistory::getId, historyId)
+                .eq(DashboardHistory::getDashboardId, dashboardId)
+                .eq(DashboardHistory::getCreatedBy, UserUtils.getId())) > 0;
+    }
+
+    /**
+     * 保留最近 MAX_HISTORY 条，超出按时间升序删除多余旧版本
+     */
+    private void pruneHistory(Long dashboardId, Long userId) {
+        List<DashboardHistory> stale = dashboardHistoryMapper.selectList(Wrappers.<DashboardHistory>lambdaQuery()
+                .select(DashboardHistory::getId)
+                .eq(DashboardHistory::getDashboardId, dashboardId)
+                .eq(DashboardHistory::getCreatedBy, userId)
+                .orderByDesc(DashboardHistory::getCreatedAt)
+                .orderByDesc(DashboardHistory::getId)
+                .last("limit " + MAX_HISTORY + ", 100000"));
+        if (!stale.isEmpty()) {
+            dashboardHistoryMapper.delete(Wrappers.<DashboardHistory>lambdaQuery()
+                    .in(DashboardHistory::getId, stale.stream().map(DashboardHistory::getId).toList()));
+        }
     }
 
     private Dashboard findDefaultTemplate() {
@@ -152,7 +225,8 @@ public class DashboardServiceImpl extends ServiceImpl<DashboardMapper, Dashboard
         dashboard.setStatus(DashboardStatus.PUBLISHED);
         dashboard.setIsDefault(true);
         dashboard.setVersion("1");
-        dashboard.setConfig(seedLoader.load());
+        // 默认内容置空（无内置默认配置），新用户从空白开始搭建
+        dashboard.setConfig(new HashMap<>());
         save(dashboard);
         return dashboard;
     }

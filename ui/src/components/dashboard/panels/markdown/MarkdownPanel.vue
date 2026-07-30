@@ -44,8 +44,8 @@ const html = computed(() => {
 }
 
 .md-body {
-  font-size: 14px;
-  color: #434343;
+  font-size: var(--dash-text-size, 14px);
+  color: var(--dash-text-color, #434343);
   line-height: 1.7;
   word-break: break-word;
 

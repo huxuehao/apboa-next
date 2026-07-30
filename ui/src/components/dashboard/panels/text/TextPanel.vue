@@ -34,8 +34,9 @@ const align = computed<'left' | 'center' | 'right'>(
 }
 
 .text-content {
-  font-size: 14px;
-  color: #434343;
+  font-size: var(--dash-text-size, 14px);
+  color: var(--dash-text-color, #434343);
+  font-weight: var(--dash-text-weight, 400);
   line-height: 1.7;
   white-space: pre-wrap;
   word-break: break-word;
