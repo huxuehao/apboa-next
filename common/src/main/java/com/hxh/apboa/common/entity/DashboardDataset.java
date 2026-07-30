@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.hxh.apboa.common.config.mybatis.JsonNodeTypeHandler;
 import com.hxh.apboa.common.consts.TableConst;
+import com.hxh.apboa.common.enums.dashboard.DatasetType;
 import com.hxh.apboa.common.mp.annotation.QueryDefine;
 import com.hxh.apboa.common.mp.support.QueryCondition;
 import lombok.Getter;
@@ -28,6 +29,11 @@ public class DashboardDataset extends BaseTenantEntity {
      */
     private String remark;
     /**
+     * 数据集类型（SQL / HTTP），为空时按 SQL 处理
+     */
+    @QueryDefine(condition = QueryCondition.EQ)
+    private DatasetType type;
+    /**
      * 查询语句（仅允许 SELECT），列名 sql 为保留字故映射为 sql_text
      */
     @TableField("sql_text")
@@ -51,4 +57,9 @@ public class DashboardDataset extends BaseTenantEntity {
      */
     @QueryDefine(condition = QueryCondition.EQ)
     private Long datasourceId;
+    /**
+     * HTTP 数据集配置（url、queries、headers、dataPath），仅 type=HTTP 时使用
+     */
+    @TableField(value = "http_config", typeHandler = JsonNodeTypeHandler.class)
+    private Object httpConfig;
 }

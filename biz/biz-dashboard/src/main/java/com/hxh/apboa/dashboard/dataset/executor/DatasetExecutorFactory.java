@@ -1,11 +1,12 @@
 package com.hxh.apboa.dashboard.dataset.executor;
 
+import com.hxh.apboa.common.enums.dashboard.DatasetType;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
 
 /**
- * 描述：数据集执行器工厂。按数据源选择匹配的执行器实现。
+ * 描述：数据集执行器工厂。按数据集类型选择匹配的执行器实现。
  *
  * @author huxuehao
  **/
@@ -17,10 +18,10 @@ public class DatasetExecutorFactory {
         this.executors = executors;
     }
 
-    public DatasetExecutor resolve(Long datasourceId) {
+    public DatasetExecutor resolve(DatasetType type) {
         return executors.stream()
-                .filter(e -> e.supports(datasourceId))
+                .filter(e -> e.supports(type))
                 .findFirst()
-                .orElseThrow(() -> new IllegalStateException("未找到匹配的数据集执行器: datasourceId=" + datasourceId));
+                .orElseThrow(() -> new IllegalStateException("未找到匹配的数据集执行器: type=" + type));
     }
 }

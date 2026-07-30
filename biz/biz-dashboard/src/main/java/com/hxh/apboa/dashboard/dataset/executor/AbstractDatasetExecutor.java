@@ -1,12 +1,9 @@
 package com.hxh.apboa.dashboard.dataset.executor;
 
-import com.hxh.apboa.common.util.TenantUtils;
-import com.hxh.apboa.common.util.UserUtils;
 import com.hxh.apboa.dashboard.dataset.guard.SqlSecurityValidator;
 import com.hxh.apboa.dashboard.dataset.model.DatasetExecuteCommand;
 import com.hxh.apboa.dashboard.dataset.model.DatasetExecuteResult;
 
-import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -34,17 +31,10 @@ public abstract class AbstractDatasetExecutor implements DatasetExecutor {
 
     /**
      * 组装命名参数：用户参数（数据集固定参数 + 面板私有筛选参数） + 自动注入的租户/用户上下文。
-     * 系统作用域保护：先写入用户参数、后写入系统参数，前端传入同名 currentTenantId/currentUserId
-     * 必被覆盖，确保系统保留参数不可被外部伪造。
+     * 系统保留参数不可被外部伪造，由 {@link DatasetParamSupport#mergeParams} 统一保证。
      */
     protected Map<String, Object> buildParams(DatasetExecuteCommand command) {
-        Map<String, Object> params = new HashMap<>();
-        if (command.getParams() != null) {
-            params.putAll(command.getParams());
-        }
-        params.put("currentTenantId", TenantUtils.getCurrentTenantId());
-        params.put("currentUserId", UserUtils.getId());
-        return params;
+        return DatasetParamSupport.mergeParams(command.getParams());
     }
 
     /**

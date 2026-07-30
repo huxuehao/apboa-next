@@ -58,17 +58,26 @@ watch(
   },
 )
 
-// 拖拽/缩放改变坐标后回写到面板 DSL
+// 拖拽/缩放改变坐标后回写到面板 DSL；
+// 仅在坐标真正变化时回写并通知，避免挂载/首帧内部规范化触发假变更（导致误判为未保存）
 watch(
   layout,
   (items) => {
+    let changed = false
     items.forEach((item) => {
       const panel = panelById(item.i)
-      if (panel) {
+      if (
+        panel &&
+        (panel.layout.x !== item.x ||
+          panel.layout.y !== item.y ||
+          panel.layout.w !== item.w ||
+          panel.layout.h !== item.h)
+      ) {
         panel.layout = { x: item.x, y: item.y, w: item.w, h: item.h }
+        changed = true
       }
     })
-    emit('change')
+    if (changed) emit('change')
   },
   { deep: true },
 )

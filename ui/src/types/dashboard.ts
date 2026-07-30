@@ -119,16 +119,42 @@ export interface DashboardEntity {
   enabled?: boolean
 }
 
+/** 数据集类型 */
+export type DatasetType = 'SQL' | 'HTTP'
+
+/** HTTP 查询参数：value 支持 :name 模板（绑定筛选/系统参数），default 为回退默认值 */
+export interface HttpQueryParam {
+  key: string
+  value: string
+  default?: string
+}
+
+/** HTTP 固定请求头 */
+export interface HttpHeaderItem {
+  key: string
+  value: string
+}
+
+/** HTTP 数据集配置 */
+export interface HttpDatasetConfig {
+  url: string
+  queries: HttpQueryParam[]
+  headers: HttpHeaderItem[]
+  dataPath?: string
+}
+
 /** 数据集实体 */
 export interface DashboardDatasetEntity {
   id?: string
   name?: string
   remark?: string
+  type?: DatasetType
   sqlText?: string
   params?: unknown
   resultSchema?: unknown
   cacheTtl?: number
   datasourceId?: string
+  httpConfig?: HttpDatasetConfig
   enabled?: boolean
 }
 

@@ -1,5 +1,6 @@
 package com.hxh.apboa.dashboard.dataset.executor;
 
+import com.hxh.apboa.common.enums.dashboard.DatasetType;
 import com.hxh.apboa.dashboard.config.DashboardDatasetProperties;
 import com.hxh.apboa.dashboard.dataset.guard.SqlSecurityValidator;
 import com.hxh.apboa.dashboard.dataset.model.ColumnMeta;
@@ -34,8 +35,8 @@ public class MainDbSqlExecutor extends AbstractDatasetExecutor {
     }
 
     @Override
-    public boolean supports(Long datasourceId) {
-        return datasourceId == null;
+    public boolean supports(DatasetType type) {
+        return type == null || type == DatasetType.SQL;
     }
 
     @Override

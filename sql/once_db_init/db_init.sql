@@ -1167,6 +1167,8 @@ CREATE TABLE `dashboard_dataset` (
 `tenant_id` bigint NOT NULL COMMENT '租户ID',
 `name` varchar(128) NOT NULL COMMENT '数据集名称',
 `remark` varchar(512) DEFAULT NULL COMMENT '备注',
+`type` varchar(16) NOT NULL DEFAULT 'SQL' COMMENT '数据集类型：SQL / HTTP',
+`http_config` json DEFAULT NULL COMMENT 'HTTP 数据集配置（url、queries、headers、dataPath）',
 `sql_text` text COMMENT '查询语句（仅限SELECT）',
 `params` json DEFAULT NULL COMMENT '参数声明',
 `result_schema` json DEFAULT NULL COMMENT '缓存的结果列',

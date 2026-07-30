@@ -21,4 +21,12 @@ public class DatasetQueryRequest {
      * 行数上限，可空则使用默认取数上限
      */
     private Integer limit;
+    /**
+     * 调用方浏览器 Origin（由 Controller 从请求头回填）
+     */
+    private String callerOrigin;
+    /**
+     * 调用方平台 Authorization（由 Controller 从请求头回填，仅同源转发）
+     */
+    private String callerToken;
 }

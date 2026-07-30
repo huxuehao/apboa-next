@@ -45,11 +45,15 @@ public class DatasetExecutionService {
     public DatasetExecuteResult preview(DatasetPreviewRequest request) {
         int limit = request.getLimit() == null ? properties.getPreviewLimit() : request.getLimit();
         DatasetExecuteCommand command = new DatasetExecuteCommand();
+        command.setType(request.getType());
         command.setSql(request.getSql());
         command.setParams(request.getParams());
         command.setLimit(limit);
         command.setDatasourceId(request.getDatasourceId());
-        return withConcurrency(() -> executorFactory.resolve(request.getDatasourceId()).execute(command));
+        command.setHttpConfig(request.getHttpConfig());
+        command.setCallerOrigin(request.getCallerOrigin());
+        command.setCallerToken(request.getCallerToken());
+        return withConcurrency(() -> executorFactory.resolve(request.getType()).execute(command));
     }
 
     /**
@@ -76,12 +80,16 @@ public class DatasetExecutionService {
                     }
                 }
                 DatasetExecuteCommand command = new DatasetExecuteCommand();
+                command.setType(dataset.getType());
                 command.setSql(dataset.getSqlText());
                 command.setParams(request.getParams());
                 command.setLimit(limit);
                 command.setDatasourceId(dataset.getDatasourceId());
+                command.setHttpConfig(dataset.getHttpConfig());
+                command.setCallerOrigin(request.getCallerOrigin());
+                command.setCallerToken(request.getCallerToken());
                 DatasetExecuteResult result = withConcurrency(
-                        () -> executorFactory.resolve(dataset.getDatasourceId()).execute(command));
+                        () -> executorFactory.resolve(dataset.getType()).execute(command));
                 cache.put(key, result, ttl);
                 return result;
             }

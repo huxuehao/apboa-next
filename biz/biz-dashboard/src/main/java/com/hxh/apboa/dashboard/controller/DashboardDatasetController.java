@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -71,7 +72,11 @@ public class DashboardDatasetController {
      * 即席预览执行
      */
     @PostMapping("/execute")
-    public R<DatasetExecuteResult> execute(@RequestBody DatasetPreviewRequest request) {
+    public R<DatasetExecuteResult> execute(@RequestBody DatasetPreviewRequest request,
+                                           @RequestHeader(value = "Origin", required = false) String origin,
+                                           @RequestHeader(value = "Authorization", required = false) String authorization) {
+        request.setCallerOrigin(origin);
+        request.setCallerToken(authorization);
         return R.data(datasetService.preview(request));
     }
 
@@ -79,7 +84,13 @@ public class DashboardDatasetController {
      * 按已保存数据集取数（面板运行态）
      */
     @PostMapping("/{id}/query")
-    public R<DatasetExecuteResult> query(@PathVariable("id") Long id, @RequestBody(required = false) DatasetQueryRequest request) {
-        return R.data(datasetService.queryById(id, request == null ? new DatasetQueryRequest() : request));
+    public R<DatasetExecuteResult> query(@PathVariable("id") Long id,
+                                         @RequestBody(required = false) DatasetQueryRequest request,
+                                         @RequestHeader(value = "Origin", required = false) String origin,
+                                         @RequestHeader(value = "Authorization", required = false) String authorization) {
+        DatasetQueryRequest req = request == null ? new DatasetQueryRequest() : request;
+        req.setCallerOrigin(origin);
+        req.setCallerToken(authorization);
+        return R.data(datasetService.queryById(id, req));
     }
 }

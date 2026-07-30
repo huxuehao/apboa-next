@@ -15,6 +15,7 @@ import CartesianDatasetGuide from './guides/CartesianDatasetGuide.vue'
 import PieDatasetGuide from './guides/PieDatasetGuide.vue'
 import RadarDatasetGuide from './guides/RadarDatasetGuide.vue'
 import FilterDatasetGuide from './guides/FilterDatasetGuide.vue'
+import HttpDatasetGuide from './guides/HttpDatasetGuide.vue'
 
 let registered = false
 
@@ -80,6 +81,12 @@ export function registerBuiltinGuides() {
     title: '面板私有筛选器',
     panelTypes: [],
     component: markRaw(FilterDatasetGuide),
+  })
+  registerGuide({
+    key: 'http',
+    title: 'HTTP 数据集',
+    panelTypes: [],
+    component: markRaw(HttpDatasetGuide),
   })
   registered = true
 }

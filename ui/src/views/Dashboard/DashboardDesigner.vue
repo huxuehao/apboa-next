@@ -5,7 +5,7 @@
  * @author huxuehao
  */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, onBeforeRouteLeave } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { debounce } from 'lodash-es'
 import {
@@ -110,6 +110,20 @@ function commit() {
 }
 const commitDebounced = debounce(commit, 400)
 
+// ── 未保存离开拦截 ──
+// 以已保存快照为基线，当前 dsl 序列化与其不同即为脏
+const savedSnapshot = ref('')
+const leaveModalOpen = ref(false)
+let pendingLeave: (() => void) | null = null
+
+function markSaved() {
+  savedSnapshot.value = dsl.value ? JSON.stringify(dsl.value) : ''
+}
+
+const isDirty = computed(
+  () => !!dsl.value && JSON.stringify(dsl.value) !== savedSnapshot.value,
+)
+
 const canUndo = computed(() => past.value.length > 0)
 const canRedo = computed(() => future.value.length > 0)
 
@@ -211,6 +225,7 @@ async function loadPortal() {
   dsl.value = normalizeDsl(portal.config)
   selectedId.value = null
   resetHistory()
+  markSaved()
 }
 
 function normalizeDsl(config: DashboardDsl | null): DashboardDsl {
@@ -283,6 +298,7 @@ async function doDirectSave() {
   saving.value = true
   try {
     await dashboardSavePersonal(dashboardId.value, dsl.value)
+    markSaved()
     saveModalOpen.value = false
     message.success('已保存')
   } finally {
@@ -295,6 +311,7 @@ async function doSaveVersion(note: string) {
   saving.value = true
   try {
     await dashboardSaveVersion(dashboardId.value, dsl.value, note)
+    markSaved()
     saveModalOpen.value = false
     message.success('已保存为历史版本')
   } finally {
@@ -308,6 +325,7 @@ function onRolledback(config: DashboardDsl) {
   selectedId.value = null
   canvasKey.value++
   resetHistory()
+  markSaved()
 }
 
 function goDatasets() {
@@ -318,14 +336,60 @@ function goPortal() {
   router.push({ name: RouteNames.DASHBOARD })
 }
 
+// 路由离开守卫：脏时拦截、弹模态由用户决定（返回按钮/后退/任意跳转统一命中）
+onBeforeRouteLeave(() => {
+  if (!isDirty.value) return true
+  return new Promise<boolean>((resolve) => {
+    pendingLeave = () => resolve(true)
+    leaveModalOpen.value = true
+    // 模态关闭（取消/点 X）而未确认离开时，解析 false 留在页面
+    leaveResolve = resolve
+  })
+})
+
+let leaveResolve: ((v: boolean) => void) | null = null
+
+/** 直接退出：不保存，放行导航 */
+function leaveWithoutSave() {
+  leaveModalOpen.value = false
+  const go = pendingLeave
+  pendingLeave = null
+  leaveResolve = null
+  if (go) go()
+}
+
+/** 保存后退出 */
+async function saveThenLeave() {
+  await doDirectSave()
+  leaveWithoutSave()
+}
+
+/** 取消离开：留在页面 */
+function cancelLeave() {
+  leaveModalOpen.value = false
+  pendingLeave = null
+  if (leaveResolve) leaveResolve(false)
+  leaveResolve = null
+}
+
+/** 关闭标签页/刷新的兑底提醒（浏览器原生，无法自定义按钮） */
+function onBeforeUnload(e: BeforeUnloadEvent) {
+  if (isDirty.value) {
+    e.preventDefault()
+    e.returnValue = ''
+  }
+}
+
 onMounted(() => {
   loadPortal()
   loadDatasets()
   document.addEventListener('keydown', onKeyDown)
+  window.addEventListener('beforeunload', onBeforeUnload)
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('keydown', onKeyDown)
+  window.removeEventListener('beforeunload', onBeforeUnload)
 })
 </script>
 
@@ -461,6 +525,22 @@ onBeforeUnmount(() => {
       @rolledback="onRolledback"
     />
     <AutoLayoutModal v-model:open="autoLayoutOpen" @apply="onAutoLayout" />
+
+    <a-modal
+      :open="leaveModalOpen"
+      title="有未保存的修改"
+      :footer="null"
+      :mask-closable="false"
+      width="420px"
+      @cancel="cancelLeave"
+    >
+      <p class="leave-tip">当前工作台存在未保存的修改，直接退出将丢失这些更改。</p>
+      <div class="leave-actions">
+        <a-button @click="cancelLeave">取消</a-button>
+        <a-button @click="leaveWithoutSave">直接退出</a-button>
+        <a-button type="primary" :loading="saving" @click="saveThenLeave">保存后退出</a-button>
+      </div>
+    </a-modal>
   </div>
 </template>
 
@@ -503,6 +583,18 @@ onBeforeUnmount(() => {
 .toggle-label {
   font-size: 13px;
   color: #595959;
+}
+
+.leave-tip {
+  margin: 0 0 20px;
+  font-size: 14px;
+  color: #595959;
+}
+
+.leave-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .designer-body {

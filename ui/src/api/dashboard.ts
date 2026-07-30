@@ -6,15 +6,19 @@ import type {
   DashboardHistoryEntity,
   DashboardUserEntity,
   DatasetExecuteResult,
+  DatasetType,
+  HttpDatasetConfig,
   PortalDashboard,
 } from '@/types/dashboard'
 
 /** 数据集预览执行请求 */
 export interface DatasetPreviewRequest {
-  sql: string
+  sql?: string
+  type?: DatasetType
   params?: Record<string, unknown>
   limit?: number
   datasourceId?: string
+  httpConfig?: HttpDatasetConfig
 }
 
 /** 面板取数请求 */

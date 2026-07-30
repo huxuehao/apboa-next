@@ -8,7 +8,9 @@ import { onMounted, reactive, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import { debounce } from 'lodash-es'
 import {
+  ApiOutlined,
   CloseOutlined,
+  ConsoleSqlOutlined,
   DeleteOutlined,
   EditOutlined,
   PauseCircleOutlined,
@@ -25,7 +27,12 @@ import {
   datasetEnable,
   datasetExecute,
 } from '@/api/dashboard'
-import type { DashboardDatasetEntity, DatasetExecuteResult } from '@/types/dashboard'
+import type {
+  DashboardDatasetEntity,
+  DatasetExecuteResult,
+  DatasetType,
+  HttpDatasetConfig,
+} from '@/types/dashboard'
 
 const emit = defineEmits<{ (e: 'close'): void; (e: 'changed'): void }>()
 
@@ -94,10 +101,25 @@ interface DatasetForm {
   id?: string
   name: string
   remark: string
+  type: DatasetType
   sqlText: string
   cacheTtl: number
+  httpConfig: HttpDatasetConfig
 }
-const form = reactive<DatasetForm>({ name: '', remark: '', sqlText: '', cacheTtl: 0 })
+
+/** 默认 HTTP 配置（每次新建/编辑时深拷贝） */
+function defaultHttpConfig(): HttpDatasetConfig {
+  return { url: '', queries: [], headers: [], dataPath: '' }
+}
+
+const form = reactive<DatasetForm>({
+  name: '',
+  remark: '',
+  type: 'SQL',
+  sqlText: '',
+  cacheTtl: 0,
+  httpConfig: defaultHttpConfig(),
+})
 
 const previewLoading = ref(false)
 const previewError = ref<string | null>(null)
@@ -114,7 +136,15 @@ function resetPreview() {
 
 function openCreate() {
   editing.value = false
-  Object.assign(form, { id: undefined, name: '', remark: '', sqlText: '', cacheTtl: 0 })
+  Object.assign(form, {
+    id: undefined,
+    name: '',
+    remark: '',
+    type: 'SQL',
+    sqlText: '',
+    cacheTtl: 0,
+    httpConfig: defaultHttpConfig(),
+  })
   resetPreview()
   modalOpen.value = true
 }
@@ -125,22 +155,53 @@ function openEdit(record: DashboardDatasetEntity) {
     id: record.id,
     name: record.name,
     remark: record.remark,
+    type: record.type || 'SQL',
     sqlText: record.sqlText,
     cacheTtl: record.cacheTtl ?? 0,
+    httpConfig: record.httpConfig
+      ? {
+          url: record.httpConfig.url || '',
+          queries: (record.httpConfig.queries || []).map((q) => ({ ...q })),
+          headers: (record.httpConfig.headers || []).map((h) => ({ ...h })),
+          dataPath: record.httpConfig.dataPath || '',
+        }
+      : defaultHttpConfig(),
   })
   resetPreview()
   modalOpen.value = true
 }
 
+// HTTP query / header 行编辑
+function addQuery() {
+  form.httpConfig.queries.push({ key: '', value: '', default: '' })
+}
+function removeQuery(index: number) {
+  form.httpConfig.queries.splice(index, 1)
+}
+function addHeader() {
+  form.httpConfig.headers.push({ key: '', value: '' })
+}
+function removeHeader(index: number) {
+  form.httpConfig.headers.splice(index, 1)
+}
+
 async function runPreview() {
-  if (!form.sqlText) {
+  if (form.type === 'SQL' && !form.sqlText) {
     message.warning('请先输入查询语句')
+    return
+  }
+  if (form.type === 'HTTP' && !form.httpConfig.url) {
+    message.warning('请先输入请求地址')
     return
   }
   previewLoading.value = true
   previewError.value = null
   try {
-    const resp = await datasetExecute({ sql: form.sqlText, limit: 50 })
+    const payload =
+      form.type === 'HTTP'
+        ? { type: 'HTTP' as const, httpConfig: form.httpConfig, limit: 50 }
+        : { type: 'SQL' as const, sql: form.sqlText, limit: 50 }
+    const resp = await datasetExecute(payload)
     previewResult.value = resp.data.data
     previewColumns.value = (resp.data.data.columns || []).map((c) => ({
       title: c.name,
@@ -157,8 +218,16 @@ async function runPreview() {
 }
 
 async function submit() {
-  if (!form.name || !form.sqlText) {
-    message.warning('名称与查询语句必填')
+  if (!form.name) {
+    message.warning('请填写名称')
+    return
+  }
+  if (form.type === 'SQL' && !form.sqlText) {
+    message.warning('请填写查询语句')
+    return
+  }
+  if (form.type === 'HTTP' && !form.httpConfig.url) {
+    message.warning('请填写请求地址')
     return
   }
   if (editing.value) {
@@ -216,17 +285,24 @@ onMounted(loadList)
         <template v-else>
           <div class="dp-cards">
             <div v-for="d in list" :key="d.id" class="ds-card">
-              <div class="ds-card-head">
-                <span class="ds-name">{{ d.name }}</span>
-                <a-tag :color="d.enabled ? 'green' : 'default'" :bordered="false">{{ d.enabled ? '启用' : '停用' }}</a-tag>
+              <div class="ds-card-main">
+                <div
+                  class="ds-avatar"
+                  :class="d.type === 'HTTP' ? 'is-http' : 'is-sql'"
+                  :title="d.type === 'HTTP' ? 'HTTP 数据集' : 'SQL 数据集'"
+                >
+                  <ApiOutlined v-if="d.type === 'HTTP'" />
+                  <ConsoleSqlOutlined v-else />
+                </div>
+                <div class="ds-card-info">
+                  <div class="ds-card-head">
+                    <span class="ds-name">{{ d.name }}</span>
+                  </div>
+                  <div class="ds-remark">{{ d.remark || '无描述' }}</div>
+                </div>
               </div>
-              <div class="ds-remark">{{ d.remark || '无描述' }}</div>
               <div class="ds-card-actions">
                 <a @click="openEdit(d)"><EditOutlined /> 编辑</a>
-                <a @click="toggleEnable(d)">
-                  <component :is="d.enabled ? PauseCircleOutlined : PlayCircleOutlined" />
-                  {{ d.enabled ? '停用' : '启用' }}
-                </a>
                 <a-popconfirm title="确认删除该数据集？" @confirm="remove(d)">
                   <a class="danger"><DeleteOutlined /> 删除</a>
                 </a-popconfirm>
@@ -249,6 +325,13 @@ onMounted(loadList)
       @ok="submit"
     >
       <div class="form-grid">
+        <div class="form-item full">
+          <span class="form-label">类型</span>
+          <a-radio-group v-model:value="form.type" button-style="solid">
+            <a-radio-button value="SQL">SQL 查询</a-radio-button>
+            <a-radio-button value="HTTP">HTTP 接口</a-radio-button>
+          </a-radio-group>
+        </div>
         <div class="form-item">
           <span class="form-label">名称</span>
           <a-input v-model:value="form.name" placeholder="数据集名称" />
@@ -261,16 +344,71 @@ onMounted(loadList)
           <span class="form-label">描述</span>
           <a-input v-model:value="form.remark" placeholder="描述" />
         </div>
-        <div class="form-item full">
+        <div v-if="form.type === 'SQL'" class="form-item full">
           <div class="sql-header">
             <span class="form-label">查询语句（仅 SELECT）</span>
-            <a-button size="small"  type="text" :loading="previewLoading" @click="runPreview">
+            <a-button size="small" type="text" :loading="previewLoading" @click="runPreview">
               <template #icon><PlayCircleOutlined /></template>
               运行预览
             </a-button>
           </div>
           <ConfigCodeEditor v-model="form.sqlText" language="sql" height="200px" :maximize="false" />
         </div>
+
+        <template v-else>
+          <div class="form-item full">
+            <div class="sql-header">
+              <span class="form-label">请求地址（仅 GET）</span>
+              <a-button size="small" type="text" :loading="previewLoading" @click="runPreview">
+                <template #icon><PlayCircleOutlined /></template>
+                运行预览
+              </a-button>
+            </div>
+            <a-input v-model:value="form.httpConfig.url" placeholder="https://host:port/path" />
+          </div>
+
+          <div class="form-item full">
+            <div class="list-header">
+              <span class="form-label">请求参数 query</span>
+              <a-button size="small" type="text" @click="addQuery">
+                <template #icon><PlusOutlined /></template>
+                添加
+              </a-button>
+            </div>
+            <div v-if="!form.httpConfig.queries.length" class="list-empty">暂无参数</div>
+            <div v-for="(q, i) in form.httpConfig.queries" :key="i" class="kv-row">
+              <a-input v-model:value="q.key" placeholder="参数名" />
+              <a-input v-model:value="q.value" placeholder="值或 :筛选名" />
+              <a-input v-model:value="q.default" placeholder="默认值" />
+              <a-button type="text" danger @click="removeQuery(i)">
+                <template #icon><DeleteOutlined /></template>
+              </a-button>
+            </div>
+          </div>
+
+          <div class="form-item full">
+            <div class="list-header">
+              <span class="form-label">请求头（固定值）</span>
+              <a-button size="small" type="text" @click="addHeader">
+                <template #icon><PlusOutlined /></template>
+                添加
+              </a-button>
+            </div>
+            <div v-if="!form.httpConfig.headers.length" class="list-empty">暂无请求头</div>
+            <div v-for="(h, i) in form.httpConfig.headers" :key="i" class="kv-row">
+              <a-input v-model:value="h.key" placeholder="头名" />
+              <a-input v-model:value="h.value" placeholder="固定值" />
+              <a-button type="text" danger @click="removeHeader(i)">
+                <template #icon><DeleteOutlined /></template>
+              </a-button>
+            </div>
+          </div>
+
+          <div class="form-item full">
+            <span class="form-label">数据路径 dataPath</span>
+            <a-input v-model:value="form.httpConfig.dataPath" placeholder="如 data.list；为空则取整个响应体" />
+          </div>
+        </template>
       </div>
 
       <div v-if="previewError" class="preview-error">{{ previewError }}</div>
@@ -370,6 +508,42 @@ onMounted(loadList)
   background: #fff;
 }
 
+.ds-card-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* 类型头像：浅色底 + 主题色图标，区分 SQL / HTTP 数据集 */
+.ds-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  font-size: 17px;
+}
+
+.ds-avatar.is-sql {
+  color: #1677ff;
+  background: #e9f2ff;
+}
+
+.ds-avatar.is-http {
+  color: #00b96b;
+  background: #e5f8ef;
+}
+
+.ds-card-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .ds-card-head {
   display: flex;
   align-items: center;
@@ -438,6 +612,30 @@ onMounted(loadList)
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+.list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.list-empty {
+  font-size: 12px;
+  color: #bfbfbf;
+  padding: 4px 0;
+}
+
+.kv-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.kv-row .ant-input {
+  flex: 1;
 }
 
 .preview-block {

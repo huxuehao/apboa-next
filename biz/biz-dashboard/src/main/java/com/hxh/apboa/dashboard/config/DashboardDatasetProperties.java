@@ -43,4 +43,20 @@ public class DashboardDatasetProperties {
      * 单租户并发执行上限
      */
     private int maxConcurrentPerTenant = 8;
+    /**
+     * HTTP 数据集：连接超时（毫秒）
+     */
+    private int httpConnectTimeoutMs = 3000;
+    /**
+     * HTTP 数据集：读取超时（毫秒）
+     */
+    private int httpReadTimeoutMs = 8000;
+    /**
+     * HTTP 数据集：响应体大小上限（字节）
+     */
+    private long httpMaxResponseBytes = 2 * 1024 * 1024;
+    /**
+     * HTTP 数据集：主机白名单（小写域名/IP）。为空时不启用白名单（仅依赖 SSRF 基础防护）
+     */
+    private List<String> httpAllowedHosts = new ArrayList<>();
 }

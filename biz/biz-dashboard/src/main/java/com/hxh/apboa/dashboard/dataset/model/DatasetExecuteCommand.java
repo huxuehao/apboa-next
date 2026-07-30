@@ -1,5 +1,6 @@
 package com.hxh.apboa.dashboard.dataset.model;
 
+import com.hxh.apboa.common.enums.dashboard.DatasetType;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -14,7 +15,11 @@ import java.util.Map;
 @Setter
 public class DatasetExecuteCommand {
     /**
-     * 查询语句
+     * 数据集类型（null 按 SQL 处理）
+     */
+    private DatasetType type;
+    /**
+     * 查询语句（SQL 类型）
      */
     private String sql;
     /**
@@ -29,4 +34,16 @@ public class DatasetExecuteCommand {
      * 绑定的外部数据源 ID，为空表示主库
      */
     private Long datasourceId;
+    /**
+     * HTTP 数据集配置（HTTP 类型）
+     */
+    private Object httpConfig;
+    /**
+     * 调用方浏览器 Origin（用于同源 token 判定）
+     */
+    private String callerOrigin;
+    /**
+     * 调用方携带的平台 Authorization（仅同源时转发）
+     */
+    private String callerToken;
 }
