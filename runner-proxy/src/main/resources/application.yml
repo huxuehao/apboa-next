@@ -3,7 +3,7 @@ server:
 
 spring:
   application:
-    name: proxy
+    name: apboa-proxy
   main:
     banner-mode: off
 

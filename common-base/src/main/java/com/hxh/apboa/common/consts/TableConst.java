@@ -72,4 +72,7 @@ public class TableConst {
     public static final String GATEWAY_API = "gateway_api";
     public static final String GATEWAY_API_WORKFLOW = "gateway_api_workflow";
     public static final String GATEWAY_ACCESS_LOG = "gateway_access_log";
+    public static final String DASHBOARD = "dashboard";
+    public static final String DASHBOARD_USER = "dashboard_user";
+    public static final String DASHBOARD_DATASET = "dashboard_dataset";
 }

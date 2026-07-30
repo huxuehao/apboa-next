@@ -10,6 +10,7 @@ import { useKnowledgeStore } from './modules/knowledge'
 import { useModelStore } from './modules/model'
 import { useAgentStore } from './modules/agent'
 import { useWorkflowStore } from './modules/workflow'
+import { useDashboardStore } from './modules/dashboard'
 
 export {
   useAccountStore,
@@ -23,5 +24,6 @@ export {
   useKnowledgeStore,
   useModelStore,
   useAgentStore,
-  useWorkflowStore
+  useWorkflowStore,
+  useDashboardStore
 }

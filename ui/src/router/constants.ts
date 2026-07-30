@@ -20,6 +20,8 @@ export const RouteNames = {
   // 主页
   HOME: 'Home',
   DASHBOARD: 'Dashboard',
+  DASHBOARD_DESIGN: 'DashboardDesign',
+  DASHBOARD_DATASET: 'DashboardDataset',
   AUTOMATION: 'Automation',
   API_SERVICE: 'ApiService',
   CHAT_CLUSTER: 'ChatCluster',
@@ -103,6 +105,8 @@ export const RoutePaths = {
   ROOT: '/',
   HOME: '/home',
   DASHBOARD: '/dashboard',
+  DASHBOARD_DESIGN: '/dashboard/design',
+  DASHBOARD_DATASET: '/dashboard/dataset-manage',
   AUTOMATION: '/automation',
   API_SERVICE: '/api-service',
   CHAT_CLUSTER: '/chat-cluster',

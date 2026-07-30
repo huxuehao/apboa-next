@@ -3,6 +3,8 @@ server:
 
 # 关闭嵌入式 Web 服务器，runner-file 不对外暴露 HTTP 接口
 spring:
+  application:
+    name: apboa-file
   profiles:
     active: dev
 

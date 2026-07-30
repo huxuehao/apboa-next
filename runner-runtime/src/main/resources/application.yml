@@ -2,7 +2,7 @@ spring:
   profiles:
     active: dev
   application:
-    name: Apboa
+    name: apboa-runtime
   servlet:
     multipart:
       max-file-size: 30MB # 单个文件最大 30MB

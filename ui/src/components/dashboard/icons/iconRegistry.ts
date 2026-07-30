@@ -1,0 +1,148 @@
+/**
+ * Ant Design 图标注册表：为快捷方式等面板提供可选图标（图标选择器数据源）。
+ *
+ * @author huxuehao
+ */
+import { markRaw, type Component } from 'vue'
+import {
+  HomeOutlined,
+  AppstoreOutlined,
+  DashboardOutlined,
+  BarChartOutlined,
+  LineChartOutlined,
+  PieChartOutlined,
+  FundOutlined,
+  RiseOutlined,
+  FallOutlined,
+  TableOutlined,
+  DatabaseOutlined,
+  CloudOutlined,
+  ApiOutlined,
+  SettingOutlined,
+  ToolOutlined,
+  UserOutlined,
+  TeamOutlined,
+  BellOutlined,
+  MailOutlined,
+  PhoneOutlined,
+  MessageOutlined,
+  FileOutlined,
+  FileTextOutlined,
+  FolderOutlined,
+  LinkOutlined,
+  GlobalOutlined,
+  CompassOutlined,
+  RocketOutlined,
+  ThunderboltOutlined,
+  FireOutlined,
+  StarOutlined,
+  HeartOutlined,
+  LikeOutlined,
+  TrophyOutlined,
+  GiftOutlined,
+  ShoppingCartOutlined,
+  ShopOutlined,
+  DollarOutlined,
+  WalletOutlined,
+  CalendarOutlined,
+  ClockCircleOutlined,
+  ScheduleOutlined,
+  CheckCircleOutlined,
+  WarningOutlined,
+  InfoCircleOutlined,
+  SafetyOutlined,
+  LockOutlined,
+  KeyOutlined,
+  SearchOutlined,
+  FilterOutlined,
+  TagOutlined,
+  FlagOutlined,
+  BulbOutlined,
+  ExperimentOutlined,
+  RobotOutlined,
+  CodeOutlined,
+  DeploymentUnitOutlined,
+  ClusterOutlined,
+  ApartmentOutlined,
+  SyncOutlined,
+} from '@ant-design/icons-vue'
+
+export interface IconEntry {
+  name: string
+  component: Component
+}
+
+const entries: IconEntry[] = [
+  { name: 'HomeOutlined', component: HomeOutlined },
+  { name: 'AppstoreOutlined', component: AppstoreOutlined },
+  { name: 'DashboardOutlined', component: DashboardOutlined },
+  { name: 'BarChartOutlined', component: BarChartOutlined },
+  { name: 'LineChartOutlined', component: LineChartOutlined },
+  { name: 'PieChartOutlined', component: PieChartOutlined },
+  { name: 'FundOutlined', component: FundOutlined },
+  { name: 'RiseOutlined', component: RiseOutlined },
+  { name: 'FallOutlined', component: FallOutlined },
+  { name: 'TableOutlined', component: TableOutlined },
+  { name: 'DatabaseOutlined', component: DatabaseOutlined },
+  { name: 'CloudOutlined', component: CloudOutlined },
+  { name: 'ApiOutlined', component: ApiOutlined },
+  { name: 'SettingOutlined', component: SettingOutlined },
+  { name: 'ToolOutlined', component: ToolOutlined },
+  { name: 'UserOutlined', component: UserOutlined },
+  { name: 'TeamOutlined', component: TeamOutlined },
+  { name: 'BellOutlined', component: BellOutlined },
+  { name: 'MailOutlined', component: MailOutlined },
+  { name: 'PhoneOutlined', component: PhoneOutlined },
+  { name: 'MessageOutlined', component: MessageOutlined },
+  { name: 'FileOutlined', component: FileOutlined },
+  { name: 'FileTextOutlined', component: FileTextOutlined },
+  { name: 'FolderOutlined', component: FolderOutlined },
+  { name: 'LinkOutlined', component: LinkOutlined },
+  { name: 'GlobalOutlined', component: GlobalOutlined },
+  { name: 'CompassOutlined', component: CompassOutlined },
+  { name: 'RocketOutlined', component: RocketOutlined },
+  { name: 'ThunderboltOutlined', component: ThunderboltOutlined },
+  { name: 'FireOutlined', component: FireOutlined },
+  { name: 'StarOutlined', component: StarOutlined },
+  { name: 'HeartOutlined', component: HeartOutlined },
+  { name: 'LikeOutlined', component: LikeOutlined },
+  { name: 'TrophyOutlined', component: TrophyOutlined },
+  { name: 'GiftOutlined', component: GiftOutlined },
+  { name: 'ShoppingCartOutlined', component: ShoppingCartOutlined },
+  { name: 'ShopOutlined', component: ShopOutlined },
+  { name: 'DollarOutlined', component: DollarOutlined },
+  { name: 'WalletOutlined', component: WalletOutlined },
+  { name: 'CalendarOutlined', component: CalendarOutlined },
+  { name: 'ClockCircleOutlined', component: ClockCircleOutlined },
+  { name: 'ScheduleOutlined', component: ScheduleOutlined },
+  { name: 'CheckCircleOutlined', component: CheckCircleOutlined },
+  { name: 'WarningOutlined', component: WarningOutlined },
+  { name: 'InfoCircleOutlined', component: InfoCircleOutlined },
+  { name: 'SafetyOutlined', component: SafetyOutlined },
+  { name: 'LockOutlined', component: LockOutlined },
+  { name: 'KeyOutlined', component: KeyOutlined },
+  { name: 'SearchOutlined', component: SearchOutlined },
+  { name: 'FilterOutlined', component: FilterOutlined },
+  { name: 'TagOutlined', component: TagOutlined },
+  { name: 'FlagOutlined', component: FlagOutlined },
+  { name: 'BulbOutlined', component: BulbOutlined },
+  { name: 'ExperimentOutlined', component: ExperimentOutlined },
+  { name: 'RobotOutlined', component: RobotOutlined },
+  { name: 'CodeOutlined', component: CodeOutlined },
+  { name: 'DeploymentUnitOutlined', component: DeploymentUnitOutlined },
+  { name: 'ClusterOutlined', component: ClusterOutlined },
+  { name: 'ApartmentOutlined', component: ApartmentOutlined },
+  { name: 'SyncOutlined', component: SyncOutlined },
+].map((e) => ({ name: e.name, component: markRaw(e.component) }))
+
+const iconMap = new Map(entries.map((e) => [e.name, e.component]))
+
+/** 全部可选图标 */
+export function listIcons(): IconEntry[] {
+  return entries
+}
+
+/** 按名称解析图标组件，未命中返回 undefined */
+export function resolveIcon(name?: string): Component | undefined {
+  return name ? iconMap.get(name) : undefined
+}

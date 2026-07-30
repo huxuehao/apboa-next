@@ -358,6 +358,26 @@ const bizRoutes: AppRouteRecordRaw[] = [
       hidden: true,
       hideFooter: true,
     },
+  },
+  {
+    path: RoutePaths.DASHBOARD_DESIGN,
+    name: RouteNames.DASHBOARD_DESIGN,
+    component: () => import('@/views/Dashboard/DashboardDesigner.vue'),
+    meta: {
+      title: '工作台设计器',
+      hidden: true,
+      hideFooter: true,
+    },
+  },
+  {
+    path: RoutePaths.DASHBOARD_DATASET,
+    name: RouteNames.DASHBOARD_DATASET,
+    component: () => import('@/views/Dashboard/DatasetManage.vue'),
+    meta: {
+      title: '数据集管理',
+      hidden: true,
+      hideFooter: true,
+    },
   }
 ]
 
