@@ -48,6 +48,7 @@ COPY biz/biz-datasource/pom.xml ./biz/biz-datasource/
 COPY biz/biz-gateway/pom.xml ./biz/biz-gateway/
 COPY biz/biz-mq/pom.xml ./biz/biz-mq/
 COPY biz/biz-channel/pom.xml ./biz/biz-channel/
+COPY biz/biz-dashboard/pom.xml ./biz/biz-dashboard/
 
 # 复制 Maven 私有仓库配置（在线模式为空壳，离线模式用户编辑）
 COPY docker/maven/settings.xml /root/.m2/settings.xml
