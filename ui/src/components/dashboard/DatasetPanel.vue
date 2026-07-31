@@ -4,19 +4,17 @@
  *
  * @author huxuehao
  */
-import { onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import { debounce } from 'lodash-es'
 import {
-  ApiOutlined,
   CloseOutlined,
-  ConsoleSqlOutlined,
   DeleteOutlined,
   EditOutlined,
-  PauseCircleOutlined,
   PlayCircleOutlined,
   PlusOutlined,
   SearchOutlined,
+  ShareAltOutlined,
 } from '@ant-design/icons-vue'
 import ConfigCodeEditor from '@/components/editor/ConfigCodeEditor.vue'
 import {
@@ -24,9 +22,10 @@ import {
   datasetSave,
   datasetUpdate,
   datasetRemove,
-  datasetEnable,
+  datasetQuery,
   datasetExecute,
 } from '@/api/dashboard'
+import { useAccountStore } from '@/stores/modules/account'
 import type {
   DashboardDatasetEntity,
   DatasetExecuteResult,
@@ -35,6 +34,15 @@ import type {
 } from '@/types/dashboard'
 
 const emit = defineEmits<{ (e: 'close'): void; (e: 'changed'): void }>()
+
+const accountStore = useAccountStore()
+/** 当前用户 ID，用于数据集归属判断 */
+const currentUserId = computed(() => accountStore.userInfo?.id)
+
+/** 是否本人创建（createdBy 为空或不匹配均按非本人） */
+function isMine(d: DashboardDatasetEntity): boolean {
+  return !!d.createdBy && String(d.createdBy) === String(currentUserId.value)
+}
 
 const list = ref<DashboardDatasetEntity[]>([])
 const loading = ref(false)
@@ -94,9 +102,11 @@ function onScroll() {
   }
 }
 
-// ── 新建/编辑弹窗 ──
+// ── 新建/编辑/查看弹窗 ──
 const modalOpen = ref(false)
 const editing = ref(false)
+/** 只读查看模式（他人共享的数据集）：表单禁用、隐藏保存，保留运行预览 */
+const viewMode = ref(false)
 interface DatasetForm {
   id?: string
   name: string
@@ -104,6 +114,7 @@ interface DatasetForm {
   type: DatasetType
   sqlText: string
   cacheTtl: number
+  shared: boolean
   httpConfig: HttpDatasetConfig
 }
 
@@ -118,6 +129,7 @@ const form = reactive<DatasetForm>({
   type: 'SQL',
   sqlText: '',
   cacheTtl: 0,
+  shared: false,
   httpConfig: defaultHttpConfig(),
 })
 
@@ -136,6 +148,7 @@ function resetPreview() {
 
 function openCreate() {
   editing.value = false
+  viewMode.value = false
   Object.assign(form, {
     id: undefined,
     name: '',
@@ -143,14 +156,15 @@ function openCreate() {
     type: 'SQL',
     sqlText: '',
     cacheTtl: 0,
+    shared: false,
     httpConfig: defaultHttpConfig(),
   })
   resetPreview()
   modalOpen.value = true
 }
 
-function openEdit(record: DashboardDatasetEntity) {
-  editing.value = true
+/** 填充表单（编辑与只读查看共用） */
+function fillForm(record: DashboardDatasetEntity) {
   Object.assign(form, {
     id: record.id,
     name: record.name,
@@ -158,6 +172,7 @@ function openEdit(record: DashboardDatasetEntity) {
     type: record.type || 'SQL',
     sqlText: record.sqlText,
     cacheTtl: record.cacheTtl ?? 0,
+    shared: record.shared === true,
     httpConfig: record.httpConfig
       ? {
           url: record.httpConfig.url || '',
@@ -169,6 +184,12 @@ function openEdit(record: DashboardDatasetEntity) {
   })
   resetPreview()
   modalOpen.value = true
+}
+
+function openEdit(record: DashboardDatasetEntity) {
+  editing.value = true
+  viewMode.value = false
+  fillForm(record)
 }
 
 // HTTP query / header 行编辑
@@ -249,11 +270,41 @@ async function remove(record: DashboardDatasetEntity) {
   emit('changed')
 }
 
-async function toggleEnable(record: DashboardDatasetEntity) {
+// ── 他人共享数据集的只运行预览（不暴露数据集细节） ──
+const sharedPreviewOpen = ref(false)
+const sharedPreviewName = ref('')
+const sharedPreviewLoading = ref(false)
+const sharedPreviewError = ref<string | null>(null)
+const sharedPreviewResult = ref<DatasetExecuteResult | null>(null)
+const sharedPreviewColumns = ref<
+  { title: string; dataIndex: string; key: string; ellipsis: boolean }[]
+>([])
+const sharedPreviewRows = ref<Record<string, unknown>[]>([])
+
+async function runSharedPreview(record: DashboardDatasetEntity) {
   if (!record.id) return
-  await datasetEnable(record.id, record.enabled ? 0 : 1)
-  await loadList()
-  emit('changed')
+  sharedPreviewName.value = record.name || '数据集'
+  sharedPreviewOpen.value = true
+  sharedPreviewLoading.value = true
+  sharedPreviewError.value = null
+  sharedPreviewResult.value = null
+  sharedPreviewColumns.value = []
+  sharedPreviewRows.value = []
+  try {
+    const resp = await datasetQuery(record.id, { limit: 50 })
+    sharedPreviewResult.value = resp.data.data
+    sharedPreviewColumns.value = (resp.data.data.columns || []).map((c) => ({
+      title: c.name,
+      dataIndex: c.name,
+      key: c.name,
+      ellipsis: true,
+    }))
+    sharedPreviewRows.value = (resp.data.data.rows || []).map((r, i) => ({ ...r, _rowKey: i }))
+  } catch (e: unknown) {
+    sharedPreviewError.value = typeof e === 'string' ? e : (e as Error)?.message || '执行失败'
+  } finally {
+    sharedPreviewLoading.value = false
+  }
 }
 
 onMounted(loadList)
@@ -286,13 +337,20 @@ onMounted(loadList)
           <div class="dp-cards">
             <div v-for="d in list" :key="d.id" class="ds-card">
               <div class="ds-card-main">
-                <div
-                  class="ds-avatar"
-                  :class="d.type === 'HTTP' ? 'is-http' : 'is-sql'"
-                  :title="d.type === 'HTTP' ? 'HTTP 数据集' : 'SQL 数据集'"
-                >
-                  <ApiOutlined v-if="d.type === 'HTTP'" />
-                  <ConsoleSqlOutlined v-else />
+                <div class="ds-avatar-wrap">
+                  <div
+                    class="ds-avatar"
+                    :class="d.type === 'HTTP' ? 'is-http' : 'is-sql'"
+                    :title="isMine(d) ? '我创建的' : '他人共享'"
+                  >
+                    <span class="ds-avatar-text">{{ d.type === 'HTTP' ? 'API' : 'SQL' }}</span>
+                  </div>
+                  <span
+                    v-if="d.shared"
+                    class="ds-badge"
+                    :class="d.type === 'HTTP' ? 'is-http' : 'is-sql'"
+                    title="已共享"
+                  ><ShareAltOutlined /></span>
                 </div>
                 <div class="ds-card-info">
                   <div class="ds-card-head">
@@ -302,10 +360,13 @@ onMounted(loadList)
                 </div>
               </div>
               <div class="ds-card-actions">
-                <a @click="openEdit(d)"><EditOutlined /> 编辑</a>
-                <a-popconfirm title="确认删除该数据集？" @confirm="remove(d)">
-                  <a class="danger"><DeleteOutlined /> 删除</a>
-                </a-popconfirm>
+                <template v-if="isMine(d)">
+                  <a @click="openEdit(d)"><EditOutlined /> 编辑</a>
+                  <a-popconfirm title="确认删除该数据集？" @confirm="remove(d)">
+                    <a class="danger"><DeleteOutlined /> 删除</a>
+                  </a-popconfirm>
+                </template>
+                <a v-else @click="runSharedPreview(d)"><PlayCircleOutlined /> 运行预览</a>
               </div>
             </div>
           </div>
@@ -319,30 +380,35 @@ onMounted(loadList)
 
     <a-modal
       v-model:open="modalOpen"
-      :title="editing ? '编辑数据集' : '新建数据集'"
+      :title="viewMode ? '查看数据集' : editing ? '编辑数据集' : '新建数据集'"
       width="760px"
       ok-text="保存"
+      :footer="viewMode ? null : undefined"
       @ok="submit"
     >
       <div class="form-grid">
         <div class="form-item full">
           <span class="form-label">类型</span>
-          <a-radio-group v-model:value="form.type" button-style="solid">
+          <a-radio-group v-model:value="form.type" button-style="solid" :disabled="viewMode">
             <a-radio-button value="SQL">SQL 查询</a-radio-button>
             <a-radio-button value="HTTP">HTTP 接口</a-radio-button>
           </a-radio-group>
         </div>
         <div class="form-item">
           <span class="form-label">名称</span>
-          <a-input v-model:value="form.name" placeholder="数据集名称" />
+          <a-input v-model:value="form.name" placeholder="数据集名称" :disabled="viewMode" />
         </div>
         <div class="form-item">
           <span class="form-label">缓存(秒)</span>
-          <a-input-number v-model:value="form.cacheTtl" :min="0" style="width: 100%" />
+          <a-input-number v-model:value="form.cacheTtl" :min="0" style="width: 100%" :disabled="viewMode" />
+        </div>
+        <div class="form-item">
+          <span class="form-label">共享给租户成员</span>
+          <a-switch v-model:checked="form.shared" :disabled="viewMode" class="ds-share-switch" />
         </div>
         <div class="form-item full">
           <span class="form-label">描述</span>
-          <a-input v-model:value="form.remark" placeholder="描述" />
+          <a-input v-model:value="form.remark" placeholder="描述" :disabled="viewMode" />
         </div>
         <div v-if="form.type === 'SQL'" class="form-item full">
           <div class="sql-header">
@@ -352,7 +418,13 @@ onMounted(loadList)
               运行预览
             </a-button>
           </div>
-          <ConfigCodeEditor v-model="form.sqlText" language="sql" height="200px" :maximize="false" />
+          <ConfigCodeEditor
+            v-model="form.sqlText"
+            language="sql"
+            height="200px"
+            :maximize="false"
+            :readonly="viewMode"
+          />
         </div>
 
         <template v-else>
@@ -364,23 +436,23 @@ onMounted(loadList)
                 运行预览
               </a-button>
             </div>
-            <a-input v-model:value="form.httpConfig.url" placeholder="https://host:port/path" />
+            <a-input v-model:value="form.httpConfig.url" placeholder="https://host:port/path" :disabled="viewMode" />
           </div>
 
           <div class="form-item full">
             <div class="list-header">
               <span class="form-label">请求参数 query</span>
-              <a-button size="small" type="text" @click="addQuery">
+              <a-button v-if="!viewMode" size="small" type="text" @click="addQuery">
                 <template #icon><PlusOutlined /></template>
                 添加
               </a-button>
             </div>
             <div v-if="!form.httpConfig.queries.length" class="list-empty">暂无参数</div>
             <div v-for="(q, i) in form.httpConfig.queries" :key="i" class="kv-row">
-              <a-input v-model:value="q.key" placeholder="参数名" />
-              <a-input v-model:value="q.value" placeholder="值或 :筛选名" />
-              <a-input v-model:value="q.default" placeholder="默认值" />
-              <a-button type="text" danger @click="removeQuery(i)">
+              <a-input v-model:value="q.key" placeholder="参数名" :disabled="viewMode" />
+              <a-input v-model:value="q.value" placeholder="值或 :筛选名" :disabled="viewMode" />
+              <a-input v-model:value="q.default" placeholder="默认值" :disabled="viewMode" />
+              <a-button v-if="!viewMode" type="text" danger @click="removeQuery(i)">
                 <template #icon><DeleteOutlined /></template>
               </a-button>
             </div>
@@ -389,16 +461,16 @@ onMounted(loadList)
           <div class="form-item full">
             <div class="list-header">
               <span class="form-label">请求头（固定值）</span>
-              <a-button size="small" type="text" @click="addHeader">
+              <a-button v-if="!viewMode" size="small" type="text" @click="addHeader">
                 <template #icon><PlusOutlined /></template>
                 添加
               </a-button>
             </div>
             <div v-if="!form.httpConfig.headers.length" class="list-empty">暂无请求头</div>
             <div v-for="(h, i) in form.httpConfig.headers" :key="i" class="kv-row">
-              <a-input v-model:value="h.key" placeholder="头名" />
-              <a-input v-model:value="h.value" placeholder="固定值" />
-              <a-button type="text" danger @click="removeHeader(i)">
+              <a-input v-model:value="h.key" placeholder="头名" :disabled="viewMode" />
+              <a-input v-model:value="h.value" placeholder="固定值" :disabled="viewMode" />
+              <a-button v-if="!viewMode" type="text" danger @click="removeHeader(i)">
                 <template #icon><DeleteOutlined /></template>
               </a-button>
             </div>
@@ -406,7 +478,7 @@ onMounted(loadList)
 
           <div class="form-item full">
             <span class="form-label">数据路径 dataPath</span>
-            <a-input v-model:value="form.httpConfig.dataPath" placeholder="如 data.list；为空则取整个响应体" />
+            <a-input v-model:value="form.httpConfig.dataPath" placeholder="如 data.list；为空则取整个响应体" :disabled="viewMode" />
           </div>
         </template>
       </div>
@@ -423,6 +495,30 @@ onMounted(loadList)
           row-key="_rowKey"
           size="small"
           :scroll="{ y: 200 }"
+          :pagination="false"
+        />
+      </div>
+    </a-modal>
+
+    <a-modal
+      v-model:open="sharedPreviewOpen"
+      :title="`运行预览 · ${sharedPreviewName}`"
+      width="760px"
+      :footer="null"
+    >
+      <a-spin v-if="sharedPreviewLoading" />
+      <div v-else-if="sharedPreviewError" class="preview-error">{{ sharedPreviewError }}</div>
+      <div v-else-if="sharedPreviewResult" class="preview-block">
+        <div class="preview-meta">
+          返回 {{ sharedPreviewResult.rowCount }} 行，耗时 {{ sharedPreviewResult.elapsedMs }}ms
+          <span v-if="sharedPreviewResult.truncated" class="truncated">（已截断）</span>
+        </div>
+        <a-table
+          :columns="sharedPreviewColumns"
+          :data-source="sharedPreviewRows"
+          row-key="_rowKey"
+          size="small"
+          :scroll="{ y: 320 }"
           :pagination="false"
         />
       </div>
@@ -526,6 +622,26 @@ onMounted(loadList)
   font-size: 17px;
 }
 
+/* 文字头像（SQL / API） */
+.ds-avatar-text {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+/* 共享开关：固定宽度 45px */
+.ds-share-switch {
+  min-width: 45px;
+  width: 45px;
+}
+
+/* 头像容器：供共享徽章角部定位 */
+.ds-avatar-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+/* 类型区分：SQL = 蓝；API(HTTP) = 绿，一眼辨认 */
 .ds-avatar.is-sql {
   color: #1677ff;
   background: #e9f2ff;
@@ -534,6 +650,29 @@ onMounted(loadList)
 .ds-avatar.is-http {
   color: #00b96b;
   background: #e5f8ef;
+}
+
+/* 共享徽章：头像右下角，白底，图标色跟随类型，无边框无阴影 */
+.ds-badge {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  font-size: 12px;
+}
+
+.ds-badge.is-sql {
+  color: #1677ff;
+}
+
+.ds-badge.is-http {
+  color: #00b96b;
 }
 
 .ds-card-info {

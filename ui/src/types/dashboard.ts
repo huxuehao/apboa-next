@@ -156,6 +156,10 @@ export interface DashboardDatasetEntity {
   datasourceId?: string
   httpConfig?: HttpDatasetConfig
   enabled?: boolean
+  /** 是否租户内共享 */
+  shared?: boolean
+  /** 创建人用户 ID（归属判断） */
+  createdBy?: string
 }
 
 /** 个人副本实体 */

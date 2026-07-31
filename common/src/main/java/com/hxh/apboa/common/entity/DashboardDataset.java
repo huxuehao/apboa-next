@@ -29,6 +29,11 @@ public class DashboardDataset extends BaseTenantEntity {
      */
     private String remark;
     /**
+     * 是否租户内共享（共享后同租户成员可使用，但仅创建人可修改/删除）
+     */
+    @QueryDefine(condition = QueryCondition.EQ)
+    private Boolean shared;
+    /**
      * 数据集类型（SQL / HTTP），为空时按 SQL 处理
      */
     @QueryDefine(condition = QueryCondition.EQ)

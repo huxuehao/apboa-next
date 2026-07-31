@@ -9,6 +9,7 @@ import com.hxh.apboa.dashboard.dataset.model.DatasetExecuteCommand;
 import com.hxh.apboa.dashboard.dataset.model.DatasetExecuteResult;
 import com.hxh.apboa.dashboard.dataset.model.DatasetPreviewRequest;
 import com.hxh.apboa.dashboard.dataset.model.DatasetQueryRequest;
+import com.hxh.apboa.dashboard.dataset.support.DatasetAuditLogger;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
@@ -27,16 +28,19 @@ public class DatasetExecutionService {
     private final DatasetExecutorFactory executorFactory;
     private final DashboardDatasetProperties properties;
     private final DatasetQueryCache cache;
+    private final DatasetAuditLogger auditLogger;
 
     private final Map<Long, Semaphore> tenantSemaphores = new ConcurrentHashMap<>();
     private final Map<String, Object> keyLocks = new ConcurrentHashMap<>();
 
     public DatasetExecutionService(DatasetExecutorFactory executorFactory,
                                    DashboardDatasetProperties properties,
-                                   DatasetQueryCache cache) {
+                                   DatasetQueryCache cache,
+                                   DatasetAuditLogger auditLogger) {
         this.executorFactory = executorFactory;
         this.properties = properties;
         this.cache = cache;
+        this.auditLogger = auditLogger;
     }
 
     /**
@@ -53,7 +57,15 @@ public class DatasetExecutionService {
         command.setHttpConfig(request.getHttpConfig());
         command.setCallerOrigin(request.getCallerOrigin());
         command.setCallerToken(request.getCallerToken());
-        return withConcurrency(() -> executorFactory.resolve(request.getType()).execute(command));
+        try {
+            DatasetExecuteResult result =
+                    withConcurrency(() -> executorFactory.resolve(request.getType()).execute(command));
+            auditLogger.logSuccess("preview", command.getParams(), result);
+            return result;
+        } catch (RuntimeException e) {
+            auditLogger.logRejected("preview", request.getSql(), e.getMessage());
+            throw e;
+        }
     }
 
     /**
@@ -90,9 +102,13 @@ public class DatasetExecutionService {
                 command.setCallerToken(request.getCallerToken());
                 DatasetExecuteResult result = withConcurrency(
                         () -> executorFactory.resolve(dataset.getType()).execute(command));
+                auditLogger.logSuccess("dataset:" + dataset.getId(), command.getParams(), result);
                 cache.put(key, result, ttl);
                 return result;
             }
+        } catch (RuntimeException e) {
+            auditLogger.logRejected("dataset:" + dataset.getId(), dataset.getSqlText(), e.getMessage());
+            throw e;
         } finally {
             keyLocks.remove(key);
         }

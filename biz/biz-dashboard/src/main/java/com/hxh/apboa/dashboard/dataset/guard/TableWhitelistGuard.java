@@ -27,7 +27,12 @@ public class TableWhitelistGuard implements SqlGuard {
     public void check(SqlGuardContext context) {
         List<String> allowed = properties.getAllowedTables();
         if (allowed == null || allowed.isEmpty()) {
-            log.warn("Dashboard 数据集未配置可查询对象白名单，跳过白名单校验，存在跨租户越权风险，请在生产环境配置 apboa.dashboard.dataset.allowed-tables");
+            // 白名单未配置：默认拒绝执行（fail-closed），开发期可配 whitelist-required=false 回到告警跳过
+            if (properties.isWhitelistRequired()) {
+                throw new DatasetSecurityException(
+                        "未配置数据集可查询对象白名单，已拒绝执行（apboa.dashboard.dataset.allowed-tables）");
+            }
+            log.warn("Dashboard 数据集未配置可查询对象白名单且 whitelist-required=false，跳过白名单校验，仅限开发期使用");
             return;
         }
         Set<String> allowedLower = allowed.stream()

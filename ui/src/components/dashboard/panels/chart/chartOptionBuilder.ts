@@ -176,40 +176,77 @@ const pieBuilder: ChartBuilder = (panel, data, { tier }) => {
   }
 }
 
-/** 雷达图 */
+/** 雷达图：自动适配长格式（多行=多轴，每列一条雷达）与宽格式（单行多列，每列一个轴） */
 const radarBuilder: ChartBuilder = (panel, data, { tier }) => {
   const opts = panel.options || {}
   const rows = data?.rows || []
   const mapping = panel.fieldMapping || {}
   const nameField = (mapping.name as string) || (mapping.x as string)
   const yFields = toArray(mapping.y)
-  let max = 0
-  yFields.forEach((yf) =>
-    rows.forEach((r) => {
-      const n = Number(r[yf])
-      if (!Number.isNaN(n) && n > max) max = n
-    }),
-  )
-  const indicator = rows.map((r) => ({
-    name: nameField ? String(r[nameField]) : '',
-    max: max > 0 ? max : undefined,
-  }))
-  const series = [
-    {
-      type: 'radar',
-      symbolSize: symbolSize(tier),
-      ...(opts.area ? { areaStyle: { opacity: 0.12 } } : {}),
-      lineStyle: { width: 2 },
-      data: yFields.map((yf) => ({
-        name: yf,
-        value: rows.map((r) => {
-          const n = Number(r[yf])
-          return Number.isNaN(n) ? null : n
-        }),
-      })),
-    },
-  ]
-  const { legend } = resolveLegend(panel, yFields.length, tier)
+
+  const num = (v: unknown): number | null => {
+    const n = Number(v)
+    return Number.isNaN(n) ? null : n
+  }
+
+  // 宽格式：单行（或无维度列）且数值列≥。每个数值列作一个轴，每行一条雷达
+  const useWide = yFields.length >= 3 && rows.length <= 1
+
+  let indicator: { name: string; max?: number }[]
+  let series: Record<string, unknown>[]
+  let seriesCount: number
+
+  if (useWide) {
+    let max = 0
+    rows.forEach((r) =>
+      yFields.forEach((yf) => {
+        const n = num(r[yf])
+        if (n !== null && n > max) max = n
+      }),
+    )
+    indicator = yFields.map((yf) => ({ name: yf, max: max > 0 ? max : undefined }))
+    const dataRows = rows.length ? rows : []
+    series = [
+      {
+        type: 'radar',
+        symbolSize: symbolSize(tier),
+        ...(opts.area ? { areaStyle: { opacity: 0.12 } } : {}),
+        lineStyle: { width: 2 },
+        data: dataRows.map((r, i) => ({
+          name: nameField ? String(r[nameField]) : `系列${i + 1}`,
+          value: yFields.map((yf) => num(r[yf])),
+        })),
+      },
+    ]
+    seriesCount = dataRows.length
+  } else {
+    let max = 0
+    yFields.forEach((yf) =>
+      rows.forEach((r) => {
+        const n = num(r[yf])
+        if (n !== null && n > max) max = n
+      }),
+    )
+    indicator = rows.map((r) => ({
+      name: nameField ? String(r[nameField]) : '',
+      max: max > 0 ? max : undefined,
+    }))
+    series = [
+      {
+        type: 'radar',
+        symbolSize: symbolSize(tier),
+        ...(opts.area ? { areaStyle: { opacity: 0.12 } } : {}),
+        lineStyle: { width: 2 },
+        data: yFields.map((yf) => ({
+          name: yf,
+          value: rows.map((r) => num(r[yf])),
+        })),
+      },
+    ]
+    seriesCount = yFields.length
+  }
+
+  const { legend } = resolveLegend(panel, seriesCount, tier)
   return {
     tooltip: { trigger: 'item', ...tooltipStyle() },
     legend,

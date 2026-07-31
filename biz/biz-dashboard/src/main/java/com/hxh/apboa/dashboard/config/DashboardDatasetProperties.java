@@ -17,12 +17,20 @@ import java.util.List;
 @Getter
 @Setter
 @Component
-@ConfigurationProperties(prefix = "apboa.dashboard.dataset")
+@ConfigurationProperties(prefix = "dashboard.dataset")
 public class DashboardDatasetProperties {
     /**
-     * 可查询对象白名单（表/视图名，小写匹配）。为空时不启用白名单校验（仅建议开发期），生产应显式配置。
+     * 可查询对象白名单（表/视图名，小写匹配）。为空且 whitelistRequired=true 时拒绝执行。
      */
     private List<String> allowedTables = new ArrayList<>();
+    /**
+     * 白名单为空时是否拒绝执行（生产应保持 true；开发期可配 false 回到告警跳过）
+     */
+    private boolean whitelistRequired = false;
+    /**
+     * 租户谓词注入豁免清单（真正的全局字典表，无 tenant_id 列）
+     */
+    private List<String> tenantExemptTables = new ArrayList<>();
     /**
      * 单次执行返回行数硬上限
      */

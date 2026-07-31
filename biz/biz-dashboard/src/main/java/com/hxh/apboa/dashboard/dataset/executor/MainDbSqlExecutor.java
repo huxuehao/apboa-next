@@ -3,6 +3,7 @@ package com.hxh.apboa.dashboard.dataset.executor;
 import com.hxh.apboa.common.enums.dashboard.DatasetType;
 import com.hxh.apboa.dashboard.config.DashboardDatasetProperties;
 import com.hxh.apboa.dashboard.dataset.guard.SqlSecurityValidator;
+import com.hxh.apboa.dashboard.dataset.guard.TenantPredicateRewriter;
 import com.hxh.apboa.dashboard.dataset.model.ColumnMeta;
 import com.hxh.apboa.dashboard.dataset.model.DatasetExecuteResult;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -26,8 +27,9 @@ public class MainDbSqlExecutor extends AbstractDatasetExecutor {
     private final NamedParameterJdbcTemplate namedJdbcTemplate;
     private final DashboardDatasetProperties properties;
 
-    public MainDbSqlExecutor(SqlSecurityValidator validator, DataSource dataSource, DashboardDatasetProperties properties) {
-        super(validator);
+    public MainDbSqlExecutor(SqlSecurityValidator validator, TenantPredicateRewriter tenantRewriter,
+                             DataSource dataSource, DashboardDatasetProperties properties) {
+        super(validator, tenantRewriter);
         JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
         jdbcTemplate.setQueryTimeout(properties.getQueryTimeoutSeconds());
         this.namedJdbcTemplate = new NamedParameterJdbcTemplate(jdbcTemplate);

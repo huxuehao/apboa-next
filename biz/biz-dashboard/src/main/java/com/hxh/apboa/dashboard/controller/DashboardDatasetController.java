@@ -35,12 +35,12 @@ public class DashboardDatasetController {
 
     @GetMapping("/page")
     public R<IPage<DashboardDataset>> page(PageParams pageParams, DashboardDataset query) {
-        return R.data(datasetService.page(MP.getPage(pageParams), MP.getQueryWrapper(query)));
+        return R.data(datasetService.pageVisible(MP.getPage(pageParams), MP.getQueryWrapper(query)));
     }
 
     @GetMapping
     public R<List<DashboardDataset>> list(DashboardDataset query) {
-        return R.data(datasetService.list(MP.getQueryWrapper(query)));
+        return R.data(datasetService.listVisible(MP.getQueryWrapper(query)));
     }
 
     @GetMapping("/{id}")

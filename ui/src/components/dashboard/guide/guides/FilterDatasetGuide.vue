@@ -96,6 +96,15 @@ group by dept</pre>
         <code>(:x is null or ...)</code> 写法。
       </span>
     </div>
+
+    <div class="tip-box">
+      <span class="tip-icon">!</span>
+      <span>
+        租户隔离已由平台<b>强制自动注入</b>：无论 SQL 是否手写
+        <code>tenant_id = :currentTenantId</code>，执行时都会自动追加当前租户过滤，
+        无法跨租户查询；示例中保留手写写法仅为清晰起见。
+      </span>
+    </div>
   </div>
 </template>
 
