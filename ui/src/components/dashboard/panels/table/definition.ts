@@ -21,6 +21,7 @@ export const tablePanelDefinition: PanelDefinition = {
     fieldMapping: {},
   }),
   configSchema: [
+    { key: 'options.columns', label: '显示列', type: 'columnPicker', group: '显示' },
     { key: 'options.pageSize', label: '每页行数', type: 'number', group: '显示' },
     { key: 'options.showHeader', label: '显示表头', type: 'switch', group: '风格' },
     { key: 'options.bordered', label: '显示边框', type: 'switch', group: '风格' },

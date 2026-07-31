@@ -196,6 +196,34 @@ export type PanelConfigFieldType =
   | 'icon'
   | 'field'
   | 'fields'
+  | 'portalComponent'
+  | 'propsList'
+  | 'columnPicker'
+
+/** 面板标题栏操作按钮（由面板组件运行时注册，通用机制） */
+export interface PanelAction {
+  key: string
+  label: string
+  /** iconRegistry 中的图标名（可选） */
+  icon?: string
+  run: () => void
+}
+
+/** portal 自定义组件元信息（defineOptions({ portalMeta }) 约定） */
+export interface PortalMeta {
+  name?: string
+  description?: string
+}
+
+/** 自定义组件 props 条目类型 */
+export type PanelPropType = 'string' | 'number' | 'boolean' | 'array' | 'date' | 'object'
+
+/** 自定义组件 props 条目（array/object 的 value 以 JSON 字符串存储，date 为 YYYY-MM-DD） */
+export interface PanelPropItem {
+  key: string
+  type: PanelPropType
+  value: unknown
+}
 
 /** 面板配置项声明 */
 export interface PanelConfigField {

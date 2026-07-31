@@ -5,12 +5,13 @@
  *
  * @author huxuehao
  */
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { getPanel } from './panels'
 import { useDatasetData } from './composables/useDatasetData'
 import { useRefreshTimer } from './composables/useRefreshTimer'
 import FilterBar from './filter/FilterBar.vue'
 import { resolveIcon } from './icons/iconRegistry'
+import { getPanelActions, getPanelRefresh, unregisterPanelActions } from './panelActionsStore'
 import {
   buildFilterParams,
   initFilterValues,
@@ -157,8 +158,19 @@ function reload(silent = false) {
       undefined,
       silent,
     )
+    return
   }
+  // 无数据集面板（如自定义组件）：定时刷新转发给组件自身暴露的 refresh 处理器
+  getPanelRefresh(props.panel.id)?.()
 }
+
+// ── 标题栏操作按钮（通用机制：面板组件运行时注册，按配置显隐） ──
+const panelActions = computed(() => {
+  const visibility = (props.panel.options?.actionVisibility as Record<string, boolean>) || {}
+  return getPanelActions(props.panel.id).filter((a) => visibility[a.key] !== false)
+})
+
+onBeforeUnmount(() => unregisterPanelActions(props.panel.id))
 
 onMounted(() => reload())
 watch(() => props.panel.dataset, () => reload(), { deep: true })
@@ -173,6 +185,14 @@ useRefreshTimer(() => reload(true), () => refreshConfig.value)
       <span v-if="titleTextVisible" class="panel-title">
         <component :is="titleIconComp" v-if="titleIconComp" class="panel-title-icon" />
         <span class="panel-title-text">{{ panel.title }}</span>
+      </span>
+      <span v-if="panelActions.length" class="panel-actions">
+        <a-tooltip v-for="a in panelActions" :key="a.key" :title="a.label">
+          <a-button type="text" size="small" class="panel-action-btn" @click.stop="a.run()">
+            <component :is="resolveIcon(a.icon)" v-if="a.icon && resolveIcon(a.icon)" />
+            <template v-else>{{ a.label }}</template>
+          </a-button>
+        </a-tooltip>
       </span>
       <FilterBar
         v-if="headerFilterVisible"
@@ -253,6 +273,22 @@ useRefreshTimer(() => reload(true), () => refreshConfig.value)
   font-size: 14px;
   font-weight: 600;
   color: inherit;
+}
+
+.panel-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  /* 靠右显示；若同时存在标题栏筛选器，按钮位于其左侧 */
+  margin-left: auto;
+}
+
+.panel-action-btn {
+  color: #8c8c8c;
+}
+
+.panel-action-btn:hover {
+  color: #1677ff;
 }
 
 .panel-title-icon {

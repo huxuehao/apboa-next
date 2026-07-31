@@ -11,10 +11,20 @@ import { getPanel } from './panels'
 import StyleOverrideEditor from './StyleOverrideEditor.vue'
 import IconSelect from './icons/IconSelect.vue'
 import FilterConfigModal from './filter/FilterConfigModal.vue'
+import PropsConfigModal from './panels/custom/PropsConfigModal.vue'
+import ColumnPickerModal from './ColumnPickerModal.vue'
 import { buildFilterParams, initFilterValues } from './filter/filterParams'
 import { getCachedColumns, setCachedColumns, invalidateCachedColumns } from './columnCache'
+import { getPanelActions } from './panelActionsStore'
+import { loadPortalOptions, type PortalOption } from './panels/custom/portalRegistry'
 import { datasetQuery } from '@/api/dashboard'
-import type { DashboardDatasetEntity, DashboardFilter, PanelDsl, PanelStyleGroup } from '@/types/dashboard'
+import type {
+  DashboardDatasetEntity,
+  DashboardFilter,
+  PanelDsl,
+  PanelPropItem,
+  PanelStyleGroup,
+} from '@/types/dashboard'
 
 const props = defineProps<{
   panel: PanelDsl | null
@@ -37,6 +47,94 @@ const styleGroups = computed<PanelStyleGroup[]>(
 
 // ── 私有筛选配置 ──
 const panelFilterConfigOpen = ref(false)
+
+// ── portal 自定义组件下拉（三要素：名称/文件名/描述） ──
+const portalOptions = ref<(PortalOption & { label: string })[]>([])
+const portalLoading = ref(false)
+
+const hasPortalField = computed(
+  () => definition.value?.configSchema?.some((f) => f.type === 'portalComponent') === true,
+)
+
+/** 存在 portalComponent 字段时预加载选项（模块级缓存，重复调用无开销） */
+watch(
+  hasPortalField,
+  async (has) => {
+    if (!has) return
+    portalLoading.value = true
+    try {
+      const opts = await loadPortalOptions()
+      portalOptions.value = opts.map((o) => ({ ...o, label: o.name }))
+    } finally {
+      portalLoading.value = false
+    }
+  },
+  { immediate: true },
+)
+
+/** 下拉搜索：同时匹配组件名称/文件名/描述 */
+function filterPortalOption(input: string, option?: Record<string, unknown>) {
+  const kw = input.trim().toLowerCase()
+  if (!kw || !option) return true
+  return ['name', 'value', 'description'].some((k) =>
+    String(option[k] ?? '').toLowerCase().includes(kw),
+  )
+}
+
+// ── 组件 props 列表配置弹窗 ──
+const propsModalOpen = ref(false)
+const propsModalFieldKey = ref('')
+
+/** 切换 portal 组件：同步清空旧组件的 props 配置与操作按钮显隐，避免脏数据残留 */
+function onPortalComponentChange(fieldKey: string, value: unknown) {
+  emit('update', fieldKey, value ?? '')
+  emit('update', 'options.propsList', [])
+  emit('update', 'options.actionVisibility', {})
+}
+
+function openPropsModal(fieldKey: string) {
+  propsModalFieldKey.value = fieldKey
+  propsModalOpen.value = true
+}
+
+const propsModalItems = computed(
+  () => (getByPath(propsModalFieldKey.value) as PanelPropItem[]) || [],
+)
+
+function onSavePropsList(items: PanelPropItem[]) {
+  emit('update', propsModalFieldKey.value, items)
+}
+
+// ── 显示列选择弹窗（数据表格/滚动轮播表） ──
+const columnPickerOpen = ref(false)
+const columnPickerFieldKey = ref('')
+
+function openColumnPicker(fieldKey: string) {
+  columnPickerFieldKey.value = fieldKey
+  columnPickerOpen.value = true
+}
+
+const pickedColumns = computed(
+  () => (getByPath(columnPickerFieldKey.value) as string[]) || [],
+)
+
+function onSaveColumns(cols: string[]) {
+  emit('update', columnPickerFieldKey.value, cols)
+}
+
+/** 列选择按钮文案：空配置为全部列 */
+function columnPickerLabel(fieldKey: string): string {
+  const picked = (getByPath(fieldKey) as string[]) || []
+  return picked.length ? `已选 ${picked.length} 列` : '全部列'
+}
+
+// ── 标题栏操作按钮（通用机制：自动识别运行时注册的 actions，提供显隐开关） ──
+const detectedActions = computed(() => (props.panel ? getPanelActions(props.panel.id) : []))
+
+function actionVisible(key: string): boolean {
+  const visibility = (props.panel?.options?.actionVisibility as Record<string, boolean>) || {}
+  return visibility[key] !== false
+}
 
 const filterPositionOptions = [
   { label: '标题栏右侧', value: 'header' },
@@ -266,6 +364,42 @@ watch(
             style="width: 100%"
             @update:value="emit('update', field.key, $event)"
           />
+          <a-select
+            v-else-if="field.type === 'portalComponent'"
+            :value="getByPath(field.key) || undefined"
+            :options="portalOptions"
+            :loading="portalLoading"
+            show-search
+            :filter-option="filterPortalOption"
+            placeholder="选择 portal 组件"
+            allow-clear
+            style="width: 100%"
+            @update:value="onPortalComponentChange(field.key, $event)"
+          >
+            <template #option="opt">
+              <div class="portal-opt">
+                <div class="po-main">
+                  <span class="po-name">{{ opt.name }}</span>
+                  <span class="po-file">{{ opt.value }}</span>
+                </div>
+                <div v-if="opt.description" class="po-desc">{{ opt.description }}</div>
+              </div>
+            </template>
+          </a-select>
+          <a-button
+            v-else-if="field.type === 'propsList'"
+            block
+            @click="openPropsModal(field.key)"
+          >
+            编辑 props（{{ ((getByPath(field.key) as unknown[]) || []).length }}）
+          </a-button>
+          <a-button
+            v-else-if="field.type === 'columnPicker'"
+            block
+            @click="openColumnPicker(field.key)"
+          >
+            选择显示列（{{ columnPickerLabel(field.key) }}）
+          </a-button>
         </div>
         <div v-if="needsDataset && !availableColumns.length" class="config-hint">
           绑定数据集后可选择字段
@@ -313,6 +447,18 @@ watch(
         </template>
       </div>
 
+      <div v-if="detectedActions.length" class="config-section">
+        <div class="section-title">操作按钮</div>
+        <div v-for="a in detectedActions" :key="a.key" class="config-item">
+          <span class="config-label">{{ a.label }}</span>
+          <a-switch
+            :checked="actionVisible(a.key)"
+            @update:checked="emit('update', 'options.actionVisibility.' + a.key, $event)"
+          />
+        </div>
+        <div class="config-hint">组件自动识别的标题栏按钮，关闭后不再展示</div>
+      </div>
+
       <div class="config-section">
         <div class="section-title">定时刷新</div>
         <div class="config-item">
@@ -346,6 +492,20 @@ watch(
         v-model:open="panelFilterConfigOpen"
         :filters="panel.panelFilter?.items || []"
         @save="onSavePanelFilterItems"
+      />
+
+      <PropsConfigModal
+        v-model:open="propsModalOpen"
+        :items="propsModalItems"
+        :component-id="(getByPath('options.component') as string) || ''"
+        @save="onSavePropsList"
+      />
+
+      <ColumnPickerModal
+        v-model:open="columnPickerOpen"
+        :all-columns="availableColumns"
+        :selected="pickedColumns"
+        @save="onSaveColumns"
       />
     </template>
   </div>
@@ -408,6 +568,36 @@ watch(
 .config-hint {
   font-size: 12px;
   color: #bbb;
+}
+
+.portal-opt {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 2px 0;
+}
+
+.po-main {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.po-name {
+  font-size: 13px;
+  color: #1a1a1a;
+}
+
+.po-file {
+  font-size: 12px;
+  color: #bfbfbf;
+  font-family: 'JetBrains Mono', Menlo, Consolas, monospace;
+}
+
+.po-desc {
+  font-size: 12px;
+  color: #999;
+  white-space: normal;
 }
 
 .cfg-color {

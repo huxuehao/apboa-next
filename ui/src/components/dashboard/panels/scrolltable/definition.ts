@@ -21,6 +21,7 @@ export const scrollTablePanelDefinition: PanelDefinition = {
     fieldMapping: {},
   }),
   configSchema: [
+    { key: 'options.columns', label: '显示列', type: 'columnPicker', group: '显示' },
     { key: 'options.showHeader', label: '显示表头', type: 'switch', group: '风格' },
     { key: 'options.rowsPerView', label: '可视行数', type: 'number', group: '滚动' },
     { key: 'options.interval', label: '滚动间隔(ms)', type: 'number', group: '滚动' },

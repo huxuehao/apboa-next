@@ -17,6 +17,7 @@ import { mediaPanelDefinition } from './media/definition'
 import { iframePanelDefinition } from './iframe/definition'
 import { clockPanelDefinition } from './clock/definition'
 import { markdownPanelDefinition } from './markdown/definition'
+import { customPanelDefinition } from './custom/definition'
 
 let registered = false
 
@@ -36,6 +37,7 @@ export function registerBuiltinPanels() {
   registerPanel(iframePanelDefinition)
   registerPanel(clockPanelDefinition)
   registerPanel(markdownPanelDefinition)
+  registerPanel(customPanelDefinition)
   registered = true
 }
 

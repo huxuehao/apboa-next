@@ -17,6 +17,7 @@ import RadarDatasetGuide from './guides/RadarDatasetGuide.vue'
 import FilterDatasetGuide from './guides/FilterDatasetGuide.vue'
 import HttpDatasetGuide from './guides/HttpDatasetGuide.vue'
 import PlaceholderDatasetGuide from './guides/PlaceholderDatasetGuide.vue'
+import PortalComponentGuide from './guides/PortalComponentGuide.vue'
 
 let registered = false
 
@@ -94,6 +95,12 @@ export function registerBuiltinGuides() {
     title: '文本 / Markdown 动态占位',
     panelTypes: ['text', 'markdown'],
     component: markRaw(PlaceholderDatasetGuide),
+  })
+  registerGuide({
+    key: 'portal',
+    title: '自定义组件开发规范',
+    panelTypes: ['custom'],
+    component: markRaw(PortalComponentGuide),
   })
   registered = true
 }

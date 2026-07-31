@@ -4,7 +4,7 @@
  * @author huxuehao
  */
 import { markRaw } from 'vue'
-import { PieChartOutlined } from '@ant-design/icons-vue'
+import { Loading3QuartersOutlined } from '@ant-design/icons-vue'
 import type { PanelDefinition } from '@/types/dashboard'
 import ProgressPanel from './ProgressPanel.vue'
 
@@ -12,7 +12,7 @@ export const progressPanelDefinition: PanelDefinition = {
   type: 'progress',
   name: '进度环',
   category: '指标',
-  icon: markRaw(PieChartOutlined),
+  icon: markRaw(Loading3QuartersOutlined),
   component: markRaw(ProgressPanel),
   dataRequirement: { needsDataset: true },
   styleGroups: ['card', 'header', 'text'],

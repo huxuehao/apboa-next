@@ -16,7 +16,15 @@ const props = defineProps<{
 
 const ROW_HEIGHT = 36
 
-const columns = computed(() => props.data?.columns || [])
+const columns = computed(() => {
+  const all = props.data?.columns || []
+  // 选列配置：按用户选择的列与顺序展示；空配置 = 全部列
+  const picked = (props.panel.options?.columns as string[]) || []
+  if (!picked.length) return all
+  return picked
+    .map((name) => all.find((c) => c.name === name))
+    .filter((c): c is NonNullable<typeof c> => !!c)
+})
 const rows = computed(() => props.data?.rows || [])
 const rowsPerView = computed(() => (props.panel.options?.rowsPerView as number) || 5)
 const interval = computed(() => (props.panel.options?.interval as number) || 2000)

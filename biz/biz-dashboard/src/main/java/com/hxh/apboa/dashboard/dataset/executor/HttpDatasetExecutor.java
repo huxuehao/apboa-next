@@ -39,7 +39,10 @@ public class HttpDatasetExecutor implements DatasetExecutor {
     public HttpDatasetExecutor(HttpUrlGuard urlGuard, DashboardDatasetProperties properties) {
         this.urlGuard = urlGuard;
         this.properties = properties;
+        // 固定 HTTP/1.1：默认 HTTP/2 对 http 地址会发 h2c 升级请求，
+        // Node 系服务器（如 Vite 代理）会直接断连导致 "header parser received no bytes"
         this.httpClient = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1)
                 .connectTimeout(Duration.ofMillis(properties.getHttpConnectTimeoutMs()))
                 .followRedirects(HttpClient.Redirect.NORMAL)
                 .build();

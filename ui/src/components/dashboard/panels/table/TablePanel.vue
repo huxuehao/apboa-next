@@ -14,14 +14,20 @@ const props = defineProps<{
   error?: string | null
 }>()
 
-const columns = computed(() =>
-  (props.data?.columns || []).map((c) => ({
-    title: c.name,
-    dataIndex: c.name,
-    key: c.name,
+const columns = computed(() => {
+  const all = props.data?.columns || []
+  // 选列配置：按用户选择的列与顺序展示；空配置 = 全部列
+  const picked = (props.panel.options?.columns as string[]) || []
+  const names = picked.length
+    ? picked.filter((name) => all.some((c) => c.name === name))
+    : all.map((c) => c.name)
+  return names.map((name) => ({
+    title: name,
+    dataIndex: name,
+    key: name,
     ellipsis: true,
-  })),
-)
+  }))
+})
 
 const dataSource = computed(() =>
   (props.data?.rows || []).map((row, index) => ({ ...row, _rowKey: index })),
