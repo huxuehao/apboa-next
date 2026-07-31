@@ -219,6 +219,33 @@ Apboa 自动化模块将定时调度与 AI 能力深度整合，让用户可以�
 
 > 数据面由 [GatewayLifecycleManager](gateway/src/main/java/com/hxh/apboa/gateway/core/GatewayLifecycleManager.java) 管理应用生命周期。
 
+### 📊 千人千面工作台
+
+**拖拽搭建专属数据看板，让每个人的首页都不一样。**
+
+Apboa 工作台是面向终端用户的可视化数据门户。通过拖拽面板、绑定数据集，用户几分钟即可搭出属于自己的数据看板——关心的指标、顺手的入口、实时的图表各就各位。设计器提供细粒度栅格、自动排版、历史版本与未保存离开拦截，兼具专业工具的手感与克制的视觉美学。
+
+**核心亮点：**
+
+| 特性 | 说明 |
+|------|------|
+| **20+ 面板类型** | 指标（数据卡片 / KPI 趋势 / 进度环 / 数字翻牌）、图表（柱状 / 折线 / 面积 / 散点 / 饼图 / 雷达）、表格（数据表格 / 滚动轮播表）、内容（文本 / Markdown / 图片 / 网页 / 时钟）、快捷方式 |
+| **双通道数据集** | SQL 数据集（参数化 + 缓存 + 限流）与 HTTP 数据集（GET + dataPath 映射 + 同源带 token），统一策略执行 |
+| **数据集归属与共享** | 数据集归创建人私有，可选租户内共享；非创建人仅可使用与运行预览，不可查看细节或改删 |
+| **租户隔离强制注入** | 平台自动为数据集 SQL 追加租户过滤，敏感系统表黑名单 + 可查询白名单 + 越权防护 + 审计日志 |
+| **面板私有筛选器** | 日期 / 月份 / 年份 / 下拉 / 文本，可拖拽排序、四角停靠，同一数据集各面板各看切面 |
+| **可视化设计器** | 48 列细粒度栅格、防碰撞开关、skyline 自动排版、撤销重做、历史版本回滚、未保存离开拦截 |
+| **动态占位与自定义组件** | 文本 / Markdown 支持 `{{ 字段 }}` 占位；portal 目录 Vue 组件自动扫描、props 自动识别，零胶水扩展 |
+| **样式覆盖与定时刷新** | 每面板可覆盖背景 / 边框 / 圆角 / 内边距 / 文字样式（含透明度）；定时静默刷新不闪屏 |
+
+**典型应用场景：**
+
+- **运营看板**：绑定 SQL 数据集 → 拖入指标卡与图表 → 私有筛选按日期/状态切片 → 定时刷新
+- **接口聚合**：HTTP 数据集对接内部服务 → dataPath 映射为表格 → 与本地数据同屏对比
+- **个性首页**：快捷方式导航 + 摸鱼进度条 + 每日一言等自定义组件，打造专属工作起点
+
+> 数据集执行经安全校验与租户改写后执行，详见 [DatasetExecutionService](biz/biz-dashboard/src/main/java/com/hxh/apboa/dashboard/dataset/DatasetExecutionService.java) 与 [TenantPredicateRewriter](biz/biz-dashboard/src/main/java/com/hxh/apboa/dashboard/dataset/guard/TenantPredicateRewriter.java)。
+
 ---
 
 ## 系统架构
@@ -297,6 +324,7 @@ PgVector / Milvus / Elasticsearch / Qdrant / Weaviate——修改 `VECTOR_STORE_
 - **自动化定时任务（Automation）** — Cron 可视化配置、预设模板、启用/禁用开关、手动触发、执行记录追踪
 - **集群调度** — Quartz 调度引擎 + Redis 分布式锁 + 执行历史负载均衡 + 节点心跳存活检测
 - **API 服务网关（Gateway）** — 工作流一键暴露为 HTTP API，独立端口应用 + 动态路由 + 统一鉴权 + IP 白名单 + 访问日志（尝鲜）
+- **千人千面工作台（Dashboard）** — 拖拽式数据看板，20+ 面板 + SQL/HTTP 双通道数据集 + 数据集归属共享 + 租户隔离强制注入 + 自动排版 + 历史版本 + 自定义组件扩展
 
 ---
 
