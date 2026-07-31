@@ -1,11 +1,12 @@
 <script setup lang="ts">
 /**
- * 文本面板：展示静态文本（保留换行），无数据集依赖。
+ * 文本面板：展示文本（保留换行），支持绑定数据集后用 {{ 字段 }} / {{#each}} 动态占位。
  *
  * @author huxuehao
  */
 import { computed } from 'vue'
 import type { DatasetExecuteResult, PanelDsl } from '@/types/dashboard'
+import { interpolateTemplate } from '../templateInterpolate'
 
 const props = defineProps<{
   panel: PanelDsl
@@ -14,7 +15,9 @@ const props = defineProps<{
   error?: string | null
 }>()
 
-const content = computed(() => (props.panel.options?.content as string) || '')
+const content = computed(() =>
+  interpolateTemplate((props.panel.options?.content as string) || '', props.data ?? null),
+)
 const align = computed<'left' | 'center' | 'right'>(
   () => ((props.panel.options?.align as string) || 'left') as 'left' | 'center' | 'right',
 )

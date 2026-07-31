@@ -1,6 +1,7 @@
 <script setup lang="ts">
 /**
- * Markdown 卡片：渲染 Markdown 富文本（标题/列表/代码/链接等），安全净化。无数据集依赖。
+ * Markdown 卡片：渲染 Markdown 富文本（标题/列表/代码/链接等），安全净化。
+ * 支持绑定数据集后用 {{ 字段 }} / {{#each}} 动态占位（先插值、再渲染、最后净化）。
  *
  * @author huxuehao
  */
@@ -8,6 +9,7 @@ import { computed } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import type { DatasetExecuteResult, PanelDsl } from '@/types/dashboard'
+import { interpolateTemplate } from '../templateInterpolate'
 
 const props = defineProps<{
   panel: PanelDsl
@@ -19,8 +21,9 @@ const props = defineProps<{
 const content = computed(() => (props.panel.options?.content as string) || '')
 
 const html = computed(() => {
-  if (!content.value) return ''
-  const raw = marked.parse(content.value, { async: false }) as string
+  const interpolated = interpolateTemplate(content.value, props.data ?? null)
+  if (!interpolated) return ''
+  const raw = marked.parse(interpolated, { async: false }) as string
   return DOMPurify.sanitize(raw)
 })
 </script>

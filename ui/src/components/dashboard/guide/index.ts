@@ -16,6 +16,7 @@ import PieDatasetGuide from './guides/PieDatasetGuide.vue'
 import RadarDatasetGuide from './guides/RadarDatasetGuide.vue'
 import FilterDatasetGuide from './guides/FilterDatasetGuide.vue'
 import HttpDatasetGuide from './guides/HttpDatasetGuide.vue'
+import PlaceholderDatasetGuide from './guides/PlaceholderDatasetGuide.vue'
 
 let registered = false
 
@@ -87,6 +88,12 @@ export function registerBuiltinGuides() {
     title: 'HTTP 数据集',
     panelTypes: [],
     component: markRaw(HttpDatasetGuide),
+  })
+  registerGuide({
+    key: 'placeholder',
+    title: '文本 / Markdown 动态占位',
+    panelTypes: ['text', 'markdown'],
+    component: markRaw(PlaceholderDatasetGuide),
   })
   registered = true
 }

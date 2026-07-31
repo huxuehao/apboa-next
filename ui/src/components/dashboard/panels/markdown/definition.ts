@@ -14,7 +14,7 @@ export const markdownPanelDefinition: PanelDefinition = {
   category: '内容',
   icon: markRaw(FileMarkdownOutlined),
   component: markRaw(MarkdownPanel),
-  dataRequirement: { needsDataset: false, supportsDataset: false },
+  dataRequirement: { needsDataset: false, supportsDataset: true },
   styleGroups: ['card', 'header', 'text'],
   defaultDsl: () => ({
     layout: { x: 0, y: 0, w: 8, h: 5 },
