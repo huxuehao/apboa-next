@@ -32,6 +32,8 @@ import type {
   DatasetType,
   HttpDatasetConfig,
 } from '@/types/dashboard'
+import sqlAvatar from '@/assets/avatar/sql-dataset.png'
+import apiAvatar from '@/assets/avatar/api-dataset.png'
 
 const emit = defineEmits<{ (e: 'close'): void; (e: 'changed'): void }>()
 
@@ -338,13 +340,12 @@ onMounted(loadList)
             <div v-for="d in list" :key="d.id" class="ds-card">
               <div class="ds-card-main">
                 <div class="ds-avatar-wrap">
-                  <div
+                  <img
                     class="ds-avatar"
-                    :class="d.type === 'HTTP' ? 'is-http' : 'is-sql'"
+                    :src="d.type === 'HTTP' ? apiAvatar : sqlAvatar"
+                    :alt="d.type === 'HTTP' ? 'API' : 'SQL'"
                     :title="isMine(d) ? '我创建的' : '他人共享'"
-                  >
-                    <span class="ds-avatar-text">{{ d.type === 'HTTP' ? 'API' : 'SQL' }}</span>
-                  </div>
+                  />
                   <span
                     v-if="d.shared"
                     class="ds-badge"
@@ -610,29 +611,14 @@ onMounted(loadList)
   gap: 10px;
 }
 
-/* 类型头像：浅色底 + 主题色图标，区分 SQL / HTTP 数据集 */
+/* 类型头像：图片头像（SQL / API 数据集） */
 .ds-avatar {
-  display: flex;
-  align-items: center;
-  justify-content: center;
   flex-shrink: 0;
   width: 36px;
   height: 36px;
   border-radius: 10px;
-  font-size: 17px;
-}
-
-/* 文字头像（SQL / API） */
-.ds-avatar-text {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-}
-
-/* 共享开关：固定宽度 45px */
-.ds-share-switch {
-  min-width: 45px;
-  width: 45px;
+  object-fit: cover;
+  display: block;
 }
 
 /* 头像容器：供共享徽章角部定位 */
@@ -641,15 +627,10 @@ onMounted(loadList)
   flex-shrink: 0;
 }
 
-/* 类型区分：SQL = 蓝；API(HTTP) = 绿，一眼辨认 */
-.ds-avatar.is-sql {
-  color: #1677ff;
-  background: #e9f2ff;
-}
-
-.ds-avatar.is-http {
-  color: #00b96b;
-  background: #e5f8ef;
+/* 共享开关：固定宽度 45px */
+.ds-share-switch {
+  min-width: 45px;
+  width: 45px;
 }
 
 /* 共享徽章：头像右下角，白底，图标色跟随类型，无边框无阴影 */
@@ -668,11 +649,11 @@ onMounted(loadList)
 }
 
 .ds-badge.is-sql {
-  color: #1677ff;
+  color: #00b96b;
 }
 
 .ds-badge.is-http {
-  color: #00b96b;
+  color: #1677ff;
 }
 
 .ds-card-info {
