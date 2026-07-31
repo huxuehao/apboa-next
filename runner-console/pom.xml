@@ -35,6 +35,10 @@
         </dependency>
         <dependency>
             <groupId>com.hxh.apboa.next</groupId>
+            <artifactId>biz-dashboard</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.hxh.apboa.next</groupId>
             <artifactId>biz-channel</artifactId>
         </dependency>
         <dependency>

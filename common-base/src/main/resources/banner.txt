@@ -1,0 +1,10 @@
+欢迎使用 APBOA-NEXT , 程序开始启动...
+${AnsiColor.BLUE}   █████████   ███████████  ███████████     ███████      █████████
+${AnsiColor.BLUE}  ███░░░░░███ ░░███░░░░░███░░███░░░░░███  ███░░░░░███   ███░░░░░███
+${AnsiColor.BLUE} ░███    ░███  ░███    ░███ ░███    ░███ ███     ░░███ ░███    ░███
+${AnsiColor.BLUE} ░███████████  ░██████████  ░██████████ ░███      ░███ ░███████████
+${AnsiColor.BLUE} ░███░░░░░███  ░███░░░░░░   ░███░░░░░███░███      ░███ ░███░░░░░███
+${AnsiColor.BLUE} ░███    ░███  ░███         ░███    ░███░░███     ███  ░███    ░███
+${AnsiColor.BLUE} █████   █████ █████        ███████████  ░░░███████░   █████   █████
+${AnsiColor.BLUE}░░░░░   ░░░░░ ░░░░░        ░░░░░░░░░░░     ░░░░░░░    ░░░░░   ░░░░░
+${AnsiColor.DEFAULT}作者:${AnsiColor.BLUE}huxuehao${AnsiColor.DEFAULT}  ${AnsiColor.DEFAULT}环境:${AnsiColor.RED}${spring.profiles.active}  ${AnsiColor.DEFAULT}端口:${AnsiColor.CYAN}${server.port}${AnsiColor.DEFAULT}  ${AnsiColor.DEFAULT}服务:${AnsiColor.BLUE}${spring.application.name}${AnsiColor.DEFAULT}

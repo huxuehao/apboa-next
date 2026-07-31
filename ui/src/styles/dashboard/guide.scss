@@ -1,0 +1,264 @@
+/**
+ * Dashboard 数据集帮助文档共享样式
+ * 供各面板数据集使用说明组件复用，保持简约灰阶风格。
+ */
+
+.guide-title {
+  margin: 0 0 8px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #262626;
+}
+
+.guide-intro {
+  margin: 0 0 20px;
+  font-size: 14px;
+  color: #595959;
+  line-height: 1.8;
+
+  b {
+    font-weight: 600;
+    color: #262626;
+  }
+}
+
+.section-title {
+  margin: 24px 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #f5f5f5;
+  font-size: 15px;
+  font-weight: 700;
+  color: #262626;
+
+  &:first-of-type {
+    margin-top: 0;
+  }
+}
+
+.section-text {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: #434343;
+  line-height: 1.8;
+
+  b {
+    font-weight: 600;
+    color: #262626;
+  }
+}
+
+.req-list {
+  margin: 0;
+  padding: 0 0 0 20px;
+
+  li {
+    margin-bottom: 6px;
+    font-size: 14px;
+    color: #434343;
+    line-height: 1.75;
+
+    b {
+      font-weight: 600;
+      color: #262626;
+    }
+
+    code {
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: #f2f3f5;
+      font-family: 'JetBrains Mono', Menlo, Consolas, monospace;
+      font-size: 12px;
+      color: #c41d7f;
+    }
+  }
+}
+
+/* 字段映射说明 */
+.field-map {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 6px 0 4px;
+}
+
+.fm-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.fm-key {
+  flex-shrink: 0;
+  min-width: 84px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: #f0f5ff;
+  color: #1677ff;
+  font-weight: 600;
+  text-align: center;
+}
+
+.fm-val {
+  color: #595959;
+
+  code {
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: #f2f3f5;
+    font-family: 'JetBrains Mono', Menlo, Consolas, monospace;
+    font-size: 12px;
+    color: #c41d7f;
+  }
+}
+
+/* SQL 代码块 */
+.code-block {
+  margin: 8px 0;
+  padding: 12px 14px;
+  border: 1px solid #eee;
+  border-radius: 6px;
+  background: #f8f9fa;
+  font-family: 'JetBrains Mono', Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #333;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+/* 结果 → 图形 示意 */
+.schematic {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin: 12px 0 4px;
+  padding: 16px;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  background: #fcfcfd;
+}
+
+.sc-arrow {
+  flex-shrink: 0;
+  color: #bfbfbf;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.sc-caption {
+  width: 100%;
+  margin-top: 4px;
+  text-align: center;
+  font-size: 12px;
+  color: #8c8c8c;
+}
+
+/* 模拟结果表 */
+.mock-table {
+  border: 1px solid #e8e8e8;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #fff;
+  font-size: 12px;
+}
+
+.mt-row {
+  display: flex;
+
+  &:not(:last-child) {
+    border-bottom: 1px solid #f0f0f0;
+  }
+}
+
+.mt-head .mt-cell {
+  background: #fafafa;
+  font-weight: 600;
+  color: #8c8c8c;
+}
+
+.mt-cell {
+  padding: 6px 12px;
+  color: #434343;
+  white-space: nowrap;
+
+  &:not(:last-child) {
+    border-right: 1px solid #f0f0f0;
+  }
+}
+
+.mt-cell.mt-x {
+  color: #1677ff;
+}
+
+.mt-cell.mt-y {
+  color: #d4380d;
+}
+
+/* 模拟柱状图 */
+.mock-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  height: 96px;
+  padding: 8px 10px 0;
+  border-left: 1px solid #e8e8e8;
+  border-bottom: 1px solid #e8e8e8;
+}
+
+.mc-bar {
+  width: 18px;
+  border-radius: 2px 2px 0 0;
+  background: #1677ff;
+  opacity: 0.85;
+}
+
+/* 提示框 */
+.tip-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 20px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: #fffbe6;
+  border: 1px solid #ffe58f;
+
+  span {
+    font-size: 13px;
+    color: #595959;
+    line-height: 1.7;
+
+    b {
+      font-weight: 600;
+      color: #262626;
+    }
+
+    code {
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: #fff;
+      border: 1px solid #ffe58f;
+      font-family: 'JetBrains Mono', Menlo, Consolas, monospace;
+      font-size: 12px;
+      color: #ad6800;
+    }
+  }
+}
+
+.tip-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #faad14;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+  margin-top: 1px;
+}

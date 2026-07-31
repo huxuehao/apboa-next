@@ -5,7 +5,7 @@ spring:
   profiles:
     active: dev
   application:
-    name: websocket
+    name: apboa-websocket
   main:
     banner-mode: off
   task:

@@ -55,6 +55,7 @@
     "dompurify": "^3.3.3",
     "echarts": "^6.0.0",
     "fast-json-patch": "^3.1.1",
+    "grid-layout-plus": "^1.1.1",
     "highlight.js": "^11.11.1",
     "js-cookie": "^3.0.5",
     "js-md5": "^0.8.3",

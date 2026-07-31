@@ -44,7 +44,7 @@ public class TableConst {
     public static final String AGENT_A2A = "agent_a2a";
     public static final String ACCOUNT = "account";
     public static final String SECRET_KEY = "secret_key";
-    public static final String CODE_EXECUTION_CONFIG  = "code_execution_config ";
+    public static final String CODE_EXECUTION_CONFIG  = "code_execution_config";
     public static final String AGENT_CODE_EXECUTION  = "agent_code_execution";
     public static final String RAG_DOCUMENT = "rag_document";
     public static final String RAG_DOCUMENT_CHUNK = "rag_document_chunk";
@@ -72,4 +72,8 @@ public class TableConst {
     public static final String GATEWAY_API = "gateway_api";
     public static final String GATEWAY_API_WORKFLOW = "gateway_api_workflow";
     public static final String GATEWAY_ACCESS_LOG = "gateway_access_log";
+    public static final String DASHBOARD = "dashboard";
+    public static final String DASHBOARD_USER = "dashboard_user";
+    public static final String DASHBOARD_DATASET = "dashboard_dataset";
+    public static final String DASHBOARD_HISTORY = "dashboard_history";
 }
