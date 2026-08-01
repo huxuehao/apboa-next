@@ -53,6 +53,10 @@ public class SkillImportService {
         try {
             GitSkillRepository repo = new GitSkillRepository(config.getRepoUrl(), tempDir);
             try {
+                // GitSkillRepository 的克隆是延迟执行的（首次访问技能时才触发）。
+                // 这里主动 sync() 强制立即克隆，确保后续 resolveSkillsDir(tempDir) 能读到真实的 skills 子目录，
+                // 否则 tempDir 仍为空目录，解析会回退到仓库根目录，导致每个技能的源目录都定位失败。
+           //     repo.sync();
                 Path skillsDir = SkillImportPathResolver.resolveSkillsDir(tempDir);
                 return doImport(skillsDir, repo, config.isCover(), config.getCategory());
             } finally {
