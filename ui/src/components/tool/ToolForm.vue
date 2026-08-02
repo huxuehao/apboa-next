@@ -492,7 +492,7 @@ const addItem = (e: Event) => {
         <ACol :span="12">
           <AFormItem label="是否需要确认" name="needConfirm">
             <ASwitch v-model:checked="formData.needConfirm" />
-            <span v-if="formData.needConfirm" class="text-placeholder" style="margin-left: 10px">开启后，不支持传递 AgentContext 参数</span>
+            <span v-if="formData.needConfirm" class="text-placeholder" style="margin-left: 10px">开启后，工具调用需要用户逐一确认</span>
           </AFormItem>
         </ACol>
         <ACol :span="12">

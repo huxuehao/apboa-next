@@ -136,8 +136,6 @@ public class ToolkitFactory {
                         .executionConfig(customToolkitConfig.toExecutionConfig())
                         .build());
         if (!toolIds.isEmpty()) {
-            // 获取是否开启记忆
-            Boolean isMemoryActive = AgentContext.getIfExists().map(AgentContext::isMemoryActive).orElse(false);
             // 注册工具
             toolService.listByIds(toolIds)
                     .stream()
@@ -151,7 +149,8 @@ public class ToolkitFactory {
                             toolkit.registerTool(new DynamicAgentTool(toolConfig));
                         }
 
-                        if (toolConfig.getNeedConfirm() && isMemoryActive) {
+                        // 确认是否生效只取决于工具自身 need_confirm，与 memoryActive 解耦
+                        if (Boolean.TRUE.equals(toolConfig.getNeedConfirm())) {
                             IConfirmationHook.setNeedConfirmTool(toolConfig.getToolId());
                         } else {
                             IConfirmationHook.removeNeedConfirmTool(toolConfig.getToolId());
