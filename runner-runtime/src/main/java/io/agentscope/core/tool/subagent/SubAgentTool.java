@@ -15,9 +15,11 @@
  */
 package io.agentscope.core.tool.subagent;
 
+import com.hxh.apboa.common.util.AgentMetadataStore;
 import com.hxh.apboa.common.util.TenantUtils;
 import com.hxh.apboa.engine.agui.AgentContext;
 import io.agentscope.core.agent.Agent;
+import io.agentscope.core.agent.AgentBase;
 import io.agentscope.core.agent.Event;
 import io.agentscope.core.agent.StreamOptions;
 import io.agentscope.core.message.Msg;
@@ -182,11 +184,29 @@ public class SubAgentTool implements AgentTool {
                             result = executeWithoutStreaming(agent, userMsg, finalSessionId);
                         }
 
+                        // 设置 AgentId 到 AgentMetadataStore
+                        String childAgentId;
+                        if (agent instanceof AgentBase agentBase) {
+                            childAgentId = agentBase.getAgentId();
+
+                            AgentMetadataStore.put(childAgentId, "threadId", agentContext.getThreadId());
+                            AgentMetadataStore.put(childAgentId, "runId", agentContext.getRunId());
+                            AgentMetadataStore.put(childAgentId, "tenantId", agentContext.getTenantId());
+                            AgentMetadataStore.put(childAgentId, "tenantCode", agentContext.getTenantCode());
+                            AgentMetadataStore.put(childAgentId, "cleanUpOnOwn", true);
+                        } else {
+                            childAgentId = null;
+                        }
+
                         // Save state after execution
                         return result.doOnSuccess(
                                 r -> {
                                     if (agent instanceof StateModule) {
                                         saveAgentState(finalSessionId, (StateModule) agent);
+                                    }
+                                }).doFinally(signalType -> {
+                                    if (childAgentId != null) {
+                                        AgentMetadataStore.removeOnOwn(childAgentId);
                                     }
                                 });
                     } catch (Exception e) {
