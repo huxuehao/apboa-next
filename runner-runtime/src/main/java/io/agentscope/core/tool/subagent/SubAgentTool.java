@@ -193,7 +193,6 @@ public class SubAgentTool implements AgentTool {
                             AgentMetadataStore.put(childAgentId, "runId", agentContext.getRunId());
                             AgentMetadataStore.put(childAgentId, "tenantId", agentContext.getTenantId());
                             AgentMetadataStore.put(childAgentId, "tenantCode", agentContext.getTenantCode());
-                            AgentMetadataStore.put(childAgentId, "toolProcessActive", false);
                             AgentMetadataStore.put(childAgentId, "cleanUpOnOwn", true);
                         } else {
                             childAgentId = null;
