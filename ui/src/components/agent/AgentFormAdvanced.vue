@@ -1,8 +1,8 @@
 /**
- * 智能体高级设置表单组件
- *
- * @author huxuehao
- */
+* 智能体高级设置表单组件
+*
+* @author huxuehao
+*/
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import StudioConfigSelect from '@/components/studio/StudioConfigSelect.vue'
@@ -121,7 +121,12 @@ function handleEnableMemoryCompressionToggle(checked: boolean) {
       maxToken: 131072,
       msgThreshold: 100,
       lastKeep: 50,
-      tokenRatio: 0.75
+      tokenRatio: 0.75,
+      minCompressionTokenThreshold: 5000,
+      currentRoundCompressionRatio: 0.3,
+      minConsecutiveToolMessages: 6,
+      offloadSinglePreview: 200,
+      largePayloadThreshold: 5120,
     }
   } else if (!checked) {
     formData.value.memoryCompressionConfig = null
@@ -280,6 +285,9 @@ defineExpose({
               :max="1000000"
               style="width: 100%"
             />
+            <div class="text-placeholder text-xs mt-xs">
+              模型上下文窗口 Token 上限，需匹配所用模型；实际压缩触发线为 maxToken × Token 比率
+            </div>
           </AFormItem>
         </ACol>
         <ACol :span="6">
@@ -290,6 +298,9 @@ defineExpose({
               :max="1000"
               style="width: 100%"
             />
+            <div class="text-placeholder text-xs mt-xs">
+              消息总条数达到该值时触发压缩，与 Token 触发线任一满足即可
+            </div>
           </AFormItem>
         </ACol>
         <ACol :span="6">
@@ -300,6 +311,9 @@ defineExpose({
               :max="500"
               style="width: 100%"
             />
+            <div class="text-placeholder text-xs mt-xs">
+              压缩时强制保留末尾 N 条消息，当前提问与工具调用链将原样保留
+            </div>
           </AFormItem>
         </ACol>
         <ACol :span="6">
@@ -311,6 +325,9 @@ defineExpose({
               :step="0.05"
               style="width: 100%"
             />
+            <div class="text-placeholder text-xs mt-xs">
+              触发压缩的水位比例（0-1），上下文 Token 达到 maxToken × 该值即提前压缩，为模型输出预留空间
+            </div>
           </AFormItem>
         </ACol>
         <ACol :span="6">
@@ -319,14 +336,20 @@ defineExpose({
               v-model:value="memoryCompressionForm.largePayloadThreshold"
               style="width: 100%"
             />
+            <div class="text-placeholder text-xs mt-xs">
+              单条消息文本超过该字符数时将被卸载，仅保留预览与还原标签，原文可随时恢复
+            </div>
           </AFormItem>
         </ACol>
         <ACol :span="6">
-          <AFormItem label="单预览卸载阈值">
+          <AFormItem label="卸载预览长度">
             <AInputNumber
               v-model:value="memoryCompressionForm.offloadSinglePreview"
               style="width: 100%"
             />
+            <div class="text-placeholder text-xs mt-xs">
+              消息被卸载后，占位符中保留的预览文本长度（字符数），用于提示内容已被压缩可还原
+            </div>
           </AFormItem>
         </ACol>
         <ACol :span="6">
@@ -335,6 +358,9 @@ defineExpose({
               v-model:value="memoryCompressionForm.minConsecutiveToolMessages"
               style="width: 100%"
             />
+            <div class="text-placeholder text-xs mt-xs">
+              连续工具消息数超过该值时，该段工具调用才会被压缩为摘要，短工具链完整保留
+            </div>
           </AFormItem>
         </ACol>
         <ACol :span="6">
@@ -346,6 +372,9 @@ defineExpose({
               :step="0.1"
               style="width: 100%"
             />
+            <div class="text-placeholder text-xs mt-xs">
+              当前轮消息压缩后的目标长度比例，0.3 表示摘要约为原文 30%，越小越省 Token 但细节越少
+            </div>
           </AFormItem>
         </ACol>
         <ACol :span="6">
@@ -354,6 +383,9 @@ defineExpose({
               v-model:value="memoryCompressionForm.minCompressionTokenThreshold"
               style="width: 100%"
             />
+            <div class="text-placeholder text-xs mt-xs">
+              待压缩内容 Token 数低于该值时跳过压缩，避免小体量内容产生无谓的 LLM 摘要开销
+            </div>
           </AFormItem>
         </ACol>
       </ARow>
@@ -364,7 +396,8 @@ defineExpose({
 <style scoped lang="scss">
 .config-section {
   padding: var(--spacing-md);
-  background-color: var(--color-bg-light);
+  background-color: #fcfcfc;
+  border: 1px solid #eaeaea;
   border-radius: var(--border-radius-md);
   margin-bottom: var(--spacing-md);
 }
