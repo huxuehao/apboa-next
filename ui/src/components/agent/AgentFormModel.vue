@@ -537,7 +537,8 @@ defineExpose({
 
 .params-override-section {
   padding: var(--spacing-md);
-  background-color: var(--color-bg-light);
+  background-color: #fcfcfc;
+  border: 1px solid #eaeaea;
   border-radius: var(--border-radius-md);
   margin-bottom: var(--spacing-md);
 
