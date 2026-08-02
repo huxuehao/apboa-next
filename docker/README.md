@@ -178,6 +178,8 @@ bash start-console.sh upgrade    # 控制台节点执行
 bash start-execute.sh upgrade    # 执行节点执行（不操作数据库）
 ```
 
+> 注意：`upgrade` 升级机制（`db_upgrade` 台账表）为后续版本新增能力。**非首次拉取本项目并部署的存量环境**，升级前必须先确认数据库中已存在 `db_upgrade` 表，且已执行过表内全部基线 `INSERT INTO` 语句（建表语句与基线 INSERT 见 `../sql/once_db_init/db_init.sql`）；否则数据库迁移将因台账缺失而失败。首次部署执行 `db_init.sql` 初始化时已自动建好台账并写入基线，无需处理。存量环境也可直接执行 `bash upgrade-db.sh baseline` 自动接轨，详见下文「存量环境首次接入」。
+
 升级流程为：构建新镜像（旧容器继续服务）-> 执行数据库增量迁移 -> 迁移成功后切换到新容器。迁移失败会立即中止且不切换容器，旧版本继续运行。
 
 ### 数据库迁移工具（upgrade-db.sh）
@@ -210,7 +212,7 @@ MySQL 的 DDL 不支持事务回滚，迁移采用 fail-fast 策略：任一脚�
 ### 增量脚本开发约定
 
 1. 命名格式 `YYYYMMDD_描述.sql`；同一天多个脚本且有先后依赖时加序号，如 `20260801_01_xxx.sql`（执行顺序即文件名字典序）；
-2. 新增增量脚本时，同步将变更合入 `sql/once_db_init/db_init.sql`，并在其末尾的 `db_upgrade` 基线 INSERT 区追加一行记录；
+2. 新增增量脚本时，同步将变更合入 `../sql/once_db_init/db_init.sql`，并在其末尾的 `db_upgrade` 基线 INSERT 区追加一行记录；
 3. 已发布的增量脚本禁止修改（迁移时会做 MD5 校验并告警）。
 
 ## 环境变量参考
