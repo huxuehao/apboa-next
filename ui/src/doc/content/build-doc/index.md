@@ -46,14 +46,14 @@
 CREATE DATABASE IF NOT EXISTS `apboa_next` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
-执行项目 `sql/once_db_init/` 下的初始化脚本：
+执行项目 `sql/` 下的初始化脚本（仅首次部署需要）：
 
 ```bash
-mysql -u root -p apboa_next < sql/once_db_init/db_init.sql
+mysql -u root -p apboa_next < sql/db_init.sql
 ```
 
 :::warning 提醒
-db_init.sql 已包含建库语句和全量表结构及初始数据，一条命令即可完成初始化。
+db_init.sql 包含全量表结构及初始数据（建库需单独执行；Docker 部署由 `MYSQL_DATABASE` 环境变量自动建库）。后续表结构变更由 Flyway 自动完成：`runner-console` 启动时按序执行 `db/migration` 目录下的增量脚本（`V2__xxx.sql` 起），无需手工执行 SQL。
 :::
 
 
@@ -595,7 +595,7 @@ graph TD
 ### 后端启动报数据库连接失败？
 
 1. 确认 MySQL 服务已启动
-2. 确认 `apboa_next` 数据库已通过 `db_init.sql` 初始化
+2. 确认 `apboa_next` 数据库已通过 `sql/db_init.sql` 初始化，且 `runner-console` 启动时 Flyway 增量迁移执行成功
 3. 确认配置文件中的数据库连接信息正确
 4. 确认 MySQL 用户有 `apboa_next` 库的读写权限
 

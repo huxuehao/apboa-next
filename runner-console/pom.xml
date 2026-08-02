@@ -51,6 +51,15 @@
             <artifactId>heartbeat</artifactId>
             <optional>true</optional>
         </dependency>
+        <!-- Flyway 数据库迁移：首次初始化由 sql/db_init.sql 完成，后续表结构变更统一走 classpath:db/migration 下的 V2__xxx.sql 增量脚本 -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-mysql</artifactId>
+        </dependency>
     </dependencies>
 
     <build>

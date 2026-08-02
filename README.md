@@ -74,9 +74,11 @@ bash start-simple.sh
 # 创建数据库
 mysql -u root -p -e "CREATE DATABASE apboa_next DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;"
 
-# 导入表结构与初始数据
-mysql -u root -p apboa_next < sql/once_db_init/db_init.sql
+# 导入表结构与初始数据（仅首次部署需要）
+mysql -u root -p apboa_next < sql/db_init.sql
 ```
+
+> 首次初始化后，后续表结构变更全部由 Flyway 自动管理：`runner-console` 启动时会按序执行 `db/migration` 目录下的增量脚本（`V2__xxx.sql` 起，见 [runner-console/src/main/resources/db/migration](runner-console/src/main/resources/db/migration)），无需手工比对或执行 SQL。
 
 ### 2. 配置后端
 
