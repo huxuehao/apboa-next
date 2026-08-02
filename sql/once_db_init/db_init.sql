@@ -1201,4 +1201,24 @@ KEY `idx_dashboard_history_owner` (`dashboard_id`, `created_by`, `created_at`),
 KEY `idx_dashboard_history_tenant` (`tenant_id`)
 ) COMMENT='工作台个人版本历史';
 
+DROP TABLE IF EXISTS `db_upgrade`;
+CREATE TABLE `db_upgrade` (
+  `script_name` varchar(200) NOT NULL COMMENT '脚本文件名',
+  `checksum` char(32) DEFAULT NULL COMMENT '文件MD5',
+  `success` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否执行成功',
+  `executed_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '执行时间',
+  `execution_ms` int DEFAULT NULL COMMENT '执行耗时毫秒',
+  `note` varchar(200) DEFAULT NULL COMMENT '备注',
+  PRIMARY KEY (`script_name`)
+) COMMENT='增量脚本执行台账';
+
+-- 基线记录：以下增量脚本已合入本文件，新装环境无需再执行
+-- 维护规则：每新增一个 sql/incremental 脚本并合入本文件后，在此追加一行 INSERT
+INSERT INTO `db_upgrade` (`script_name`, `checksum`, `success`, `note`) VALUES ('20260629_workflow_init.sql', NULL, 1, 'baseline');
+INSERT INTO `db_upgrade` (`script_name`, `checksum`, `success`, `note`) VALUES ('20260722_automation.sql', NULL, 1, 'baseline');
+INSERT INTO `db_upgrade` (`script_name`, `checksum`, `success`, `note`) VALUES ('20260722_channel.sql', NULL, 1, 'baseline');
+INSERT INTO `db_upgrade` (`script_name`, `checksum`, `success`, `note`) VALUES ('20260724_workflow_run_change.sql', NULL, 1, 'baseline');
+INSERT INTO `db_upgrade` (`script_name`, `checksum`, `success`, `note`) VALUES ('20260726_gateway_init.sql', NULL, 1, 'baseline');
+INSERT INTO `db_upgrade` (`script_name`, `checksum`, `success`, `note`) VALUES ('20260729_dashboard.sql', NULL, 1, 'baseline');
+
 SET FOREIGN_KEY_CHECKS = 1;

@@ -2,7 +2,7 @@
 set -e
 # ============================================================
 # Apboa 执行节点管理脚本
-# 支持操作：build | rebuild | start | stop | restart | down | status
+# 支持操作：build | rebuild | upgrade | start | stop | restart | down | status
 # 注意：脚本必须保持 LF 换行
 # ============================================================
 
@@ -59,6 +59,20 @@ do_rebuild() {
   echo "${SERVICE_NAME} 重建完成"
 }
 
+# 升级流程：先构建新镜像（旧容器继续服务）再切换容器；
+# 数据库增量迁移由控制台节点负责，本节点不操作数据库
+do_upgrade() {
+  echo ">> 升级 ${SERVICE_NAME}..."
+  init_env
+  echo ">> 构建新镜像..."
+  docker compose -f "$COMPOSE_FILE" build
+  echo ">> 切换到新容器..."
+  docker compose -f "$COMPOSE_FILE" up -d
+  echo ""
+  echo "${SERVICE_NAME} 升级完成"
+  docker compose -f "$COMPOSE_FILE" ps
+}
+
 do_start() {
   echo ">> 启动 ${SERVICE_NAME}..."
   init_env
@@ -97,6 +111,7 @@ show_help() {
   echo "操作："
   echo "  build    构建镜像并启动所有服务"
   echo "  rebuild  停止并删除容器，然后重新构建并启动"
+  echo "  upgrade  版本升级：构建新镜像 + 切换容器（数据库迁移由控制台节点负责）"
   echo "  start    启动已创建的服务"
   echo "  stop     停止正在运行的服务"
   echo "  restart  重启服务"
@@ -109,7 +124,8 @@ show_help() {
   echo "  APBOA_NODE_ID=node-01 $0 build"
   echo ""
   echo "示例："
-  echo "  $0 build     # 首次部署或更新代码后使用"
+  echo "  $0 build     # 首次部署时使用"
+  echo "  $0 upgrade   # 更新代码后升级使用"
   echo "  $0 rebuild   # 需要完全重建时使用"
   echo "  $0 status    # 查看当前运行状态"
 }
@@ -118,6 +134,7 @@ show_help() {
 case "${1:-}" in
   build)   do_build   ;;
   rebuild) do_rebuild ;;
+  upgrade) do_upgrade ;;
   start)   do_start   ;;
   stop)    do_stop    ;;
   restart) do_restart ;;
