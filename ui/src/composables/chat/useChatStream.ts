@@ -55,7 +55,7 @@ export function useChatStream(
     Array<{ id: string; name: string; args: string; result?: string; startTime: number; elapsed?: number, needConfirm?: boolean }>
   >([])
 
-  // HITL §6.5：逐工具确认决策（toolUseId → 状态），所有项决策完即调 /agui/resume
+  // HITL：逐工具确认决策（toolUseId → 状态），所有项决策完即调 /agui/resume
   const pendingConfirms = ref<Record<string, 'pending' | 'approved' | 'rejected'>>({})
 
   /**
@@ -227,7 +227,7 @@ export function useChatStream(
       },
       onRunFinished: (_e) => {
         agentHasResult.value = true
-        // §6.5：不再全标记 needConfirm（旧 Bug1/MCP 假象根源）；
+        // 不再全标记 needConfirm（旧 Bug1/MCP 假象根源）；
         // 确认改由 onCustom 的 TOOL_CONFIRM_REQUIRED 事件精确驱动
       },
       onRaw: (event) => {
@@ -257,7 +257,7 @@ export function useChatStream(
         }
      },
       onCustom: (event) => {
-        // HITL §6.2/§6.5：收到 TOOL_CONFIRM_REQUIRED 时，精确标记需确认的工具（不再全标记）
+        // HITL：收到 TOOL_CONFIRM_REQUIRED 时，精确标记需确认的工具（不再全标记）
         if (event.name === 'TOOL_CONFIRM_REQUIRED') {
           const pending = (((event.value as any)?.pending) ?? []) as Array<{ toolUseId: string; name: string; input?: Record<string, unknown> }>
           restorePending(pending)
@@ -267,7 +267,7 @@ export function useChatStream(
   })
 
   /**
-   * HITL §6.5：记录单个工具的确认决策（替代旧的「前端代执行/塞文本 + run 重开一轮」）。
+   * HITL：记录单个工具的确认决策（替代旧的「前端代执行/塞文本 + run 重开一轮」）。
    * 所有待确认工具都决策后，调用 /agui/resume 由后端从暂停点续跑。
    * @param toolUseId 工具调用 id（= TOOL_CONFIRM_REQUIRED 的 toolUseId）
    * @param approved true=允许，false=拒绝

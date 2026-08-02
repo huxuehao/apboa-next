@@ -35,6 +35,7 @@ import io.agentscope.core.util.JsonUtils;
 
 import java.util.*;
 
+import lombok.Getter;
 import reactor.core.publisher.Flux;
 
 /**
@@ -59,14 +60,9 @@ import reactor.core.publisher.Flux;
  * </ul>
  */
 public class AguiAgentAdapter {
-    private final Map<String, Map<String, Object>> TOOL_CACHE_MAP = new HashMap<>();
-
     /** 本轮是否因 HITL 确认而暂停（REASONING_STOP_REQUESTED）。供 processor 决定是否无条件保存暂停态。 */
+    @Getter
     private volatile boolean suspended = false;
-
-    public boolean isSuspended() {
-        return suspended;
-    }
 
     private final Agent agent;
     private final AguiAdapterConfig config;
@@ -331,9 +327,8 @@ public class AguiAgentAdapter {
 //            }
 
         } else if (type == EventType.AGENT_RESULT) {
-            // HITL §6.2：推理后暂停（REASONING_STOP_REQUESTED）时推送 TOOL_CONFIRM_REQUIRED，
-            // pending 精确为 need_confirm 工具——过滤掉同轮被 stopAgent 连累的普通/MCP 工具
-            // （修 §2.2「MCP 确认假象」）。前端据此逐工具渲染「允许/禁止」，决策齐了调 /agui/resume。
+            // pending 精确为 need_confirm 工具——过滤掉同轮被 stopAgent 连累的普通/MCP 工具。
+            // 前端据此逐工具渲染「允许/禁止」，决策齐了调 /agui/resume。
             if (msg != null
                     && msg.getGenerateReason() == GenerateReason.REASONING_STOP_REQUESTED) {
                 List<Map<String, Object>> pending = new ArrayList<>();

@@ -158,7 +158,7 @@ public class AguiRequestProcessor {
         // 执行完成后保存session
         Flux<AguiEvent> events = adapter.run(effectiveInput)
                 .doFinally(signalType -> {
-                    // HITL（§6.1）：发生确认暂停时无条件保存暂停态（即便未开记忆），供 resume 跨实例恢复；
+                    // HITL：发生确认暂停时无条件保存暂停态（即便未开记忆），供 resume 跨实例恢复；
                     // 否则维持原长期记忆语义（仅 memoryActive 时保存）。
                     boolean shouldSave = agent instanceof ReActAgent && (memoryActive || adapter.isSuspended());
                     if (shouldSave) {
@@ -178,7 +178,7 @@ public class AguiRequestProcessor {
     }
 
     /**
-     * HITL resume（docs/hitl-confirmation-refactor.md §6.3）：根据用户确认决策恢复暂停的 agent。
+     * HITL resume：根据用户确认决策恢复暂停的 agent。
      *
      * <p>全部允许 → agent 继续执行 pending 工具；含拒绝 → 喂入「用户已拒绝执行」结果后继续。
      * <p>跨实例安全：租户/agentId 从 chat_session 查（threadId 全局唯一），暂停态从分布式 Session 恢复。
@@ -235,7 +235,7 @@ public class AguiRequestProcessor {
      * 改用结构判据——memory 最后一条为 {@code ASSISTANT} 且含 {@link ToolUseBlock}
      * （确认暂停发生在工具执行前，其后不会再有 TOOL 结果消息）。再用
      * {@link IConfirmationHook#isNeedConfirm} 过滤，与 {@code AguiAgentAdapter} 推送
-     * {@code TOOL_CONFIRM_REQUIRED} 的口径一致（排除同轮被 stopAgent 连累的普通/MCP 工具，修 §2.2「MCP 确认假象」）。
+     * {@code TOOL_CONFIRM_REQUIRED} 的口径一致（排除同轮被 stopAgent 连累的普通/MCP 工具，修「MCP 确认假象」）。
      *
      * <p>调用前需已初始化最小 {@link AgentContext}（resolveAgent 重建时经 setTenantInfo 回填），
      * 与 {@link #resume} 的租户/上下文处理一致。
@@ -269,7 +269,7 @@ public class AguiRequestProcessor {
             if (messages == null || messages.isEmpty()) {
                 return List.of();
             }
-            Msg last = messages.get(messages.size() - 1);
+            Msg last = messages.getLast();
             if (last.getRole() != MsgRole.ASSISTANT) {
                 return List.of();
             }
@@ -341,7 +341,7 @@ public class AguiRequestProcessor {
             c.tenantCode = rs.getString("tenantCode");
             return c;
         });
-        return list.isEmpty() ? null : list.get(0);
+        return list.isEmpty() ? null : list.getFirst();
     }
 
     /** resume 逐工具决策。 */

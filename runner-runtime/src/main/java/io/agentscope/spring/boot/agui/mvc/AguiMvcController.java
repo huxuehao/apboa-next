@@ -132,7 +132,7 @@ public class AguiMvcController {
     }
 
     /**
-     * HITL resume（docs/hitl-confirmation-refactor.md §6.3 / §11①②）：根据用户确认决策恢复暂停的 agent。
+     * HITL resume：根据用户确认决策恢复暂停的 agent。
      *
      * <p>与 {@link #handleInternal} 共用 {@link #subscribeAndTrack} 的 SSE 管道，差异在于：
      * <ul>

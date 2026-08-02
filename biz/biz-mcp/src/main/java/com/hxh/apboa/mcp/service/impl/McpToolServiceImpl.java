@@ -112,7 +112,7 @@ public class McpToolServiceImpl extends ServiceImpl<McpToolMapper, McpTool> impl
             entity.setEnabled(existingTool == null || existingTool.getEnabled() == null
                     ? Boolean.TRUE
                     : existingTool.getEnabled());
-            // HITL §6.6：schema 刷新时保留用户设置的 need_confirm（默认 false，不覆盖已有设置）
+            // HITL：schema 刷新时保留用户设置的 need_confirm（默认 false，不覆盖已有设置）
             entity.setNeedConfirm(existingTool == null || existingTool.getNeedConfirm() == null
                     ? Boolean.FALSE
                     : existingTool.getNeedConfirm());

@@ -17,12 +17,12 @@ const emit = defineEmits<{
 
 const foldArgs = ref<boolean>(true)
 
-/** 允许：仅记录决策（§6.5），工具实际由后端 resume 续跑执行（天然带租户/MCP 上下文） */
+/** 允许：仅记录决策，工具实际由后端 resume 续跑执行（天然带租户/MCP 上下文） */
 const handleConfirm = (id: string, name: string) => {
   emit('toolContent', { toolUseId: id, name, approved: true })
 }
 
-/** 禁止：仅记录决策（§6.5），后端 resume 时喂入「拒绝授权」错误结果，不再前端塞文本 */
+/** 禁止：仅记录决策，后端 resume 时喂入「拒绝授权」错误结果，不再前端塞文本 */
 const handleCancel = (id: string, name: string) => {
   emit('toolContent', { toolUseId: id, name, approved: false })
 }

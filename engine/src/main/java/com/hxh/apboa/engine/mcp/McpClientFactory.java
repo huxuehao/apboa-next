@@ -127,7 +127,7 @@ public class McpClientFactory {
                 if (toolSchema == null) {
                     return;
                 }
-                // HITL §6.6：按 MCP 工具自身 need_confirm 登记确认清单
+                // HITL：按 MCP 工具自身 need_confirm 登记确认清单
                 // （key 用原生名 toolSchema.name() 匹配 ToolUseBlock.name；确认后由 agent 自执行，天然带租户/MCP 上下文）
                 if (Boolean.TRUE.equals(tool.getNeedConfirm())) {
                     IConfirmationHook.setNeedConfirmTool(toolSchema.name());

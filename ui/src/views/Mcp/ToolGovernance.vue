@@ -7,14 +7,13 @@
 /* eslint-disable vue/multi-word-component-names */
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeftOutlined, BugOutlined, SearchOutlined } from '@ant-design/icons-vue'
+import { ArrowLeftOutlined, BugOutlined, CheckCircleOutlined, ExclamationCircleOutlined, SearchOutlined } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
 import type { McpServerVO, McpToolVO } from '@/types'
 import { McpActivationStatus, McpFailureSource } from '@/types'
 import * as mcpApi from '@/api/mcp'
 import ToolDebugDrawer from '@/components/mcp/ToolDebugDrawer.vue'
 import mcpToolAvatar from '@/assets/avatar/mcp-tool.png'
-import SimpleSwitch from '@/components/common/SimpleSwitch.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -107,6 +106,25 @@ async function handleToggleEnabled(tool: McpToolVO, checked: boolean) {
   }
 }
 
+/** 切换工具「需要人工确认」：调用前由 IConfirmationHook 暂停等用户允许/拒绝 */
+async function handleToggleNeedConfirm(tool: McpToolVO, checked: boolean) {
+  if (!server.value) return
+  try {
+    await mcpApi.updateToolsNeedConfirm(
+      server.value.id as string,
+      [tool.id as string],
+      checked
+    )
+    const target = tools.value.find(t => t.id === tool.id)
+    if (target) {
+      target.needConfirm = checked
+    }
+    message.success('工具确认状态已更新')
+  } catch {
+    // 失败时不更新本地状态
+  }
+}
+
 /** 进入工具调试 */
 function handleDebugTool(tool: McpToolVO) {
   debugTool.value = tool
@@ -187,17 +205,31 @@ onMounted(() => {
                 {{ tool.description || '暂无描述' }}
               </div>
               <div class="card-footer">
-                <div class="card-tags">
-                  <ATag v-if="tool.missing" color="warning" :bordered="false">已消失</ATag>
-                  <ATag v-else-if="tool.enabled" color="default" :bordered="false">全局可用</ATag>
-                  <ATag v-else color="default" :bordered="false">全局禁用</ATag>
-                </div>
-                <SimpleSwitch
-                  :checked="tool.enabled"
-                  :loading="togglingMap.has(tool.id)"
-                  :disabled="loading || readonly || togglingMap.has(tool.id)"
-                  @change="(checked: boolean) => handleToggleEnabled(tool, checked)"
-                />
+                <ATooltip :title="tool.enabled ? '全局可用' : '全局禁用'">
+                  <AButton
+                    type="text"
+                    size="small"
+                    :style="{ color: tool.enabled ? '#1677ff' : '#bfbfbf' }"
+                    :disabled="loading || readonly || togglingMap.has(tool.id)"
+                    :loading="togglingMap.has(tool.id)"
+                    @click="handleToggleEnabled(tool, !tool.enabled)"
+                  >
+                    <CheckCircleOutlined />
+                    <span>可用</span>
+                  </AButton>
+                </ATooltip>
+                <ATooltip :title="tool.needConfirm ? '需要确认' : '无需确认'">
+                  <AButton
+                    type="text"
+                    size="small"
+                    :style="{ color: tool.needConfirm ? '#ff4d4f' : '#bfbfbf' }"
+                    :disabled="loading || readonly || !tool.enabled"
+                    @click="handleToggleNeedConfirm(tool, !tool.needConfirm)"
+                  >
+                    <ExclamationCircleOutlined />
+                    <span>确认</span>
+                  </AButton>
+                </ATooltip>
               </div>
             </div>
           </div>
@@ -363,16 +395,9 @@ onMounted(() => {
     .card-footer {
       display: flex;
       align-items: center;
-      justify-content: space-between;
+      justify-content: flex-end;
+      gap: 4px;
       padding-top: var(--spacing-xs);
-
-      .card-tags {
-        flex: 1;
-        min-width: 0;
-        display: flex;
-        flex-wrap: wrap;
-        gap: 4px;
-      }
     }
   }
 }

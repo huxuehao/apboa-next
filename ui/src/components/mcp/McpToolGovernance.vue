@@ -59,7 +59,7 @@ function handleToggleEnabled(tool: McpToolVO, checked: boolean) {
   emit('toolEnabledChange', tool, checked)
 }
 
-/** 切换工具「需要人工确认」（HITL §6.6）：调用前由 IConfirmationHook 暂停等用户允许/拒绝 */
+/** 切换工具「需要人工确认」：调用前由 IConfirmationHook 暂停等用户允许/拒绝 */
 function handleToggleNeedConfirm(tool: McpToolVO, checked: boolean) {
   emit('toolNeedConfirmChange', tool, checked)
 }

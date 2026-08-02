@@ -5,7 +5,7 @@ import java.util.List;
 import lombok.Data;
 
 /**
- * MCP 工具批量设置「需要人工确认」请求（HITL §6.6）
+ * MCP 工具批量设置「需要人工确认」请求
  *
  * @author huxuehao
  */

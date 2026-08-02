@@ -120,7 +120,7 @@ public class McpServerController {
     }
 
     /**
-     * 批量切换工具是否需要人工确认（HITL §6.6）
+     * 批量切换工具是否需要人工确认
      */
     @PutMapping("/{id}/tools/global-need-confirm")
     @RoleNeed({TenantRole.TENANT_ADMIN, TenantRole.TENANT_EDITOR})

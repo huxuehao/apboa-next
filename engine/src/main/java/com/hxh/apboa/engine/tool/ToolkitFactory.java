@@ -149,8 +149,7 @@ public class ToolkitFactory {
                             toolkit.registerTool(new DynamicAgentTool(toolConfig));
                         }
 
-                        // §6.4：确认是否生效只取决于工具自身 need_confirm，与 memoryActive 解耦
-                        // （修 §2.5 Bug3：不开记忆时 need_confirm 工具被移出清单导致裸跑的安全漏洞）
+                        // 确认是否生效只取决于工具自身 need_confirm，与 memoryActive 解耦
                         if (Boolean.TRUE.equals(toolConfig.getNeedConfirm())) {
                             IConfirmationHook.setNeedConfirmTool(toolConfig.getToolId());
                         } else {

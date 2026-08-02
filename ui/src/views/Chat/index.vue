@@ -350,7 +350,7 @@ const submitRename = async () => {
   }
 }
 
-// HITL §6.5：value = { toolUseId, name, approved }，记录该工具决策（全部决策完内部自动调 resume 续跑）
+// HITL：value = { toolUseId, name, approved }，记录该工具决策（全部决策完内部自动调 resume 续跑）
 const handelToolContent = (value: any) => {
   decideConfirm(value.toolUseId, value.approved)
 }

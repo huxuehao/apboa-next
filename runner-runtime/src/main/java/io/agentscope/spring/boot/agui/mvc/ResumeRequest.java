@@ -19,7 +19,7 @@ import io.agentscope.core.agui.processor.AguiRequestProcessor.ResumeDecision;
 import java.util.List;
 
 /**
- * HITL resume 请求体（docs/hitl-confirmation-refactor.md §6.3）。
+ * HITL resume 请求体。
  *
  * @param decisions 逐工具确认决策（toolUseId/name/approved）；null 或空表示全部允许
  * @param memoryActive 是否开启长期记忆（决定 resume 完成后保留还是删除 session）

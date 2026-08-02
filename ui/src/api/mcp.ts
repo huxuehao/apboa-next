@@ -73,7 +73,7 @@ export function updateToolsGlobalEnabled(id: string, toolIds: string[], enabled:
 }
 
 /**
- * 批量设置工具是否需要人工确认（HITL §6.6）
+ * 批量设置工具是否需要人工确认
  * PUT /mcp/server/{id}/tools/global-need-confirm
  */
 export function updateToolsNeedConfirm(id: string, toolIds: string[], needConfirm: boolean) {

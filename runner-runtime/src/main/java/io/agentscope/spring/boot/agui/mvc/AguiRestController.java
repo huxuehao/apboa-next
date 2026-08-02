@@ -142,7 +142,7 @@ public class AguiRestController {
     }
 
     /**
-     * HITL resume 端点（docs/hitl-confirmation-refactor.md §6.3）：提交逐工具确认决策，
+     * HITL resume 端点：提交逐工具确认决策，
      * 后端用 AgentScope 官方「暂停-恢复」从暂停点续跑（全允许→agent 继续执行 pending；
      * 含拒绝→喂入「用户已拒绝执行」后继续），并续接暂停前的 SSE 事件流。
      *
