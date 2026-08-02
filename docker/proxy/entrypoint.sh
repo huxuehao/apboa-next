@@ -10,7 +10,8 @@ set -e
 # ============================================================
 
 # 修复 volume 挂载目录权限（失败不阻塞启动）
-chown -R shellproxy:shellproxy /app/logs /app/.apboa 2>/dev/null || true
+# /opt/tools 为 Python/Node 依赖安装卷，挂载后属主被宿主机覆盖，需一并修复
+chown -R shellproxy:shellproxy /app/logs /app/.apboa /opt/tools 2>/dev/null || true
 
 # JVM 堆占容器内存上限的百分比，默认 50%
 # 剩余内存留给 shell 子进程

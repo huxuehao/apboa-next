@@ -99,6 +99,11 @@ services:
       SHELL_MAX_TIMEOUT: ${SHELLPROXY_MAX_TIMEOUT:-3600}
       SHELL_MAX_OUTPUT_SIZE: ${SHELLPROXY_MAX_OUTPUT_SIZE:-52428800}
       SHELLPROXY_JAVA_HEAP_PERCENTAGE: ${SHELLPROXY_JAVA_HEAP_PERCENTAGE:-50.0}
+      # Python/Node 依赖安装落盘目录（read_only 根文件系统下唯一持久化可写点）
+      PIP_TARGET: /opt/tools/pylib
+      PYTHONPATH: /opt/tools/pylib
+      NPM_CONFIG_PREFIX: /opt/tools/npm-global
+      PATH: /opt/tools/npm-global/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       # 心跳标识：由 start-execute.sh 自动注入，同一节点的三个服务必须相同
       APBOA_NODE_ID: ${APBOA_NODE_ID}
       APBOA_HOST_NAME: ${APBOA_HOST_NAME}
@@ -107,6 +112,7 @@ services:
     volumes:
       - ${LOG_PATH:-./logs}/proxy:/app/logs
       - ${DATA_PATH:-./data}/.apboa:/app/.apboa
+      - ${DATA_PATH:-./data}/proxy-tools:/opt/tools
     networks:
       - apboa_execute
 

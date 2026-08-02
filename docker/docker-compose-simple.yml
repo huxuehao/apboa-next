@@ -19,7 +19,7 @@ services:
       - "${MYSQL_PORT:-3306}:3306"
     volumes:
       - ${DATA_PATH:-./data}/mysql_data:/var/lib/mysql
-      - ../sql/once_db_init/db_init.sql:/docker-entrypoint-initdb.d/db_init.sql:ro
+      - ../sql/db_init.sql:/docker-entrypoint-initdb.d/db_init.sql:ro
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
@@ -222,6 +222,11 @@ services:
       SHELL_MAX_TIMEOUT: ${SHELLPROXY_MAX_TIMEOUT:-3600}
       SHELL_MAX_OUTPUT_SIZE: ${SHELLPROXY_MAX_OUTPUT_SIZE:-52428800}
       SHELLPROXY_JAVA_HEAP_PERCENTAGE: ${SHELLPROXY_JAVA_HEAP_PERCENTAGE:-50.0}
+      # Python/Node 依赖安装落盘目录（read_only 根文件系统下唯一持久化可写点）
+      PIP_TARGET: /opt/tools/pylib
+      PYTHONPATH: /opt/tools/pylib
+      NPM_CONFIG_PREFIX: /opt/tools/npm-global
+      PATH: /opt/tools/npm-global/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       APBOA_NODE_ID: ${APBOA_NODE_ID}
       APBOA_HOST_NAME: ${APBOA_HOST_NAME}
       APBOA_HOST_IP: ${APBOA_HOST_IP}
@@ -229,6 +234,7 @@ services:
     volumes:
       - ${LOG_PATH:-./logs}/proxy:/app/logs
       - ${DATA_PATH:-./data}/.apboa:/app/.apboa
+      - ${DATA_PATH:-./data}/proxy-tools:/opt/tools
     networks:
       - apboa_simple
 
