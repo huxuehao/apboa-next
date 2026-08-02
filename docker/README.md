@@ -154,67 +154,6 @@ docker compose -f docker-compose-execute.yml up -d --build
 | 执行节点 | `WEBSOCKET_HOST` | 控制台服务器 IP | runtime 连接 WebSocket 服务 |
 | 执行节点 | `APBOA_NODE_ID` / `APBOA_HOST_IP` | 本机 IP（脚本自动注入） | 节点标识 |
 
-## 版本升级
-
-升级命令会重新构建镜像，并自动执行数据库增量脚本（`sql/incremental/`），无需人工比对哪些脚本已执行过。
-
-### 升级原理
-
-数据库中的 `db_upgrade` 台账表记录了每个增量脚本的执行状态。`docker/upgrade-db.sh` 在迁移时按文件名字典序遍历 `sql/incremental/` 目录，仅执行台账中没有成功记录的脚本，执行结果（含文件 MD5、耗时）实时写回台账。新装环境的台账由 `db_init.sql` 初始化时一并建好，天然齐全。
-
-### 升级步骤
-
-```bash
-# 1. 拉取新代码
-git pull
-
-cd docker
-
-# 2. 单机模式：一条命令完成 构建镜像 -> 数据库迁移 -> 切换容器
-bash start-simple.sh upgrade
-
-# 生产多节点：先升级控制台节点（负责数据库迁移），再升级执行节点
-bash start-console.sh upgrade    # 控制台节点执行
-bash start-execute.sh upgrade    # 执行节点执行（不操作数据库）
-```
-
-> 注意：`upgrade` 升级机制（`db_upgrade` 台账表）为后续版本新增能力。**非首次拉取本项目并部署的存量环境**，升级前必须先确认数据库中已存在 `db_upgrade` 表，且已执行过表内全部基线 `INSERT INTO` 语句（建表语句与基线 INSERT 见 `../sql/once_db_init/db_init.sql`）；否则数据库迁移将因台账缺失而失败。首次部署执行 `db_init.sql` 初始化时已自动建好台账并写入基线，无需处理。存量环境也可直接执行 `bash upgrade-db.sh baseline` 自动接轨，详见下文「存量环境首次接入」。
-
-升级流程为：构建新镜像（旧容器继续服务）-> 执行数据库增量迁移 -> 迁移成功后切换到新容器。迁移失败会立即中止且不切换容器，旧版本继续运行。
-
-### 数据库迁移工具（upgrade-db.sh）
-
-```bash
-bash upgrade-db.sh status              # 查看脚本执行状态（已执行/待执行/失败）
-bash upgrade-db.sh migrate             # 按序执行所有未执行的增量脚本
-bash upgrade-db.sh baseline            # 存量环境首次接入（见下）
-bash upgrade-db.sh repair <脚本名>      # 清除失败记录，供修复后重跑
-```
-
-连接信息取自 `docker/.env`；本机存在 `apboa-mysql` 容器时直接复用，否则自动启动一次性 mysql 客户端容器连接远程库，宿主机无需安装 mysql。
-
-### 存量环境首次接入
-
-在本机制引入之前部署的环境没有 `db_upgrade` 台账表，首次升级前需手工接轨一次：
-
-1. 人工确认数据库结构已与当前代码版本一致（增量脚本均已手工执行过）；
-2. 执行 `bash upgrade-db.sh baseline`，将当前所有增量脚本标记为已执行（不实际执行 SQL）；
-3. 之后的升级全部交给 `upgrade` 命令自动处理。
-
-### 迁移失败处理
-
-MySQL 的 DDL 不支持事务回滚，迁移采用 fail-fast 策略：任一脚本失败立即中止并在台账中留下失败记录，后续升级会被阻断。处理流程：
-
-1. 根据错误输出人工修复数据库；
-2. 执行 `bash upgrade-db.sh repair <脚本名>` 清除失败记录；
-3. 重新执行 `upgrade` 或 `upgrade-db.sh migrate`。
-
-### 增量脚本开发约定
-
-1. 命名格式 `YYYYMMDD_描述.sql`；同一天多个脚本且有先后依赖时加序号，如 `20260801_01_xxx.sql`（执行顺序即文件名字典序）；
-2. 新增增量脚本时，同步将变更合入 `../sql/once_db_init/db_init.sql`，并在其末尾的 `db_upgrade` 基线 INSERT 区追加一行记录；
-3. 已发布的增量脚本禁止修改（迁移时会做 MD5 校验并告警）。
-
 ## 环境变量参考
 
 ### 通用变量
@@ -303,8 +242,7 @@ docker/
 ├── docker-compose-console.yml  # 生产-控制台节点
 ├── docker-compose-execute.yml  # 生产-执行节点
 ├── docker-compose-middleware.yml # 生产-中间件
-├── upgrade-db.sh               # 数据库增量迁移脚本（status/migrate/baseline/repair）
-├── start-simple.sh             # 单机管理脚本（build/rebuild/upgrade/start/stop/restart/down/status）
+├── start-simple.sh             # 单机管理脚本（build/rebuild/start/stop/restart/down/status）
 ├── start-console.sh            # 控制台节点管理脚本
 ├── start-execute.sh            # 执行节点管理脚本
 ├── start-middleware.sh         # 中间件管理脚本
