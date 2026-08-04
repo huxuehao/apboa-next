@@ -15,14 +15,7 @@ services:
         JRE_IMAGE: ${DOCKER_REGISTRY}eclipse-temurin:21-jre
     container_name: apboa-runtime
     restart: unless-stopped
-    cap_drop:
-      - ALL
-    cap_add:
-      - SETUID
-      - SETGID
-      - CHOWN
-    security_opt:
-      - no-new-privileges:true
+    # root 运行（业务可信服务，容器隔离承担安全边界），无 cap/security 限制
     mem_limit: ${RUNTIME_MEM_LIMIT:-8g}
     cpus: ${RUNTIME_CPU_LIMIT:-8}
     environment:
@@ -52,6 +45,11 @@ services:
       WEBSOCKET_HOST: ${WEBSOCKET_HOST:-apboa-websocket}
       WEBSOCKET_PORT: ${WEBSOCKET_PORT:-3064}
       WORKSPACE_CAPACITY_MB: ${WORKSPACE_CAPACITY_MB:-30}
+      # Python/Node 依赖安装落盘目录（容器重建后依赖持久化）
+      PIP_TARGET: /opt/tools/pylib
+      PYTHONPATH: /opt/tools/pylib
+      NPM_CONFIG_PREFIX: /opt/tools/npm-global
+      PATH: /opt/tools/npm-global/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       # 心跳标识：由 start-execute.sh 自动注入，同一节点的三个服务必须相同
       APBOA_NODE_ID: ${APBOA_NODE_ID}
       APBOA_HOST_NAME: ${APBOA_HOST_NAME}
@@ -60,6 +58,7 @@ services:
     volumes:
       - ${LOG_PATH:-./logs}/runtime:/app/logs
       - ${DATA_PATH:-./data}/.apboa:/app/.apboa
+      - ${DATA_PATH:-./data}/runtime-tools:/opt/tools
     ports:
       - "${RUNTIME_PORT:-3061}:3061"
     networks:
@@ -126,14 +125,7 @@ services:
         JRE_IMAGE: ${DOCKER_REGISTRY}eclipse-temurin:21-jre
     container_name: apboa-file
     restart: unless-stopped
-    cap_drop:
-      - ALL
-    cap_add:
-      - SETUID
-      - SETGID
-      - CHOWN
-    security_opt:
-      - no-new-privileges:true
+    # root 运行（业务可信服务，容器隔离承担安全边界），无 cap/security 限制
     mem_limit: ${FILE_MEM_LIMIT:-512m}
     cpus: ${FILE_CPU_LIMIT:-0.5}
     environment:

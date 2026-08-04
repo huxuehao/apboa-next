@@ -15,14 +15,7 @@ services:
         JRE_IMAGE: ${DOCKER_REGISTRY}eclipse-temurin:21-jre
     container_name: apboa-console
     restart: unless-stopped
-    cap_drop:
-      - ALL
-    cap_add:
-      - SETUID
-      - SETGID
-      - CHOWN
-    security_opt:
-      - no-new-privileges:true
+    # root 运行（业务可信服务，容器隔离承担安全边界），无 cap/security 限制
     mem_limit: ${CONSOLE_MEM_LIMIT:-4g}
     cpus: ${CONSOLE_CPU_LIMIT:-4}
     environment:

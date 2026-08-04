@@ -68,30 +68,37 @@ FROM ${JRE_IMAGE}
 
 WORKDIR /app
 
-# 以非root运行可缩小内核攻击面，配合cap_drop=ALL和no-new-privileges，阻断容器→宿主机逃逸路径
-RUN groupadd -r apboa -g 1001 && \
-    useradd -r -g apboa -u 1001 -m -s /sbin/nologin -d /app apboa && \
-    chown -R apboa:apboa /app
+# 以 root 运行：容器内拥有完整文件系统权限（可随意创建文件、下载依赖）
+# 安全边界由容器隔离承担；apboa-proxy 仍保持非 root 降权以隔离不可信命令执行
 
-# 安装 gosu（容器降权启动工具）
+# 安装 Python 3 + Node.js 22（供容器内下载/执行依赖）
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends gosu curl && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
+    apt-get install -y --no-install-recommends \
+        python3 \
+        python3-pip \
+        python3-venv \
+        curl \
+        ca-certificates \
+    && ln -sf /usr/bin/python3 /usr/bin/python \
+    && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y nodejs \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# 验证运行时
+RUN python --version && node --version && npm --version
 
 # 复制构建产物
 COPY --from=build /build/runner-runtime/target/runner-runtime-*.jar app.jar
 
-# 创建数据目录并将 /app 全部赋权给 apboa（logback 相对路径依赖 /app 可写）
-RUN mkdir -p /app/data /app/logs /app/.apboa && \
-    chown -R apboa:apboa /app
+# 创建数据目录（logback 相对路径依赖 /app 可写）
+RUN mkdir -p /app/data /app/logs /app/.apboa
 
 EXPOSE 3061
 
 ENV TZ=Asia/Shanghai
 # ---------- 启动脚本 ----------
-# 复制 entrypoint.sh（动态 JVM 堆计算 + 权限修复 + gosu 降权启动）
+# 复制 entrypoint.sh（动态 JVM 堆计算 + root 直接启动）
 COPY docker/runtime/entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
-# 以 root 启动 → entrypoint.sh chown 修复 volume 挂载目录权限 → gosu 切到 apboa 用户启动 Java
 ENTRYPOINT ["/app/entrypoint.sh"]
