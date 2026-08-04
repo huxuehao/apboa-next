@@ -1016,7 +1016,8 @@ function removeMetadataCondition(index: number) {
 .config-section {
   .config-content {
     padding: 12px;
-    background-color: var(--color-bg-light);
+    background-color: #fcfcfc;
+    border: 1px solid #eaeaea;
     border-radius: var(--border-radius-base);
 
     h4 {
