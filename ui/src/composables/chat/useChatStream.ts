@@ -106,7 +106,7 @@ export function useChatStream(
       onTextMessageEnd: (_e, finalText) => {
         const sid = currentSessionId.value
         if (sid && finalText) {
-          // 纯文本保存，不再与推理打包，通过队列保证写入顺序
+          // 纯文本保存，不再与推理打包
           onMessageSaved?.({
             id: streamingMessageId.value,
             sessionId: sid,
@@ -134,7 +134,7 @@ export function useChatStream(
       onReasoningMessageEnd: () => {
         const sid = currentSessionId.value
         if (sid && streamingContent.value) {
-          // 推理结束时立即保存为独立消息，通过队列保证写入顺序
+          // 推理结束时立即保存为独立消息
           onMessageSaved?.({
             id: streamingMessageId.value,
             sessionId: sid,
@@ -163,7 +163,7 @@ export function useChatStream(
 
         const sid = currentSessionId.value
         if (sid && streamingContent.value) {
-          // 推理结束时保存为独立消息，通过队列保证写入顺序
+          // 推理结束时保存为独立消息
           onMessageSaved?.({
             id: streamingMessageId.value,
             sessionId: sid,
@@ -203,26 +203,29 @@ export function useChatStream(
             t.id === e.toolCallId ? { ...t, result: e.content, elapsed: Date.now() - t.startTime } : t
           )
 
-          // // 保存工具调用消息，通过队列保证写入顺序
+          // 保存当前完成的工具调用消息（仅保存刚完成的这一条）
           const sid = currentSessionId.value
           if (sid) {
-            const contentToSave = buildToolCallsContent(toolCallsInProgress.value)
-            if (contentToSave) {
-              onMessageSaved?.({
-                id: nextIdBig(),
-                sessionId: sid,
-                role: 'tool',
-                content: contentToSave,
-                parentId: '',
-                path: '',
-                depth: 0,
-                createdAt: ''
-              } as ChatMessageVO)
+            const completedTool = toolCallsInProgress.value.find((t) => t.id === e.toolCallId)
+            if (completedTool) {
+              const contentToSave = buildToolCallsContent([completedTool])
+              if (contentToSave) {
+                onMessageSaved?.({
+                  id: nextIdBig(),
+                  sessionId: sid,
+                  role: 'tool',
+                  content: contentToSave,
+                  parentId: '',
+                  path: '',
+                  depth: 0,
+                  createdAt: ''
+                } as ChatMessageVO)
+              }
             }
           }
         } finally {
-          // 清空进行中的工具调用（可根据需要保留，此处清空）
-          toolCallsInProgress.value = []
+          // 移除已完成的工具调用，保留仍在进行中的
+          toolCallsInProgress.value = toolCallsInProgress.value.filter((t) => t.id !== e.toolCallId)
         }
       },
       onRunFinished: (_e) => {
@@ -316,20 +319,22 @@ export function useChatStream(
     resetPlan()
 
     if (sid) {
-      // 保存工具调用消息，通过队列保证写入顺序
+      // 保存所有进行中的工具调用消息（按顺序逐个保存）
       if (toolCallsInProgress.value.length > 0) {
-        const contentToSave = buildToolCallsContent(toolCallsInProgress.value)
-        if (contentToSave) {
-          onMessageSaved?.({
-            id: nextIdBig(),
-            sessionId: sid,
-            role: 'tool',
-            content: contentToSave,
-            parentId: '',
-            path: '',
-            depth: 0,
-            createdAt: ''
-          } as ChatMessageVO)
+        for (const tool of toolCallsInProgress.value) {
+          const contentToSave = buildToolCallsContent([tool])
+          if (contentToSave) {
+            onMessageSaved?.({
+              id: nextIdBig(),
+              sessionId: sid,
+              role: 'tool',
+              content: contentToSave,
+              parentId: '',
+              path: '',
+              depth: 0,
+              createdAt: ''
+            } as ChatMessageVO)
+          }
         }
       }
       // 保存AI回复消息
