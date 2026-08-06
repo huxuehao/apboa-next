@@ -17,6 +17,7 @@ import CreateCard from '@/components/skill/CreateCard.vue'
 import ImportLocalForm from '@/components/skill/ImportLocalForm.vue'
 import ImportGitForm from '@/components/skill/ImportGitForm.vue'
 import ImportUploadForm from '@/components/skill/ImportUploadForm.vue'
+import ImportSkillHub from '@/components/skill/ImportSkillHub.vue'
 import SkillToolLinkModal from '@/components/skill/SkillToolLinkModal.vue'
 import {ApboaModalApi} from "@/components/common/ApboaModalApi.ts";
 import ApboaInfiniteLoading from '@/components/common/ApboaInfiniteLoading.vue'
@@ -28,6 +29,7 @@ const { list, categories, selectedCategory, keyword, loading, hasMore } = storeT
 const importLocalVisible = ref(false)
 const importGitVisible = ref(false)
 const importUploadVisible = ref(false)
+const importSkillHubVisible = ref(false)
 
 /** 关联工具弹窗状态 */
 const toolLinkVisible = ref(false)
@@ -73,6 +75,13 @@ function handleImportGit() {
  */
 function handleImportUpload() {
   importUploadVisible.value = true
+}
+
+/**
+ * 处理导入skill hub 技能包
+ */
+function handleImportSkillHub() {
+  importSkillHubVisible.value = true
 }
 
 /**
@@ -312,6 +321,7 @@ onMounted(() => {
           @click="handleCreate"
           @importLocal="handleImportLocal"
           @importGit="handleImportGit"
+          @importSkillHub="handleImportSkillHub"
           @importUpload="handleImportUpload"
           v-permission="['TENANT_EDITOR','TENANT_ADMIN','TENANT_OWNER']"
         />
@@ -350,6 +360,10 @@ onMounted(() => {
       v-model:visible="importUploadVisible"
       :categories="categories"
       :default-category="selectedCategory"
+      @success="handleImportSuccess"
+    />
+    <ImportSkillHub
+      v-model:visible="importSkillHubVisible"
       @success="handleImportSuccess"
     />
 
