@@ -687,7 +687,7 @@ function removeMetadataCondition(index: number) {
               <AInputPassword v-model:value="ragflowConnection.apiKey" placeholder="请输入API Key" />
             </AFormItem>
             <AFormItem label="基础地址（Base URL）" :rules="[{ required: true, message: '请输入Base URL' }]">
-              <AInput v-model:value="ragflowConnection.baseUrl" placeholder="请输入Base URL" />
+              <AInput v-model:value="ragflowConnection.baseUrl" placeholder="例如: https://cloud.ragflow.io" />
             </AFormItem>
             <AFormItem label="数据集ID列表（Dataset IDs）">
               <ASelect
