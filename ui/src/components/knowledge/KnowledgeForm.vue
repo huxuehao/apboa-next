@@ -223,6 +223,7 @@ const difyRetrieval = reactive({
 
 const ragflowRetrieval = reactive({
   topK: 1024,
+  scoreThreshold: 0.5,
   similarityThreshold: 0.2,
   vectorSimilarityWeight: 0.3,
   page: 1,
@@ -828,6 +829,9 @@ function removeMetadataCondition(index: number) {
           <template v-if="formData.kbType === 'RAGFLOW'">
             <AFormItem label="返回Top K（Top K）">
               <AInputNumber v-model:value="ragflowRetrieval.topK" :min="1" :max="2048" style="width: 100%" />
+            </AFormItem>
+            <AFormItem label="分数阈值（Score Threshold）">
+              <AInputNumber v-model:value="ragflowRetrieval.scoreThreshold" :min="0" :max="1" :step="0.1" style="width: 100%" />
             </AFormItem>
             <AFormItem label="相似度阈值（Similarity Threshold）">
               <AInputNumber v-model:value="ragflowRetrieval.similarityThreshold" :min="0" :max="1" :step="0.1" style="width: 100%" />
