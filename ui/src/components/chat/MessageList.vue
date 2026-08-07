@@ -157,6 +157,10 @@ function subAgentRunFor(message: DisplayMessage): SubAgentRunVO {
         v-else-if="isSubAgentMessage(firstMessage(group))"
         :key="firstMessage(group).id"
         :run="subAgentRunFor(firstMessage(group))"
+        @inputTagPreview="$emit('inputTagPreview', $event as FlatFileItem)"
+        @interaction-submit="$emit('interactionSubmit', $event)"
+        @uip-retry="$emit('uipRetry', $event)"
+        @vep-retry="$emit('vepRetry', $event)"
       />
       <MessageItem
         v-else

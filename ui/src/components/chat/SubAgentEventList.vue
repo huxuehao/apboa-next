@@ -1,12 +1,21 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
-import { BulbOutlined, CheckCircleOutlined, LoadingOutlined, ToolOutlined } from '@ant-design/icons-vue'
-import MarkdownRenderer from '@/components/markdown/MarkdownRenderer.vue'
+import { LoadingOutlined } from '@ant-design/icons-vue'
+import MessageItem from './MessageItem.vue'
+import ToolCallItem from './ToolCallItem.vue'
 import type { SubAgentTraceEvent } from '@/types'
+import type { InteractionSubmitPayload } from '@/components/markdown/uip/types'
 
 const props = defineProps<{
   events: SubAgentTraceEvent[]
   active: boolean
+}>()
+
+defineEmits<{
+  (e: 'inputTagPreview', value: unknown): void
+  (e: 'interactionSubmit', payload: InteractionSubmitPayload): void
+  (e: 'uipRetry', uipCode: string): void
+  (e: 'vepRetry', vepCode: string): void
 }>()
 
 type TimelineItem =
@@ -104,6 +113,19 @@ function onScroll() {
   followTail.value = isNearBottom()
 }
 
+function serialized(value: unknown): string {
+  return typeof value === 'string' ? value : JSON.stringify(value ?? '', null, 2)
+}
+
+function toolHistoryContent(item: Extract<TimelineItem, { kind: 'tool' }>): string {
+  return JSON.stringify({
+    name: item.name,
+    totalTimes: 0,
+    args: item.args === undefined ? '' : serialized(item.args),
+    result: item.result === undefined ? '' : serialized(item.result),
+  })
+}
+
 watch(() => props.events, () => nextTick(scrollToTail), { deep: true, flush: 'post' })
 watch(() => props.active, (active) => { if (active && isNearBottom()) followTail.value = true })
 onBeforeUnmount(() => { if (scrollRaf !== null) cancelAnimationFrame(scrollRaf) })
@@ -111,34 +133,49 @@ onBeforeUnmount(() => { if (scrollRaf !== null) cancelAnimationFrame(scrollRaf) 
 
 <template>
   <div ref="scrollRef" class="subagent-event-list" @scroll="onScroll">
-    <div v-for="item in timeline" :key="item.key" class="subagent-event" :class="`subagent-event--${item.kind}`">
+    <div v-for="(item, index) in timeline" :key="item.key" class="subagent-event">
       <template v-if="item.kind === 'message'">
-        <BulbOutlined v-if="item.role === 'thinking'" class="subagent-event-icon" />
-        <CheckCircleOutlined v-else class="subagent-event-icon" />
-        <div>
-          <div class="subagent-event-label">{{ item.role === 'thinking' ? '思考过程' : '执行输出' }}</div>
-          <MarkdownRenderer
-            v-if="item.role === 'assistant' && item.content"
-            class="subagent-event-markdown"
-            :content="item.content"
-            :is-streaming="active"
-          />
-          <div v-else class="subagent-event-content">{{ item.content || '…' }}</div>
-        </div>
+        <MessageItem
+          :id="item.key"
+          :current-index="index"
+          :total-messages="timeline.length"
+          :role="item.role"
+          :content="item.content"
+          :agent-has-result="true"
+          :is-streaming="active"
+          @inputTagPreview="$emit('inputTagPreview', $event)"
+          @interaction-submit="$emit('interactionSubmit', $event)"
+          @uip-retry="$emit('uipRetry', $event)"
+          @vep-retry="$emit('vepRetry', $event)"
+        />
       </template>
       <template v-else-if="item.kind === 'tool'">
-        <ToolOutlined class="subagent-event-icon" />
-        <div class="subagent-event-body">
-          <div class="subagent-event-label">
-            {{ item.completed ? '已完成工具调用' : '正在调用工具' }}：{{ item.name }}
-            <LoadingOutlined v-if="!item.completed" spin class="subagent-inline-loading" />
-          </div>
-          <pre v-if="item.args !== undefined" class="subagent-event-code">{{ typeof item.args === 'string' ? item.args : JSON.stringify(item.args, null, 2) }}</pre>
-          <pre v-if="item.result !== undefined" class="subagent-event-code">{{ typeof item.result === 'string' ? item.result : JSON.stringify(item.result, null, 2) }}</pre>
-        </div>
+        <MessageItem
+          v-if="item.completed"
+          :id="item.key"
+          :current-index="index"
+          :total-messages="timeline.length"
+          role="tool"
+          :content="toolHistoryContent(item)"
+          :agent-has-result="true"
+        />
+        <ToolCallItem
+          v-else
+          :id="item.key"
+          :name="item.name"
+          :args="item.args === undefined ? '' : serialized(item.args)"
+          :loading="true"
+        />
       </template>
       <template v-else>
-        <div class="subagent-event-status" :class="{ 'is-failed': item.failed }">{{ item.content }}</div>
+        <MessageItem
+          :id="item.key"
+          :current-index="index"
+          :total-messages="timeline.length"
+          role="error"
+          :content="item.content"
+          :agent-has-result="true"
+        />
       </template>
     </div>
     <div v-if="!timeline.length" class="subagent-event-empty">
@@ -149,19 +186,7 @@ onBeforeUnmount(() => { if (scrollRaf !== null) cancelAnimationFrame(scrollRaf) 
 </template>
 
 <style scoped lang="scss">
-.subagent-event-list { max-height: 320px; overflow-y: auto; overscroll-behavior: contain; padding: 4px 2px 6px; }
-.subagent-event { display: flex; gap: 8px; padding: 9px 10px; border-radius: 8px; color: #4b5563; }
-.subagent-event + .subagent-event { margin-top: 4px; }
-.subagent-event--message { background: #f8fafc; }
-.subagent-event--tool { background: #f7faff; }
-.subagent-event-icon { flex: 0 0 auto; margin-top: 3px; color: #1677ff; }
-.subagent-event-body { min-width: 0; flex: 1; }
-.subagent-event-label { color: #667085; font-size: 12px; line-height: 20px; }
-.subagent-event-content { white-space: pre-wrap; overflow-wrap: anywhere; color: #344054; font-size: 13px; line-height: 1.65; }
-.subagent-event-markdown { color: #344054; font-size: 13px; line-height: 1.65; overflow-wrap: anywhere; }
-.subagent-event-code { max-height: 120px; margin: 6px 0 0; overflow: auto; padding: 7px 8px; border-radius: 6px; background: #eef2f7; color: #475467; font-size: 12px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
-.subagent-inline-loading { margin-left: 5px; color: #1677ff; }
-.subagent-event-status { width: 100%; padding: 6px 8px; border-left: 3px solid #98a2b3; color: #667085; font-size: 13px; }
-.subagent-event-status.is-failed { border-color: #ff4d4f; color: #cf1322; background: #fff1f0; }
+.subagent-event-list { max-height: 320px; overflow-y: auto; overscroll-behavior: contain; padding: 2px; }
+.subagent-event + .subagent-event { margin-top: 6px; }
 .subagent-event-empty { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 10px; color: #98a2b3; font-size: 13px; }
 </style>
