@@ -118,6 +118,15 @@ const bizRoutes: AppRouteRecordRaw[] = [
         },
       },
       {
+        path: RoutePaths.SKILL_HUB,
+        name: RouteNames.SKILL_HUB,
+        component: () => import('@/views/Skill/SkillHub.vue'),
+        meta: {
+          title: 'SkillHub 技能市场',
+          hidden: true,
+        },
+      },
+      {
         path: RoutePaths.MCP,
         name: RouteNames.MCP,
         component: () => import('@/views/Mcp/index.vue'),

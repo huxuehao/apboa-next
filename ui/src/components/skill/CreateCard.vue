@@ -10,7 +10,7 @@ import { PlusOutlined, ImportOutlined, DownloadOutlined, CloudDownloadOutlined }
  * Emits定义
  */
 defineEmits<{
-  click: [],
+  click: []
   importLocal: []
   importGit: []
   importUpload: []

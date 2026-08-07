@@ -387,6 +387,23 @@ export interface SkillImportResult {
 }
 
 /**
+ * SkillHub 技能市场VO
+ */
+export interface SkillsHubVO {
+  category: string
+  slug: string
+  description: string
+  createdAt: string
+  updatedAt: string
+  version: string
+  name: string
+  downloads: string
+  homepage: string
+  iconUrl: string
+  requiresApiKey: string
+}
+
+/**
  * 系统提示词模板VO
  */
 export interface SystemPromptTemplateVO {
