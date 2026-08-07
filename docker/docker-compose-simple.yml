@@ -164,7 +164,6 @@ services:
       PIP_TARGET: /opt/tools/pylib
       PYTHONPATH: /opt/tools/pylib
       NPM_CONFIG_PREFIX: /opt/tools/npm-global
-      PATH: /opt/tools/npm-global/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       TZ: Asia/Shanghai
     volumes:
       - ${LOG_PATH:-./logs}/runtime:/app/logs
@@ -218,7 +217,6 @@ services:
       PIP_TARGET: /opt/tools/pylib
       PYTHONPATH: /opt/tools/pylib
       NPM_CONFIG_PREFIX: /opt/tools/npm-global
-      PATH: /opt/tools/npm-global/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       APBOA_NODE_ID: ${APBOA_NODE_ID}
       APBOA_HOST_NAME: ${APBOA_HOST_NAME}
       APBOA_HOST_IP: ${APBOA_HOST_IP}

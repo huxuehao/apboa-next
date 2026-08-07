@@ -101,6 +101,8 @@ RUN mkdir -p /app/logs && \
 EXPOSE 3062
 
 ENV TZ=Asia/Shanghai
+# 追加 npm-global bin 到 PATH（不覆盖基础镜像的 Java 路径）
+ENV PATH="/opt/tools/npm-global/bin:${PATH}"
 # ---------- 启动脚本 ----------
 # 复制 entrypoint.sh（动态 JVM 堆计算 + 权限修复 + gosu 降权启动）
 COPY docker/proxy/entrypoint.sh /app/entrypoint.sh
