@@ -73,7 +73,7 @@ const formatTime = (dateStr?: string): string => {
 
 const props = defineProps<{
   id: string
-  role: 'user' | 'assistant' | 'system' | 'tool' | 'error' | 'thinking'
+  role: 'user' | 'assistant' | 'system' | 'tool' | 'error' | 'thinking' | 'subagent'
   content: string
   currentIndex: number
   totalMessages: number

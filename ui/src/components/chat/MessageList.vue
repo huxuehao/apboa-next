@@ -8,7 +8,8 @@ import {
 } from '@ant-design/icons-vue'
 import MessageItem from './MessageItem.vue'
 import ToolCallItem from './ToolCallItem.vue'
-import type { DisplayMessage } from '@/types'
+import SubAgentCard from './SubAgentCard.vue'
+import type { DisplayMessage, SubAgentRunVO } from '@/types'
 import type {FlatFileItem} from "@/composables/chat/useWorkspaceFiles.ts";
 import type { InteractionSubmitPayload } from '@/components/markdown/uip/types'
 
@@ -98,6 +99,23 @@ function toggleAggregate(key: string) {
     [key]: !expandedMap.value[key],
   }
 }
+
+function isSubAgentMessage(message: DisplayMessage): boolean {
+  return message.role === 'subagent'
+}
+
+function subAgentRunFor(message: DisplayMessage): SubAgentRunVO {
+  if (message.subAgentRun) return message.subAgentRun
+  let anchor: { invocationId?: string; agentTitle?: string; agentCode?: string } = {}
+  try { anchor = JSON.parse(message.content || '{}') } catch { /* malformed legacy anchor */ }
+  return {
+    invocationId: anchor.invocationId || message.id,
+    agentTitle: anchor.agentTitle,
+    agentCode: anchor.agentCode,
+    status: 'SUCCESS',
+    events: [],
+  }
+}
 </script>
 
 <template>
@@ -135,6 +153,11 @@ function toggleAggregate(key: string) {
         </div>
       </div>
       <!-- 单条消息 -->
+      <SubAgentCard
+        v-else-if="isSubAgentMessage(firstMessage(group))"
+        :key="firstMessage(group).id"
+        :run="subAgentRunFor(firstMessage(group))"
+      />
       <MessageItem
         v-else
         :key="firstMessage(group).id"

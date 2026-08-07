@@ -28,6 +28,8 @@ export * from './agui'
 // Chat 类型
 export * from './chat'
 
+export * from './subagent'
+
 export * from './chat-mention'
 
 // Plan 类型

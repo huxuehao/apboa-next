@@ -133,6 +133,7 @@ const {
   streamingMessageId,
   streamingRole,
   toolCallsInProgress,
+  subAgentRuns,
   isRunning,
   currentPlan,
   sendMessage,
@@ -194,6 +195,7 @@ const displayMessages = computed<DisplayMessage[]>(() => {
       content: m.content || '',
       createdAt: m.createdAt,
       isStreaming: false,
+      subAgentRun: m.subAgentRun ?? null,
     })
   }
 
@@ -212,6 +214,25 @@ const displayMessages = computed<DisplayMessage[]>(() => {
         role: 'assistant',
         content: '',
         isStreaming: true,
+      })
+    }
+  }
+
+  // Live sub-agent traces are virtual timeline anchors until the async log consumer persists
+  // their lightweight chat anchor. This keeps concurrent cards visible without mutating the
+  // main-agent message buffer or producing duplicate history rows after a reload.
+  const persistedInvocations = new Set(
+    list.filter((message) => message.role === 'subagent')
+      .map((message) => message.subAgentRun?.invocationId || message.id)
+  )
+  for (const run of subAgentRuns.value) {
+    if (!persistedInvocations.has(run.invocationId)) {
+      list.push({
+        id: `subagent:${run.invocationId}`,
+        role: 'subagent',
+        content: run.task || run.summary || '',
+        isStreaming: run.status === 'RUNNING',
+        subAgentRun: run,
       })
     }
   }

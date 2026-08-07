@@ -22,4 +22,7 @@ public class ChatMessageVO implements SerializableEnable {
     private String path;
     private Integer depth;
     private LocalDateTime createdAt;
+
+    /** Present only for the timeline anchor whose role is {@code subagent}. */
+    private SubAgentRunVO subAgentRun;
 }

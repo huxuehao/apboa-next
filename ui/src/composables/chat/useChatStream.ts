@@ -2,6 +2,7 @@ import { ref } from 'vue'
 import { message } from 'ant-design-vue'
 import { useAgentClient } from '@/composables/useAgentClient'
 import { usePlanTracking } from '@/composables/chat/usePlanTracking'
+import { useSubAgentRuns } from '@/composables/chat/useSubAgentRuns'
 import { buildToolCallsContent } from '@/utils/chat/format'
 import type {ChatMessageVO, RawEvent} from '@/types'
 import { useAccountStore } from '@/stores'
@@ -23,6 +24,7 @@ export function useChatStream(
   onMessageSaved?: (chatMsg: ChatMessageVO) => void) {
 
   const { userInfo } = useAccountStore()
+  const { runs: subAgentRuns, acceptCustomEvent, reset: resetSubAgentRuns } = useSubAgentRuns()
 
   // 计划追踪
   const {
@@ -93,6 +95,7 @@ export function useChatStream(
         toolCallsInProgress.value = []
         streamingContent.value = ''
         streamingMessageId.value = null
+        resetSubAgentRuns()
       },
       onTextMessageStart: (e) => {
         streamingRole.value = 'assistant'
@@ -260,6 +263,16 @@ export function useChatStream(
         }
      },
       onCustom: (event) => {
+        // Keep sub-agent CUSTOM events out of the normal text/tool message buffers.
+        if (acceptCustomEvent(event)) {
+          const trace = event.value as { eventType?: string; invocationId?: string }
+          if (trace.eventType === 'STARTED' && trace.invocationId) {
+            // The parent tool call is represented by the dedicated card, not a second generic row.
+            toolCallsInProgress.value = toolCallsInProgress.value.filter((tool) => tool.id !== trace.invocationId)
+            onPlanToolResult(trace.invocationId)
+          }
+          return
+        }
         // HITL：收到 TOOL_CONFIRM_REQUIRED 时，精确标记需确认的工具（不再全标记）
         if (event.name === 'TOOL_CONFIRM_REQUIRED') {
           const pending = (((event.value as any)?.pending) ?? []) as Array<{ toolUseId: string; name: string; input?: Record<string, unknown> }>
@@ -380,7 +393,7 @@ export function useChatStream(
 
     // 构建 client 需要的消息格式
     client.messages = messagesList
-      .filter((m) => !['system', 'tool'].includes(m.role))
+      .filter((m) => !['system', 'tool', 'subagent'].includes(m.role))
       .map((m) => ({
         id: String(m.id),
         role: m.role as any,
@@ -408,6 +421,7 @@ export function useChatStream(
     streamingContent.value = ''
     streamingRole.value = 'system'
     toolCallsInProgress.value = []
+    resetSubAgentRuns()
     agentHasResult.value = true
     currentPlan.value = null
   }
@@ -418,6 +432,7 @@ export function useChatStream(
     streamingMessageId,
     streamingRole,
     toolCallsInProgress,
+    subAgentRuns,
     isRunning,
     isReplaying,
     currentPlan,

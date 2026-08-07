@@ -45,6 +45,7 @@ const displayMessages = computed<DisplayMessage[]>(() => {
       role: m.role as any,
       content: (m.content || '') as string,
       isStreaming: false,
+      subAgentRun: m.subAgentRun ?? null,
     })
   }
   return list

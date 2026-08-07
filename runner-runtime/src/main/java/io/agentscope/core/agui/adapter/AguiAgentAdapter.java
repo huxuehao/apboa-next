@@ -16,6 +16,7 @@
 package io.agentscope.core.agui.adapter;
 
 import com.hxh.apboa.engine.hook.builtins.IConfirmationHook;
+import com.hxh.apboa.common.subagent.SubAgentTraceEvent;
 import io.agentscope.core.agent.Agent;
 import io.agentscope.core.agent.Event;
 import io.agentscope.core.agent.EventType;
@@ -272,10 +273,34 @@ public class AguiAgentAdapter {
                 }
             }
         } else if (type == EventType.TOOL_RESULT) {
+            boolean subAgentTraceEvent = false;
+            for (ContentBlock block : msg.getContent()) {
+                if (block instanceof ToolResultBlock toolResult
+                        && toolResult.getMetadata().containsKey(SubAgentTraceEvent.METADATA_KEY)) {
+                    Object trace = toolResult.getMetadata().get(SubAgentTraceEvent.METADATA_KEY);
+                    events.add(new AguiEvent.Custom(
+                            state.threadId,
+                            state.runId,
+                            SubAgentTraceEvent.CUSTOM_EVENT_NAME,
+                            trace));
+                    subAgentTraceEvent = true;
+                }
+            }
+
+            if (subAgentTraceEvent) {
+                // Intermediate sub-agent chunks are a separate custom protocol. They must never
+                // enter the parent agent's text/tool conversion state.
+                return events;
+            }
+
             if (event.isLast()) {
                 // Handle tool results
                 for (ContentBlock block : msg.getContent()) {
                     if (block instanceof ToolResultBlock toolResult) {
+                        if (toolResult.getMetadata().containsKey(SubAgentTraceEvent.FINAL_RESULT_METADATA_KEY)) {
+                            // The dedicated sub-agent card replaces the generic parent tool card.
+                            continue;
+                        }
                         String toolCallId = toolResult.getId();
                         String result = extractToolResultText(toolResult);
 

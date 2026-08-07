@@ -71,7 +71,7 @@ const formatTime = (dateStr?: string): string => {
 }
 
 const props = defineProps<{
-  role: 'user' | 'assistant' | 'system' | 'tool' | 'error' | 'thinking'
+  role: 'user' | 'assistant' | 'system' | 'tool' | 'error' | 'thinking' | 'subagent'
   content: string
   createdAt?: string
 }>()
