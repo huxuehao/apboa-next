@@ -10,11 +10,10 @@ import { PlusOutlined, ImportOutlined, DownloadOutlined, CloudDownloadOutlined }
  * Emits定义
  */
 defineEmits<{
-  click: [],
+  click: []
   importLocal: []
   importGit: []
   importUpload: []
-  importSkillHub: []
 }>()
 
 
@@ -33,9 +32,6 @@ defineEmits<{
     </div>
     <div class="import text-placeholder text-sm" @click.stop="$emit('importGit')">
       <CloudDownloadOutlined /> <span>下载 Git 技能包</span>
-    </div>
-    <div class="import text-placeholder text-sm" @click.stop="$emit('importSkillHub')">
-      <CloudDownloadOutlined /> <span>SkillHub 技能包</span>
     </div>
   </div>
 </template>
