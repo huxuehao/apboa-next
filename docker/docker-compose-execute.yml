@@ -49,7 +49,6 @@ services:
       PIP_TARGET: /opt/tools/pylib
       PYTHONPATH: /opt/tools/pylib
       NPM_CONFIG_PREFIX: /opt/tools/npm-global
-      PATH: /opt/tools/npm-global/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       # 心跳标识：由 start-execute.sh 自动注入，同一节点的三个服务必须相同
       APBOA_NODE_ID: ${APBOA_NODE_ID}
       APBOA_HOST_NAME: ${APBOA_HOST_NAME}
@@ -102,7 +101,6 @@ services:
       PIP_TARGET: /opt/tools/pylib
       PYTHONPATH: /opt/tools/pylib
       NPM_CONFIG_PREFIX: /opt/tools/npm-global
-      PATH: /opt/tools/npm-global/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       # 心跳标识：由 start-execute.sh 自动注入，同一节点的三个服务必须相同
       APBOA_NODE_ID: ${APBOA_NODE_ID}
       APBOA_HOST_NAME: ${APBOA_HOST_NAME}
