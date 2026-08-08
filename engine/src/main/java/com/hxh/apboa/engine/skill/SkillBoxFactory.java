@@ -108,9 +108,8 @@ public class SkillBoxFactory {
 
         if (!executionRole.isSubAgent()) {
             skillBox.registerSkill(UserInteractionProtocolSkill.getAgentSkill());
+            skillBox.registerSkill(VisionEnhancementProtocolSkill.getAgentSkill());
         }
-        // VEP remains available because it is rendered as display-only inside sub-agent cards.
-        skillBox.registerSkill(VisionEnhancementProtocolSkill.getAgentSkill());
 
         configureCodeExecution(skillBox, codeExecutionConfig);
 
