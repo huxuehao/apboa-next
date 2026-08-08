@@ -16,6 +16,7 @@ import com.hxh.apboa.engine.model.ChatModelFactory;
 import com.hxh.apboa.engine.prompt.AgentSysPromptFactory;
 import com.hxh.apboa.engine.skill.SkillBoxFactory;
 import com.hxh.apboa.engine.memory.LongTermMemoryFactory;
+import com.hxh.apboa.engine.memory.ObservableAutoContextMemory;
 import com.hxh.apboa.engine.studio.StudioService;
 import com.hxh.apboa.engine.tool.ToolkitFactory;
 import io.agentscope.core.ReActAgent;
@@ -25,7 +26,6 @@ import io.agentscope.core.memory.LongTermMemory;
 import io.agentscope.core.memory.LongTermMemoryMode;
 import io.agentscope.core.memory.autocontext.AutoContextConfig;
 import io.agentscope.core.memory.autocontext.AutoContextHook;
-import io.agentscope.core.memory.autocontext.AutoContextMemory;
 import io.agentscope.core.model.Model;
 import io.agentscope.core.state.StatePersistence;
 import io.agentscope.core.plan.PlanNotebook;
@@ -144,7 +144,7 @@ public class ReActAgentHelper {
                         .offloadSinglePreview(JsonUtils.getIntValue(config, "offloadSinglePreview", 200))
                         .largePayloadThreshold(JsonUtils.getLongValue(config, "largePayloadThreshold", 5120L))
                         .build();
-                builder.memory(new AutoContextMemory(autoContextConfig, model));
+                builder.memory(new ObservableAutoContextMemory(autoContextConfig, model));
                 hooks.add(new AutoContextHook());
                 hooks.add(new ToolCallSequenceRepairHook());
             } else {

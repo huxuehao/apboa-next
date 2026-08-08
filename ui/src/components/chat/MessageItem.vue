@@ -96,7 +96,7 @@ const isThinking = computed(() => props.role === 'thinking')
 const isAssistant = computed(() => props.role === 'assistant')
 const isTool = computed(() => props.role === 'tool')
 const isError = computed(() => props.role === 'error')
-const isMemoryCompression = computed(() => props.isMemoryCompression === true)
+const isMemoryCompression = computed(() => props.isMemoryCompression)
 
 const parsedUserContent = computed(() => parseUserContent(props.content))
 const formattedTime = computed(() => formatTime(props.createdAt))
@@ -238,9 +238,9 @@ const openPreview = (index: number) => {
               <BulbOutlined v-else />
             </span>
             <span class="chat-reasoning-title">
-              {{ isMemoryCompression ? '记忆压缩中' : (isStreaming ? '思考中...' : '思考过程') }}
+              {{ isMemoryCompression ? '记忆压缩中...' : (isStreaming ? '思考中...' : '思考过程') }}
             </span>
-            <span class="chat-reasoning-arrow">
+            <span class="chat-reasoning-arrow" v-if="!isMemoryCompression">
               <DownOutlined v-if="reasoningExpanded" />
               <RightOutlined v-else />
             </span>

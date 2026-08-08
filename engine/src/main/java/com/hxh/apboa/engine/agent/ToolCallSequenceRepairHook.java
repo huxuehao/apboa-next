@@ -6,6 +6,8 @@ import io.agentscope.core.hook.Hook;
 import io.agentscope.core.hook.HookEvent;
 import io.agentscope.core.hook.PreReasoningEvent;
 import java.util.List;
+
+import io.agentscope.core.message.Msg;
 import reactor.core.publisher.Mono;
 
 /**
@@ -18,14 +20,14 @@ public class ToolCallSequenceRepairHook implements Hook {
 
     @Override
     public <T extends HookEvent> Mono<T> onEvent(T event) {
-        if (!(event instanceof PreReasoningEvent preReasoningEvent)
-                || !(preReasoningEvent.getAgent() instanceof ReActAgent)) {
+        if (event instanceof PreReasoningEvent preReasoningEvent
+                && event.getAgent() instanceof ReActAgent) {
+            List<Msg> messages = preReasoningEvent.getInputMessages();
+            List<Msg> sanitized = ToolCallMessageSanitizer.sanitize(messages);
+            preReasoningEvent.setInputMessages(sanitized);
             return Mono.just(event);
         }
 
-        List<io.agentscope.core.message.Msg> messages = preReasoningEvent.getInputMessages();
-        List<io.agentscope.core.message.Msg> sanitized = ToolCallMessageSanitizer.sanitize(messages);
-        preReasoningEvent.setInputMessages(sanitized);
         return Mono.just(event);
     }
 

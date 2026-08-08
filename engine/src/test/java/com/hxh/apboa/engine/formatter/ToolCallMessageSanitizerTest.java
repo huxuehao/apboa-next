@@ -5,8 +5,13 @@ import io.agentscope.core.message.MsgRole;
 import io.agentscope.core.message.TextBlock;
 import io.agentscope.core.message.ToolResultBlock;
 import io.agentscope.core.message.ToolUseBlock;
+import io.agentscope.core.model.ChatResponse;
+import io.agentscope.core.model.GenerateOptions;
+import io.agentscope.core.model.Model;
+import io.agentscope.core.model.ToolSchema;
 import java.util.List;
 import junit.framework.TestCase;
+import reactor.core.publisher.Flux;
 
 public class ToolCallMessageSanitizerTest extends TestCase {
 
@@ -32,8 +37,9 @@ public class ToolCallMessageSanitizerTest extends TestCase {
 
         List<Msg> sanitized = ToolCallMessageSanitizer.sanitize(List.of(assistant, results));
 
-        assertEquals(2, sanitized.size());
-        assertEquals(2, sanitized.get(1).getContentBlocks(ToolResultBlock.class).size());
+        assertEquals(3, sanitized.size());
+        assertEquals("call-1", sanitized.get(1).getFirstContentBlock(ToolResultBlock.class).getId());
+        assertEquals("call-2", sanitized.get(2).getFirstContentBlock(ToolResultBlock.class).getId());
     }
 
     public void testShouldDropOrphanToolResult() {
@@ -50,8 +56,8 @@ public class ToolCallMessageSanitizerTest extends TestCase {
 
         List<Msg> sanitized = ToolCallMessageSanitizer.sanitize(messages);
 
-        assertEquals(2, sanitized.size());
-        assertEquals(MsgRole.USER, sanitized.get(1).getRole());
+        assertEquals(1, sanitized.size());
+        assertEquals(MsgRole.USER, sanitized.get(0).getRole());
     }
 
     public void testShouldFilterOnlyInvalidBlocksFromMixedToolMessage() {
@@ -66,6 +72,40 @@ public class ToolCallMessageSanitizerTest extends TestCase {
         assertEquals(2, sanitized.size());
         assertEquals(1, sanitized.get(1).getContentBlocks(ToolResultBlock.class).size());
         assertEquals("call-1", sanitized.get(1).getFirstContentBlock(ToolResultBlock.class).getId());
+    }
+
+    public void testShouldRemoveToolCallWithoutMatchingResult() {
+        Msg assistant = Msg.builder()
+                .role(MsgRole.ASSISTANT)
+                .content(
+                        TextBlock.builder().text("正在调用工具").build(),
+                        toolUseBlock("call-1"),
+                        toolUseBlock("call-2"))
+                .build();
+
+        List<Msg> sanitized = ToolCallMessageSanitizer.sanitize(
+                List.of(assistant, toolResultMessage("call-1")));
+
+        assertEquals(2, sanitized.size());
+        assertEquals(1, sanitized.get(0).getContentBlocks(ToolUseBlock.class).size());
+        assertEquals("call-1", sanitized.get(0).getFirstContentBlock(ToolUseBlock.class).getId());
+        assertEquals("call-1", sanitized.get(1).getFirstContentBlock(ToolResultBlock.class).getId());
+    }
+
+    public void testShouldSanitizeAutoContextModelInput() {
+        RecordingModel delegate = new RecordingModel();
+        ToolCallSanitizingModel model = new ToolCallSanitizingModel(delegate);
+        Msg assistant = Msg.builder()
+                .role(MsgRole.ASSISTANT)
+                .content(toolUseBlock("call-1"), toolUseBlock("call-2"))
+                .build();
+
+        model.stream(List.of(assistant, toolResultMessage("call-1")), null, null).blockLast();
+
+        assertEquals(2, delegate.receivedMessages.size());
+        assertEquals(1, delegate.receivedMessages.get(0).getContentBlocks(ToolUseBlock.class).size());
+        assertEquals("call-1", delegate.receivedMessages.get(1)
+                .getFirstContentBlock(ToolResultBlock.class).getId());
     }
 
     private static Msg toolUse(String id) {
@@ -85,5 +125,21 @@ public class ToolCallMessageSanitizerTest extends TestCase {
 
     private static Msg toolResultMessage(String id) {
         return Msg.builder().role(MsgRole.TOOL).content(toolResult(id)).build();
+    }
+
+    private static class RecordingModel implements Model {
+        private List<Msg> receivedMessages;
+
+        @Override
+        public Flux<ChatResponse> stream(
+                List<Msg> messages, List<ToolSchema> tools, GenerateOptions options) {
+            receivedMessages = messages;
+            return Flux.empty();
+        }
+
+        @Override
+        public String getModelName() {
+            return "recording-model";
+        }
     }
 }

@@ -45,7 +45,14 @@ const messageGroups = computed<MessageGroup[]>(() => {
 
   for (let i = 0; i < messages_.length; i++) {
     const msg: DisplayMessage = messages_[i]!
-    if (msg.role === 'thinking' || msg.role === 'tool') {
+    if (msg.isMemoryCompression) {
+      groups.push({
+        text: true,
+        key: msg.id,
+        isStreaming: false,
+        messages: [msg],
+      })
+    } else if (msg.role === 'thinking' || msg.role === 'tool') {
       if (groups.length > 0) {
         const lastGroup = groups[groups.length - 1]!
         if (!lastGroup.text) {

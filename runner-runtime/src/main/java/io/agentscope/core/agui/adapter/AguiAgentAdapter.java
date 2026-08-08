@@ -18,6 +18,7 @@ package io.agentscope.core.agui.adapter;
 import com.hxh.apboa.engine.hook.builtins.IConfirmationHook;
 import com.hxh.apboa.common.subagent.SubAgentTraceEvent;
 import com.hxh.apboa.engine.agui.AgentContext;
+import com.hxh.apboa.engine.memory.ObservableAutoContextMemory;
 import io.agentscope.core.agent.Agent;
 import io.agentscope.core.agent.Event;
 import io.agentscope.core.agent.EventType;
@@ -42,6 +43,7 @@ import java.util.*;
 
 import lombok.Getter;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Sinks;
 
 /**
  * Adapter that bridges AgentScope agents to the AG-UI protocol.
@@ -115,16 +117,24 @@ public class AguiAgentAdapter {
         // Track state for event conversion
         EventConversionState state = new EventConversionState(threadId, runId);
         state.compressionEventCount = currentCompressionEventCount();
+        Sinks.Many<AguiEvent> lifecycleEvents = Sinks.many().unicast().onBackpressureBuffer();
+        configureCompressionLifecycle(state, lifecycleEvents);
+
+        Flux<AguiEvent> agentEvents = agent.stream(msgs, options)
+                .concatMapIterable(event -> convertEvent(event, state))
+                .doFinally(signal -> {
+                    clearCompressionLifecycle();
+                    lifecycleEvents.tryEmitComplete();
+                });
 
         return Flux.concat(
                         // Emit RUN_STARTED and the initial context snapshot
                         Flux.concat(
                                 Flux.just(new AguiEvent.RunStarted(threadId, runId)),
                                 Flux.fromIterable(buildInitialContextUsageEvent(state))),
-                        // Stream agent events and convert to AG-UI events
-                        // Use concatMapIterable to preserve strict event ordering
-                        agent.stream(msgs, options)
-                                .concatMapIterable(event -> convertEvent(event, state)),
+                        // Stream agent events and compression lifecycle events concurrently so
+                        // STARTED can reach the client before the synchronous summary call ends.
+                        Flux.merge(lifecycleEvents.asFlux(), agentEvents),
                         // Emit any pending end events and RUN_FINISHED
                         Flux.defer(() -> finishRun(state)))
                 .onErrorResume(
@@ -371,6 +381,35 @@ public class AguiAgentAdapter {
         return events;
     }
 
+    /** 注册压缩开始监听器，使压缩模型调用前即可推送 SSE。 */
+    private void configureCompressionLifecycle(
+            EventConversionState state, Sinks.Many<AguiEvent> lifecycleEvents) {
+        if (!(agent instanceof ReActAgent reActAgent)
+                || !(reActAgent.getMemory() instanceof ObservableAutoContextMemory memory)) {
+            return;
+        }
+        memory.setCompressionListener(started -> {
+            state.compressionStarted = true;
+            lifecycleEvents.tryEmitNext(new AguiEvent.Custom(
+                    state.threadId,
+                    state.runId,
+                    "CONTEXT_COMPRESSION",
+                    Map.of(
+                            "status", "STARTED",
+                            "usedTokens", started.usedTokens(),
+                            "totalTokens", started.totalTokens(),
+                            "phase", "COMPRESSION")));
+        });
+    }
+
+    /** 清理监听器，避免一次运行的 SSE sink 被后续运行继续引用。 */
+    private void clearCompressionLifecycle() {
+        if (agent instanceof ReActAgent reActAgent
+                && reActAgent.getMemory() instanceof ObservableAutoContextMemory memory) {
+            memory.setCompressionListener(null);
+        }
+    }
+
     /** 获取当前记忆中的压缩事件数量，用于区分本轮新增压缩。 */
     private int currentCompressionEventCount() {
         if (agent instanceof ReActAgent reActAgent
@@ -415,15 +454,18 @@ public class AguiAgentAdapter {
         List<AguiEvent> events = new ArrayList<>();
 
         if (compressionEvents > state.compressionEventCount) {
-            events.add(new AguiEvent.Custom(
-                    state.threadId,
-                    state.runId,
-                    "CONTEXT_COMPRESSION",
-                    Map.of(
-                            "status", "STARTED",
-                            "usedTokens", usedTokens,
-                            "totalTokens", totalTokens,
-                            "phase", "COMPRESSION")));
+            // ObservableAutoContextMemory 会在压缩模型调用前推送 STARTED；非包装记忆保留兜底。
+            if (!state.compressionStarted) {
+                events.add(new AguiEvent.Custom(
+                        state.threadId,
+                        state.runId,
+                        "CONTEXT_COMPRESSION",
+                        Map.of(
+                                "status", "STARTED",
+                                "usedTokens", usedTokens,
+                                "totalTokens", totalTokens,
+                                "phase", "COMPRESSION")));
+            }
             events.add(new AguiEvent.Custom(
                     state.threadId,
                     state.runId,
@@ -435,6 +477,7 @@ public class AguiAgentAdapter {
                             "phase", "COMPRESSION",
                             "compressed", true)));
             state.compressionEventCount = compressionEvents;
+            state.compressionStarted = false;
         }
 
         String phase = switch (type) {
@@ -561,6 +604,7 @@ public class AguiAgentAdapter {
         private final Set<String> endedReasoningMessages = new LinkedHashSet<>();
         private String currentTextMessageId = null;
         private int compressionEventCount = 0;
+        private boolean compressionStarted = false;
 
         EventConversionState(String threadId, String runId) {
             this.threadId = threadId;
