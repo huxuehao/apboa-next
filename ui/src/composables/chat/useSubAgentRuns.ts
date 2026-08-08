@@ -2,7 +2,7 @@ import { computed, ref } from 'vue'
 import type { CustomEvent, SubAgentRunVO, SubAgentTraceEvent } from '@/types'
 
 const CUSTOM_EVENT_NAME = 'APBOA_SUBAGENT_EVENT'
-const TERMINAL_STATUS = new Set(['SUCCESS', 'FAILED', 'CANCELLED'])
+const TERMINAL_STATUS = new Set(['SUCCESS', 'BLOCKED', 'FAILED', 'CANCELLED'])
 
 function asTraceEvent(value: unknown): SubAgentTraceEvent | null {
   if (!value || typeof value !== 'object') return null
@@ -15,6 +15,7 @@ function asTraceEvent(value: unknown): SubAgentTraceEvent | null {
 function statusFor(event: SubAgentTraceEvent): SubAgentRunVO['status'] {
   switch (event.eventType) {
     case 'FINISHED': return 'SUCCESS'
+    case 'BLOCKED': return 'BLOCKED'
     case 'FAILED': return 'FAILED'
     case 'CANCELLED': return 'CANCELLED'
     default: return 'RUNNING'

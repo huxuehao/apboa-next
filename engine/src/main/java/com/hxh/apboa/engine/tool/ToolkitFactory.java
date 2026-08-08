@@ -7,6 +7,7 @@ import com.hxh.apboa.agent.service.CodeExecutionConfigService;
 import com.hxh.apboa.common.entity.*;
 import com.hxh.apboa.common.enums.ToolType;
 import com.hxh.apboa.engine.agent.A2aAgentHelper;
+import com.hxh.apboa.engine.agent.AgentExecutionRole;
 import com.hxh.apboa.engine.agent.ReActAgentHelper;
 import com.hxh.apboa.engine.agui.AgentContext;
 import com.hxh.apboa.engine.hook.builtins.IConfirmationHook;
@@ -86,12 +87,19 @@ public class ToolkitFactory {
 
 
     public Toolkit getToolkit(AgentDefinition agentDefinition) {
+        return getToolkit(agentDefinition, AgentExecutionRole.ROOT);
+    }
+
+    /**
+     * Builds a toolkit for an agent execution role. A delegated sub-agent must not receive a
+     * tool that is configured to pause for human confirmation.
+     */
+    public Toolkit getToolkit(AgentDefinition agentDefinition, AgentExecutionRole executionRole) {
         List<Long> toolIds = agentToolService.getToolIds(agentDefinition.getId());
-        Toolkit toolkit = getToolkit(toolIds);
+        Toolkit toolkit = createToolkit();
 
         if (!toolIds.isEmpty()) {
-            // 注册工具
-            registerTools(toolkit, toolService.listByIds(toolIds));
+            registerTools(toolkit, toolService.listByIds(toolIds), executionRole);
         }
 
         // 注册工作流
@@ -111,12 +119,14 @@ public class ToolkitFactory {
         }
 
         // 此处仅注册缓存的 MCP 工具模式，真正的 MCP 连接会在调用时打开。
-        mcpClientFactory.getLazyMcpTools(agentDefinition).forEach(toolkit::registerAgentTool);
+        mcpClientFactory.getLazyMcpTools(agentDefinition).stream()
+                .filter(tool -> allowToolInRole(tool, executionRole))
+                .forEach(toolkit::registerAgentTool);
 
         // 注册 Agent as Tool
         List<Long> subAgentIds = agentSubAgentService.getSubAgentIds(agentDefinition.getId());
         if (!subAgentIds.isEmpty()) {
-            registerSubAgents(toolkit, subAgentIds);
+            registerSubAgents(toolkit, subAgentIds, executionRole);
         }
 
         // 注册文档附件文本读取工具（所有智能体无条件注册）
@@ -126,6 +136,14 @@ public class ToolkitFactory {
     }
 
     public Toolkit getToolkit(List<Long> toolIds) {
+        Toolkit toolkit = createToolkit();
+        if (!toolIds.isEmpty()) {
+            registerTools(toolkit, toolService.listByIds(toolIds), AgentExecutionRole.ROOT);
+        }
+        return toolkit;
+    }
+
+    private Toolkit createToolkit() {
         Toolkit toolkit = new Toolkit(
                 ToolkitConfig.builder()
                         // 是否允许并行执行多个工具
@@ -135,28 +153,6 @@ public class ToolkitFactory {
                         // 设置工具执行超时时间
                         .executionConfig(customToolkitConfig.toExecutionConfig())
                         .build());
-        if (!toolIds.isEmpty()) {
-            // 注册工具
-            toolService.listByIds(toolIds)
-                    .stream()
-                    .filter(ToolConfig::getEnabled)
-                    .forEach(toolConfig -> {
-                        // 内置工具注册
-                        if (toolConfig.getToolType() == ToolType.BUILTIN) {
-                            toolkit.registerTool(ToolsRegister.getTool(toolConfig.getClassPath()));
-                        } else {
-                            // 动态工具注册
-                            toolkit.registerTool(new DynamicAgentTool(toolConfig));
-                        }
-
-                        // 确认是否生效只取决于工具自身 need_confirm，与 memoryActive 解耦
-                        if (Boolean.TRUE.equals(toolConfig.getNeedConfirm())) {
-                            IConfirmationHook.setNeedConfirmTool(toolConfig.getToolId());
-                        } else {
-                            IConfirmationHook.removeNeedConfirmTool(toolConfig.getToolId());
-                        }
-                    });
-        }
         return toolkit;
     }
 
@@ -167,12 +163,26 @@ public class ToolkitFactory {
      * @param toolConfigs 工具配置列表
      */
     public static void registerTools(Toolkit toolkit, List<ToolConfig> toolConfigs) {
+        registerTools(toolkit, toolConfigs, AgentExecutionRole.ROOT);
+    }
+
+    /** Registers configured tools, excluding confirmation-gated tools for sub-agents. */
+    public static void registerTools(
+            Toolkit toolkit, List<ToolConfig> toolConfigs, AgentExecutionRole executionRole) {
         if (toolConfigs == null || toolConfigs.isEmpty()) {
             return;
         }
 
         toolConfigs.stream()
                 .filter(ToolConfig::getEnabled)
+                .filter(toolConfig -> {
+                    boolean blocked = executionRole.isSubAgent()
+                            && Boolean.TRUE.equals(toolConfig.getNeedConfirm());
+                    if (blocked) {
+                        log.warn("Skip confirmation-gated tool '{}' for delegated sub-agent execution", toolConfig.getToolId());
+                    }
+                    return !blocked;
+                })
                 .forEach(toolConfig -> {
                     AgentTool tool = toolkit.getTool(toolConfig.getToolId());
                     // 工具不存在时
@@ -221,7 +231,8 @@ public class ToolkitFactory {
                 });
     }
 
-    private void registerSubAgents(Toolkit toolkit, List<Long> subAgentIds) {
+    private void registerSubAgents(
+            Toolkit toolkit, List<Long> subAgentIds, AgentExecutionRole parentExecutionRole) {
         for (Long subAgentId : subAgentIds) {
             AgentDefinition definition = agentDefinitionService.getById(subAgentId);
 
@@ -234,7 +245,7 @@ public class ToolkitFactory {
                 switch (definition.getAgentType()) {
                     case CUSTOM:
                         toolkit.registration()
-                                .subAgent(() -> reActAgentHelper.getReActAgent(definition),
+                                .subAgent(() -> reActAgentHelper.getReActAgentAsSubAgent(definition),
                                         createSubAgentConfig(definition))
                                 .apply();
                         break;
@@ -261,5 +272,13 @@ public class ToolkitFactory {
                         definition.getDescription() : definition.getName())
                 .forwardEvents(true)
                 .build();
+    }
+
+    private static boolean allowToolInRole(AgentTool tool, AgentExecutionRole executionRole) {
+        boolean blocked = executionRole.isSubAgent() && IConfirmationHook.isNeedConfirm(tool.getName());
+        if (blocked) {
+            log.warn("Skip confirmation-gated MCP tool '{}' for delegated sub-agent execution", tool.getName());
+        }
+        return !blocked;
     }
 }

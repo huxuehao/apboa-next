@@ -10,6 +10,7 @@ import com.hxh.apboa.common.util.JsonUtils;
 import com.hxh.apboa.common.wrapper.KnowledgeWrapper;
 import com.hxh.apboa.engine.agui.AgentContext;
 import com.hxh.apboa.engine.hook.HooksFactory;
+import com.hxh.apboa.engine.hook.builtins.IConfirmationHook;
 import com.hxh.apboa.engine.knowledge.KnowledgeFactory;
 import com.hxh.apboa.engine.model.ChatModelFactory;
 import com.hxh.apboa.engine.prompt.AgentSysPromptFactory;
@@ -64,7 +65,12 @@ public class ReActAgentHelper {
      */
     public ReActAgent getReActAgent(AgentDefinition definition) {
         // 构建reActAgent
-        return getReactAgentBuilder(definition).build();
+        return getReactAgentBuilder(definition, AgentExecutionRole.ROOT).build();
+    }
+
+    /** Builds a delegated ReAct agent with the sub-agent execution policy applied. */
+    public ReActAgent getReActAgentAsSubAgent(AgentDefinition definition) {
+        return getReactAgentBuilder(definition, AgentExecutionRole.SUBAGENT).build();
     }
 
     /**
@@ -72,8 +78,13 @@ public class ReActAgentHelper {
      * @param definition  agent 定义
      */
     public ReActAgent.Builder getReactAgentBuilder(AgentDefinition definition) {
+        return getReactAgentBuilder(definition, AgentExecutionRole.ROOT);
+    }
+
+    private ReActAgent.Builder getReactAgentBuilder(
+            AgentDefinition definition, AgentExecutionRole executionRole) {
         Model model = chatModelFactory.getModel(definition);
-        Toolkit toolkit = toolkitFactory.getToolkit(definition);
+        Toolkit toolkit = toolkitFactory.getToolkit(definition, executionRole);
         CodeExecutionConfig codeExecutionConfig = getCodeExecutionConfig(definition.getId());
         ReActAgent.Builder builder = ReActAgent.builder()
                 .name(definition.getAgentCode())
@@ -83,8 +94,8 @@ public class ReActAgentHelper {
                 .sysPrompt(agentSysPromptFactory.getAgentSysPrompt(definition, codeExecutionConfig != null))
                 .toolkit(toolkit)
                 .skillBox(toolkit != null
-                        ? skillBoxFactory.getSkillBox(definition, toolkit, codeExecutionConfig)
-                        : skillBoxFactory.getSkillBox(definition, codeExecutionConfig));
+                        ? skillBoxFactory.getSkillBox(definition, toolkit, codeExecutionConfig, executionRole)
+                        : skillBoxFactory.getSkillBox(definition, codeExecutionConfig, executionRole));
 
         KnowledgeWrapper knowledgeWrapper = knowledgeFactory.getKnowledge(definition);
         if (knowledgeWrapper != null) {
@@ -113,6 +124,9 @@ public class ReActAgentHelper {
         // 使用可变列表，避免 getHooks 返回 List.of() 时 add 抛 UnsupportedOperationException
         List<Hook> hooks = hooksFactory.getHooks(definition);
         hooks = hooks != null ? new ArrayList<>(hooks) : new ArrayList<>();
+        if (executionRole.isSubAgent()) {
+            hooks.removeIf(IConfirmationHook.class::isInstance);
+        }
 
         // 配置记忆
         Boolean isMemoryActive = AgentContext.getIfExists().map(AgentContext::isMemoryActive).orElse(false);

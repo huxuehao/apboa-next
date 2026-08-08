@@ -74,6 +74,7 @@ public class SubAgentTracePersistenceService {
 
     private static boolean isTerminal(SubAgentTraceEventType type) {
         return type == SubAgentTraceEventType.FINISHED
+                || type == SubAgentTraceEventType.BLOCKED
                 || type == SubAgentTraceEventType.FAILED
                 || type == SubAgentTraceEventType.CANCELLED;
     }
@@ -81,6 +82,7 @@ public class SubAgentTracePersistenceService {
     private static String statusFor(SubAgentTraceEventType type) {
         return switch (type) {
             case FINISHED -> "SUCCESS";
+            case BLOCKED -> "BLOCKED";
             case FAILED -> "FAILED";
             case CANCELLED -> "CANCELLED";
             default -> "RUNNING";

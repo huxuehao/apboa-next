@@ -11,16 +11,16 @@
         v-else-if="part.type === 'uip'"
         :code="part.code as string"
         :is-streaming="isStreaming"
-        :disabled="disabled"
-        @submit="emit('interactionSubmit', $event)"
-        @retry="emit('uipRetry', $event)"
+        :disabled="disabled || readonlyInteraction"
+        @submit="onInteractionSubmit"
+        @retry="onUipRetry"
       />
       <VEPRenderer
         v-else-if="part.type === 'vep'"
         :code="part.code as string"
         :is-streaming="isStreaming"
-        :disabled="disabled"
-        @retry="emit('vepRetry', $event)"
+        :disabled="disabled || readonlyInteraction"
+        @retry="onVepRetry"
       />
     </template>
   </div>
@@ -40,6 +40,7 @@ const props = defineProps<{
   content: string
   disabled?: boolean
   isStreaming?: boolean
+  readonlyInteraction?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -49,6 +50,18 @@ const emit = defineEmits<{
 }>()
 
 const container = ref<HTMLElement>()
+
+function onInteractionSubmit(payload: InteractionSubmitPayload) {
+  if (!props.readonlyInteraction) emit('interactionSubmit', payload)
+}
+
+function onUipRetry(uipCode: string) {
+  if (!props.readonlyInteraction) emit('uipRetry', uipCode)
+}
+
+function onVepRetry(vepCode: string) {
+  if (!props.readonlyInteraction) emit('vepRetry', vepCode)
+}
 
 /** 内容分片：html、mermaid 图表、uip 交互组件、vep 视觉增强 */
 type ContentPart =

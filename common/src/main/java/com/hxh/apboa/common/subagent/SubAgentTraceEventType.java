@@ -12,6 +12,7 @@ public enum SubAgentTraceEventType {
     TOOL_ARGUMENTS,
     TOOL_COMPLETED,
     STATUS_CHANGED,
+    BLOCKED,
     FAILED,
     FINISHED,
     CANCELLED

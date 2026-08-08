@@ -6,6 +6,7 @@ export type SubAgentTraceEventType =
   | 'TOOL_ARGUMENTS'
   | 'TOOL_COMPLETED'
   | 'STATUS_CHANGED'
+  | 'BLOCKED'
   | 'FAILED'
   | 'FINISHED'
   | 'CANCELLED'
@@ -36,7 +37,7 @@ export interface SubAgentRunVO {
   agentCode?: string
   agentTitle?: string
   subagentSessionId?: string
-  status: 'RUNNING' | 'SUCCESS' | 'FAILED' | 'CANCELLED' | string
+  status: 'RUNNING' | 'SUCCESS' | 'BLOCKED' | 'FAILED' | 'CANCELLED' | string
   task?: string
   summary?: string
   startedAt?: string

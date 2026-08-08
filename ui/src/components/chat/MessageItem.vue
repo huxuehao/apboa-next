@@ -80,6 +80,7 @@ const props = defineProps<{
   createdAt?: string
   agentHasResult?: boolean
   isStreaming?: boolean
+  readonlyInteraction?: boolean
 }>()
 
 defineEmits<{
@@ -258,7 +259,8 @@ const openPreview = (index: number) => {
           <MarkdownRenderer
             :content="content"
             :is-streaming="isStreaming"
-            :disabled="currentIndex !== totalMessages - 1"
+            :disabled="currentIndex !== totalMessages - 1 || readonlyInteraction"
+            :readonly-interaction="readonlyInteraction"
             @interaction-submit="$emit('interactionSubmit', $event)"
             @uip-retry="$emit('uipRetry', $event)"
             @vep-retry="$emit('vepRetry', $event)" />

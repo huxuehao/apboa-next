@@ -4,6 +4,7 @@ import com.hxh.apboa.common.consts.SysConst;
 import com.hxh.apboa.common.entity.*;
 import com.hxh.apboa.common.enums.SkillFileType;
 import com.hxh.apboa.engine.agui.AgentContext;
+import com.hxh.apboa.engine.agent.AgentExecutionRole;
 import com.hxh.apboa.engine.skill.builtins.UserInteractionProtocolSkill;
 import com.hxh.apboa.engine.skill.builtins.VisionEnhancementProtocolSkill;
 import com.hxh.apboa.engine.tool.ToolkitFactory;
@@ -50,7 +51,14 @@ public class SkillBoxFactory {
      * @return SkillBox
      */
     public SkillBox getSkillBox(AgentDefinition agentDefinition, CodeExecutionConfig codeExecutionConfig) {
-        return getSkillBox(agentDefinition, new Toolkit(), codeExecutionConfig);
+        return getSkillBox(agentDefinition, new Toolkit(), codeExecutionConfig, AgentExecutionRole.ROOT);
+    }
+
+    public SkillBox getSkillBox(
+            AgentDefinition agentDefinition,
+            CodeExecutionConfig codeExecutionConfig,
+            AgentExecutionRole executionRole) {
+        return getSkillBox(agentDefinition, new Toolkit(), codeExecutionConfig, executionRole);
     }
 
     /**
@@ -83,11 +91,25 @@ public class SkillBoxFactory {
      * @param codeExecutionConfig   代码执行配置
      * @return SkillBox
      */
-        public SkillBox getSkillBox(AgentDefinition agentDefinition, Toolkit toolkit, CodeExecutionConfig codeExecutionConfig) {
+    public SkillBox getSkillBox(AgentDefinition agentDefinition, Toolkit toolkit, CodeExecutionConfig codeExecutionConfig) {
+        return getSkillBox(agentDefinition, toolkit, codeExecutionConfig, AgentExecutionRole.ROOT);
+    }
+
+    /**
+     * UIP is deliberately unavailable to delegated agents: it requires a browser round-trip
+     * that can only resume the root chat session in the current runtime.
+     */
+    public SkillBox getSkillBox(
+            AgentDefinition agentDefinition,
+            Toolkit toolkit,
+            CodeExecutionConfig codeExecutionConfig,
+            AgentExecutionRole executionRole) {
         SkillBox skillBox = new SkillBox(toolkit);
 
-        // 用户交互技能
-        skillBox.registerSkill(UserInteractionProtocolSkill.getAgentSkill());
+        if (!executionRole.isSubAgent()) {
+            skillBox.registerSkill(UserInteractionProtocolSkill.getAgentSkill());
+        }
+        // VEP remains available because it is rendered as display-only inside sub-agent cards.
         skillBox.registerSkill(VisionEnhancementProtocolSkill.getAgentSkill());
 
         configureCodeExecution(skillBox, codeExecutionConfig);

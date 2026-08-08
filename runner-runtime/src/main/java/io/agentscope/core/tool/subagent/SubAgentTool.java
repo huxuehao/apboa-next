@@ -25,6 +25,7 @@ import io.agentscope.core.agent.AgentBase;
 import io.agentscope.core.agent.Event;
 import io.agentscope.core.agent.StreamOptions;
 import io.agentscope.core.message.ContentBlock;
+import io.agentscope.core.message.GenerateReason;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
 import io.agentscope.core.message.TextBlock;
@@ -47,6 +48,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -77,6 +79,8 @@ public class SubAgentTool implements AgentTool {
 
     /** Parameter name for message. */
     private static final String PARAM_MESSAGE = "message";
+    private static final String POLICY_REJECTED_METADATA_KEY = "apboa.subagent.policy-rejected";
+    private static final Pattern UIP_BLOCK_PATTERN = Pattern.compile("(?is)```\\s*uip\\b");
 
     /** @deprecated Use {@link SubAgentTraceEvent#FINAL_RESULT_METADATA_KEY}. */
     @Deprecated
@@ -227,9 +231,16 @@ public class SubAgentTool implements AgentTool {
                                     if (agent instanceof StateModule) {
                                         saveAgentState(finalSessionId, (StateModule) agent);
                                     }
-                                    emitTrace(emitter, trace, SubAgentTraceEventType.FINISHED, Map.of(
-                                            "summary", extractResultText(r),
-                                            "status", "SUCCESS"));
+                                    if (isPolicyRejected(r)) {
+                                        emitTrace(emitter, trace, SubAgentTraceEventType.BLOCKED, Map.of(
+                                                "message", extractResultText(r),
+                                                "summary", extractResultText(r),
+                                                "status", "BLOCKED"));
+                                    } else {
+                                        emitTrace(emitter, trace, SubAgentTraceEventType.FINISHED, Map.of(
+                                                "summary", extractResultText(r),
+                                                "status", "SUCCESS"));
+                                    }
                                 }).onErrorResume(error -> {
                                     logger.error("Error in sub-agent execution: {}", safeMessage(error), error);
                                     emitTrace(emitter, trace, SubAgentTraceEventType.FAILED, Map.of(
@@ -324,11 +335,8 @@ public class SubAgentTool implements AgentTool {
                                 .doOnNext(event -> forwardEvent(event, emitter, trace))
                                 .filter(Event::isLast)
                                 .last()
-                                .map(
-                                        lastEvent -> {
-                                            Msg response = lastEvent.getMessage();
-                                            return buildResult(response, sessionId, trace);
-                                        })
+                                .map(lastEvent -> buildTerminalResult(
+                                        lastEvent.getMessage(), sessionId, trace))
                                 .contextWrite(context -> context.putAll(ctxView)));
     }
 
@@ -348,7 +356,7 @@ public class SubAgentTool implements AgentTool {
         return Mono.deferContextual(
                 ctxView ->
                         agent.call(List.of(userMsg))
-                                .map(response -> buildResult(response, sessionId, trace))
+                                .map(response -> buildTerminalResult(response, sessionId, trace))
                                 .contextWrite(context -> context.putAll(ctxView)));
     }
 
@@ -424,6 +432,51 @@ public class SubAgentTool implements AgentTool {
                         "session_id: %s\n\n%s",
                         sessionId, textContent != null ? textContent : "(No response)")) .build()),
                 Map.of(SubAgentTraceEvent.FINAL_RESULT_METADATA_KEY, trace.getInvocationId()));
+    }
+
+    /**
+     * A SubAgentTool is a normal parent-tool call. It must never translate a child pause or a
+     * UIP browser round-trip into a successful result, because the parent would then continue
+     * reasoning with an unfinished delegation.
+     */
+    private ToolResultBlock buildTerminalResult(Msg response, String sessionId, SubAgentTraceContext trace) {
+        String policyMessage = rejectionMessage(response);
+        return policyMessage == null
+                ? buildResult(response, sessionId, trace)
+                : buildPolicyRejectedResult(policyMessage, trace);
+    }
+
+    private static String rejectionMessage(Msg response) {
+        if (response == null) {
+            return null;
+        }
+        if (response.getGenerateReason() == GenerateReason.REASONING_STOP_REQUESTED) {
+            return "Sub-agent execution was blocked because it requested human confirmation. "
+                    + "Delegated agents cannot wait for confirmation; ask the user from the root agent instead.";
+        }
+        String text = response.getTextContent();
+        if (text != null && UIP_BLOCK_PATTERN.matcher(text).find()) {
+            return "Sub-agent execution was blocked because it emitted a UIP interaction. "
+                    + "Delegated agents cannot receive browser form input; ask the user from the root agent instead.";
+        }
+        return null;
+    }
+
+    private static ToolResultBlock buildPolicyRejectedResult(
+            String message, SubAgentTraceContext trace) {
+        return new ToolResultBlock(
+                null,
+                null,
+                List.of(TextBlock.builder().text(message).build()),
+                Map.of(
+                        SubAgentTraceEvent.FINAL_RESULT_METADATA_KEY, trace.getInvocationId(),
+                        POLICY_REJECTED_METADATA_KEY, true));
+    }
+
+    private static boolean isPolicyRejected(ToolResultBlock result) {
+        return result != null
+                && result.getMetadata() != null
+                && Boolean.TRUE.equals(result.getMetadata().get(POLICY_REJECTED_METADATA_KEY));
     }
 
     private static Map<String, Object> payload(Object... pairs) {

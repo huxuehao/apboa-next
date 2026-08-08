@@ -19,7 +19,13 @@ defineEmits<{
 }>()
 
 type TimelineItem =
-  | { key: string; kind: 'message'; role: 'assistant' | 'thinking'; content: string }
+  | {
+      key: string
+      kind: 'message'
+      role: 'assistant' | 'thinking'
+      content: string
+      completed: boolean
+    }
   | { key: string; kind: 'tool'; name: string; args?: unknown; result?: unknown; completed: boolean }
   | { key: string; kind: 'status'; content: string; failed: boolean }
 
@@ -40,7 +46,13 @@ const timeline = computed<TimelineItem[]>(() => {
       const messageId = typeof payload.messageId === 'string' ? payload.messageId : event.eventId
       let item = messages.get(`${role}:${messageId}`)
       if (!item) {
-        item = { key: `message:${role}:${messageId}`, kind: 'message', role, content: '' }
+        item = {
+          key: `message:${role}:${messageId}`,
+          kind: 'message',
+          role,
+          content: '',
+          completed: false,
+        }
         messages.set(`${role}:${messageId}`, item)
         items.push(item)
       }
@@ -51,6 +63,9 @@ const timeline = computed<TimelineItem[]>(() => {
         if (content.startsWith(item.content)) item.content = content
         else if (!item.content.startsWith(content)) item.content += content
       }
+      // Completion belongs to one concrete message, not to the whole sub-agent card. This keeps
+      // an earlier thinking panel from showing a spinner while a later reasoning round is active.
+      if (event.eventType === 'MESSAGE_COMPLETED') item.completed = true
     } else if (event.eventType === 'TOOL_STARTED') {
       const toolCallId = typeof payload.toolCallId === 'string' ? payload.toolCallId : event.eventId
       const item: Extract<TimelineItem, { kind: 'tool' }> = {
@@ -81,13 +96,14 @@ const timeline = computed<TimelineItem[]>(() => {
           completed: true,
         })
       }
-    } else if (event.eventType === 'FAILED' || event.eventType === 'CANCELLED') {
+    } else if (event.eventType === 'BLOCKED' || event.eventType === 'FAILED' || event.eventType === 'CANCELLED') {
       items.push({
         key: `status:${event.eventId}`,
         kind: 'status',
         content: typeof payload.message === 'string'
           ? payload.message
-          : event.eventType === 'CANCELLED' ? '子智能体已取消' : '子智能体运行失败',
+          : event.eventType === 'BLOCKED' ? '子智能体执行被交互策略拦截'
+            : event.eventType === 'CANCELLED' ? '子智能体已取消' : '子智能体运行失败',
         failed: true,
       })
     }
@@ -142,11 +158,9 @@ onBeforeUnmount(() => { if (scrollRaf !== null) cancelAnimationFrame(scrollRaf) 
           :role="item.role"
           :content="item.content"
           :agent-has-result="true"
-          :is-streaming="active"
+          :is-streaming="active && !item.completed"
+          :readonly-interaction="true"
           @inputTagPreview="$emit('inputTagPreview', $event)"
-          @interaction-submit="$emit('interactionSubmit', $event)"
-          @uip-retry="$emit('uipRetry', $event)"
-          @vep-retry="$emit('vepRetry', $event)"
         />
       </template>
       <template v-else-if="item.kind === 'tool'">
