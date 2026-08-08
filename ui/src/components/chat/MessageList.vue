@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import {
-  BulbOutlined,
   CheckCircleOutlined,
   DownOutlined,
   LoadingOutlined
 } from '@ant-design/icons-vue'
 import MessageItem from './MessageItem.vue'
 import ToolCallItem from './ToolCallItem.vue'
-import type { DisplayMessage } from '@/types'
+import SubAgentCard from './SubAgentCard.vue'
+import type { DisplayMessage, SubAgentRunVO } from '@/types'
 import type {FlatFileItem} from "@/composables/chat/useWorkspaceFiles.ts";
 import type { InteractionSubmitPayload } from '@/components/markdown/uip/types'
 
@@ -45,7 +45,14 @@ const messageGroups = computed<MessageGroup[]>(() => {
 
   for (let i = 0; i < messages_.length; i++) {
     const msg: DisplayMessage = messages_[i]!
-    if (msg.role === 'thinking' || msg.role === 'tool') {
+    if (msg.isMemoryCompression) {
+      groups.push({
+        text: true,
+        key: msg.id,
+        isStreaming: false,
+        messages: [msg],
+      })
+    } else if (msg.role === 'thinking' || msg.role === 'tool') {
       if (groups.length > 0) {
         const lastGroup = groups[groups.length - 1]!
         if (!lastGroup.text) {
@@ -98,6 +105,23 @@ function toggleAggregate(key: string) {
     [key]: !expandedMap.value[key],
   }
 }
+
+function isSubAgentMessage(message: DisplayMessage): boolean {
+  return message.role === 'subagent'
+}
+
+function subAgentRunFor(message: DisplayMessage): SubAgentRunVO {
+  if (message.subAgentRun) return message.subAgentRun
+  let anchor: { invocationId?: string; agentTitle?: string; agentCode?: string } = {}
+  try { anchor = JSON.parse(message.content || '{}') } catch { /* malformed legacy anchor */ }
+  return {
+    invocationId: anchor.invocationId || message.id,
+    agentTitle: anchor.agentTitle,
+    agentCode: anchor.agentCode,
+    status: 'SUCCESS',
+    events: [],
+  }
+}
 </script>
 
 <template>
@@ -127,6 +151,7 @@ function toggleAggregate(key: string) {
             :created-at="msg.createdAt"
             :agent-has-result="agentHasResult"
             :is-streaming="msg.isStreaming"
+            :is-memory-compression="msg.isMemoryCompression"
             @inputTagPreview="$emit('inputTagPreview', $event as FlatFileItem)"
             @interaction-submit="$emit('interactionSubmit', $event)"
             @uip-retry="$emit('uipRetry', $event)"
@@ -135,9 +160,18 @@ function toggleAggregate(key: string) {
         </div>
       </div>
       <!-- 单条消息 -->
+      <SubAgentCard
+        v-else-if="isSubAgentMessage(firstMessage(group))"
+        :key="`subagent-${firstMessage(group).id}`"
+        :run="subAgentRunFor(firstMessage(group))"
+        @inputTagPreview="$emit('inputTagPreview', $event as FlatFileItem)"
+        @interaction-submit="$emit('interactionSubmit', $event)"
+        @uip-retry="$emit('uipRetry', $event)"
+        @vep-retry="$emit('vepRetry', $event)"
+      />
       <MessageItem
         v-else
-        :key="firstMessage(group).id"
+        :key="`message-${firstMessage(group).id}`"
         :id="firstMessage(group).id"
         :current-index="gIdx"
         :total-messages="messageGroups.length"
@@ -146,6 +180,7 @@ function toggleAggregate(key: string) {
         :created-at="firstMessage(group).createdAt"
         :agent-has-result="agentHasResult"
         :is-streaming="firstMessage(group).isStreaming"
+        :is-memory-compression="firstMessage(group).isMemoryCompression"
         @inputTagPreview="$emit('inputTagPreview', $event as FlatFileItem)"
         @interaction-submit="$emit('interactionSubmit', $event)"
         @uip-retry="$emit('uipRetry', $event)"

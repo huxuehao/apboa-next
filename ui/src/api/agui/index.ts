@@ -43,18 +43,32 @@ export type { RunAgentInput }
 
 export { getReconnectURL, getResumeURL, getPendingURL, getStatusURL, getStopURL, getActiveRunsURL }
 
+export interface AgentRunStatus {
+  running: boolean
+  state: 'RUNNING' | 'STOPPING' | 'COMPLETED'
+}
+
 /**
  * 查询指定会话的运行状态
  * @param threadId 会话 ID
  * @returns { running: boolean }
  */
 export async function getStatus(threadId: string): Promise<boolean> {
+  const status = await getRunStatus(threadId)
+  return status.running
+}
+
+/** 查询指定会话的完整运行生命周期状态。 */
+export async function getRunStatus(threadId: string): Promise<AgentRunStatus> {
   const url = getStatusURL(threadId)
   const headers = getRESTHeaders()
   const resp = await fetch(url, { headers })
   if (!resp.ok) throw new Error(`Status check failed: ${resp.status}`)
-  const data = await resp.json()
-  return data.running === true
+  const data = await resp.json() as Partial<AgentRunStatus>
+  return {
+    running: data.running === true,
+    state: data.state === 'STOPPING' || data.state === 'RUNNING' ? data.state : 'COMPLETED'
+  }
 }
 
 /**

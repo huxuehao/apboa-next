@@ -2,7 +2,10 @@ package com.hxh.apboa.engine.log;
 
 import com.hxh.apboa.common.entity.ChatMessage;
 import com.hxh.apboa.common.util.AgentMetadataStore;
+import com.hxh.apboa.common.util.BeanUtils;
 import com.hxh.apboa.common.util.JsonUtils;
+import com.hxh.apboa.common.subagent.SubAgentTraceEvent;
+import com.hxh.apboa.common.subagent.SubAgentTraceEventType;
 import io.agentscope.core.agent.AgentBase;
 import io.agentscope.core.hook.*;
 import io.agentscope.core.message.*;
@@ -23,6 +26,20 @@ public class ChatLogHook implements Hook {
     private final Map<String, Map<String, Object>> TOOL_CACHE_MAP = new ConcurrentHashMap<>();
     @Override
     public <T extends HookEvent> Mono<T> onEvent(T event) {
+        if (event instanceof ActingChunkEvent actingChunkEvent) {
+            Object value = actingChunkEvent.getChunk().getMetadata().get(SubAgentTraceEvent.METADATA_KEY);
+            if (value instanceof SubAgentTraceEvent traceEvent) {
+                persistSubAgentTrace(event, traceEvent);
+                return Mono.just(event);
+            }
+        }
+
+        // 子代理已通过其父级的 ActingChunkEvent 进行持久化。若将其自身的 hook 回调作为普通聊天消息持久化，
+        // 会导致卡片交错与数据重复。
+        if (isSubAgentChild(event)) {
+            return Mono.just(event);
+        }
+
         if (event instanceof PostReasoningEvent || event instanceof PostActingEvent || event instanceof ErrorEvent) {
             // 解析租户ID和线程ID
             Long tenantId = extractTenantId(event);
@@ -105,6 +122,12 @@ public class ChatLogHook implements Hook {
                 for (ContentBlock block : content) {
                     if (block instanceof ToolResultBlock toolResult) {
                         String toolId = toolResult.getId();
+                        if (toolResult.getMetadata().containsKey(SubAgentTraceEvent.FINAL_RESULT_METADATA_KEY)) {
+                            Object invocationId = toolResult.getMetadata()
+                                    .get(SubAgentTraceEvent.FINAL_RESULT_METADATA_KEY);
+                            TOOL_CACHE_MAP.remove(toolId == null ? String.valueOf(invocationId) : toolId);
+                            continue;
+                        }
                         try {
                             Map<String, Object> toolCache = TOOL_CACHE_MAP.get(toolId);
                             if (toolCache == null) {
@@ -129,6 +152,42 @@ public class ChatLogHook implements Hook {
         }
 
         return Mono.just(event);
+    }
+
+    private void persistSubAgentTrace(HookEvent event, SubAgentTraceEvent traceEvent) {
+        Long tenantId = extractTenantId(event);
+        String threadId = extractThreadId(event);
+        if (tenantId == null || threadId == null) {
+            return;
+        }
+        Long sessionId;
+        try {
+            sessionId = Long.valueOf(threadId);
+        } catch (NumberFormatException ignored) {
+            return;
+        }
+
+        BeanUtils.getBean(SubAgentTracePersistenceService.class).record(tenantId, sessionId, traceEvent);
+
+        // 锚点参与正常的聊天分支路径；详细信息保留在专用的追踪表中，
+        // 并在读取历史记录时批量加载。
+        if (traceEvent.getEventType() == SubAgentTraceEventType.STARTED) {
+            Map<String, Object> anchor = new HashMap<>();
+            anchor.put("invocationId", traceEvent.getInvocationId());
+            if (traceEvent.getAgent() != null) {
+                anchor.put("agentTitle", traceEvent.getAgent().getTitle());
+                anchor.put("agentCode", traceEvent.getAgent().getCode());
+            }
+            ConcurrentLogProducer.pushLog(buildChatMessage(
+                    sessionId, "subagent", JsonUtils.toJsonStr(anchor), tenantId));
+        }
+    }
+
+    private boolean isSubAgentChild(HookEvent event) {
+        if (event.getAgent() instanceof AgentBase agentBase) {
+            return AgentMetadataStore.get(agentBase.getAgentId(), "subagentInvocationId") != null;
+        }
+        return false;
     }
 
     private Long extractTenantId(HookEvent event) {

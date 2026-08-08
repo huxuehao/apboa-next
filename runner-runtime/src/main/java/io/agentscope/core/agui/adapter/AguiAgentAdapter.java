@@ -16,13 +16,19 @@
 package io.agentscope.core.agui.adapter;
 
 import com.hxh.apboa.engine.hook.builtins.IConfirmationHook;
+import com.hxh.apboa.common.subagent.SubAgentTraceEvent;
+import com.hxh.apboa.engine.agui.AgentContext;
+import com.hxh.apboa.engine.memory.ObservableAutoContextMemory;
 import io.agentscope.core.agent.Agent;
 import io.agentscope.core.agent.Event;
 import io.agentscope.core.agent.EventType;
 import io.agentscope.core.agent.StreamOptions;
+import io.agentscope.core.ReActAgent;
 import io.agentscope.core.agui.converter.AguiMessageConverter;
 import io.agentscope.core.agui.event.AguiEvent;
 import io.agentscope.core.agui.model.RunAgentInput;
+import io.agentscope.core.memory.autocontext.AutoContextMemory;
+import io.agentscope.core.memory.autocontext.TokenCounterUtil;
 import io.agentscope.core.message.ContentBlock;
 import io.agentscope.core.message.GenerateReason;
 import io.agentscope.core.message.Msg;
@@ -37,6 +43,7 @@ import java.util.*;
 
 import lombok.Getter;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Sinks;
 
 /**
  * Adapter that bridges AgentScope agents to the AG-UI protocol.
@@ -109,14 +116,25 @@ public class AguiAgentAdapter {
 
         // Track state for event conversion
         EventConversionState state = new EventConversionState(threadId, runId);
+        state.compressionEventCount = currentCompressionEventCount();
+        Sinks.Many<AguiEvent> lifecycleEvents = Sinks.many().unicast().onBackpressureBuffer();
+        configureCompressionLifecycle(state, lifecycleEvents);
+
+        Flux<AguiEvent> agentEvents = agent.stream(msgs, options)
+                .concatMapIterable(event -> convertEvent(event, state))
+                .doFinally(signal -> {
+                    clearCompressionLifecycle();
+                    lifecycleEvents.tryEmitComplete();
+                });
 
         return Flux.concat(
-                        // Emit RUN_STARTED
-                        Flux.just(new AguiEvent.RunStarted(threadId, runId)),
-                        // Stream agent events and convert to AG-UI events
-                        // Use concatMapIterable to preserve strict event ordering
-                        agent.stream(msgs, options)
-                                .concatMapIterable(event -> convertEvent(event, state)),
+                        // Emit RUN_STARTED and the initial context snapshot
+                        Flux.concat(
+                                Flux.just(new AguiEvent.RunStarted(threadId, runId)),
+                                Flux.fromIterable(buildInitialContextUsageEvent(state))),
+                        // Stream agent events and compression lifecycle events concurrently so
+                        // STARTED can reach the client before the synchronous summary call ends.
+                        Flux.merge(lifecycleEvents.asFlux(), agentEvents),
                         // Emit any pending end events and RUN_FINISHED
                         Flux.defer(() -> finishRun(state)))
                 .onErrorResume(
@@ -272,10 +290,34 @@ public class AguiAgentAdapter {
                 }
             }
         } else if (type == EventType.TOOL_RESULT) {
+            boolean subAgentTraceEvent = false;
+            for (ContentBlock block : msg.getContent()) {
+                if (block instanceof ToolResultBlock toolResult
+                        && toolResult.getMetadata().containsKey(SubAgentTraceEvent.METADATA_KEY)) {
+                    Object trace = toolResult.getMetadata().get(SubAgentTraceEvent.METADATA_KEY);
+                    events.add(new AguiEvent.Custom(
+                            state.threadId,
+                            state.runId,
+                            SubAgentTraceEvent.CUSTOM_EVENT_NAME,
+                            trace));
+                    subAgentTraceEvent = true;
+                }
+            }
+
+            if (subAgentTraceEvent) {
+                // Intermediate sub-agent chunks are a separate custom protocol. They must never
+                // enter the parent agent's text/tool conversion state.
+                return events;
+            }
+
             if (event.isLast()) {
                 // Handle tool results
                 for (ContentBlock block : msg.getContent()) {
                     if (block instanceof ToolResultBlock toolResult) {
+                        if (toolResult.getMetadata().containsKey(SubAgentTraceEvent.FINAL_RESULT_METADATA_KEY)) {
+                            // The dedicated sub-agent card replaces the generic parent tool card.
+                            continue;
+                        }
                         String toolCallId = toolResult.getId();
                         String result = extractToolResultText(toolResult);
 
@@ -302,30 +344,6 @@ public class AguiAgentAdapter {
                     }
                 }
             }
-            /**
-             * 【子Agent流式事件发送】
-             * 此处可以实现子Agent流式事件包装成AguiEvent并发送，但是目前前端适配效果不好。
-             * 此处若想可用，需要对AguiEvent事件进行扩展，同时前端要实现合理的子Agent交互效果，并且支持多个子Agent并行运行。
-             * TODO: 待前端适配完善后再启用
-             */
-//            else {
-//                for (ContentBlock block : msg.getContent()) {
-//                    if (block instanceof ToolResultBlock toolResult) {
-//                        Object o = toolResult.getMetadata().get("subagent_id");
-//                        if (o != null) {
-//                            List<ContentBlock> output = toolResult.getOutput();
-//                            for (ContentBlock contentBlock : output) {
-//                                if (contentBlock instanceof TextBlock textBlock){
-//                                    String text = textBlock.getText();
-//                                    Event subEvent = JsonUtils.getJsonCodec().fromJson(text, Event.class);
-//                                    events.addAll(convertEvent(subEvent, state));
-//                                }
-//                            }
-//                        }
-//                    }
-//                }
-//            }
-
         } else if (type == EventType.AGENT_RESULT) {
             // pending 精确为 need_confirm 工具——过滤掉同轮被 stopAgent 连累的普通/MCP 工具。
             // 前端据此逐工具渲染「允许/禁止」，决策齐了调 /agui/resume。
@@ -352,7 +370,195 @@ public class AguiAgentAdapter {
             }
         }
 
+        // 在一轮思考、工具执行或正文输出完成后推送上下文使用量。
+        if (event.isLast()
+                && (type == EventType.REASONING
+                        || type == EventType.TOOL_RESULT
+                        || type == EventType.AGENT_RESULT)) {
+            events.addAll(buildContextUsageEvents(state, type));
+        }
+
         return events;
+    }
+
+    /** 注册压缩开始监听器，使压缩模型调用前即可推送 SSE。 */
+    private void configureCompressionLifecycle(
+            EventConversionState state, Sinks.Many<AguiEvent> lifecycleEvents) {
+        if (!(agent instanceof ReActAgent reActAgent)
+                || !(reActAgent.getMemory() instanceof ObservableAutoContextMemory memory)) {
+            return;
+        }
+        memory.setCompressionListener(started -> {
+            state.compressionStarted = true;
+            Map<String, Object> usage = contextUsagePayload(started, "COMPRESSION", false);
+            usage.put("status", "STARTED");
+            lifecycleEvents.tryEmitNext(new AguiEvent.Custom(
+                    state.threadId,
+                    state.runId,
+                    "CONTEXT_COMPRESSION",
+                    usage));
+        });
+    }
+
+    /** 清理监听器，避免一次运行的 SSE sink 被后续运行继续引用。 */
+    private void clearCompressionLifecycle() {
+        if (agent instanceof ReActAgent reActAgent
+                && reActAgent.getMemory() instanceof ObservableAutoContextMemory memory) {
+            memory.setCompressionListener(null);
+        }
+    }
+
+    /** 获取当前记忆中的压缩事件数量，用于区分本轮新增压缩。 */
+    private int currentCompressionEventCount() {
+        if (agent instanceof ReActAgent reActAgent
+                && reActAgent.getMemory() instanceof AutoContextMemory memory) {
+            return memory.getCompressionEvents().size();
+        }
+        return 0;
+    }
+
+    /** 构建本轮运行开始时的上下文快照。 */
+    private List<AguiEvent> buildInitialContextUsageEvent(EventConversionState state) {
+        if (!(agent instanceof ReActAgent reActAgent)
+                || !(reActAgent.getMemory() instanceof AutoContextMemory memory)) {
+            return List.of();
+        }
+        Map<String, Object> usage = contextUsagePayload(memory, "RUN", memory.getCompressionEvents().size() > 0);
+        return List.of(new AguiEvent.Custom(
+                state.threadId,
+                state.runId,
+                "CONTEXT_USAGE",
+                usage));
+    }
+
+    /** 构建上下文使用量事件，并在检测到压缩后补发压缩完成事件。 */
+    private List<AguiEvent> buildContextUsageEvents(EventConversionState state, EventType type) {
+        if (!(agent instanceof ReActAgent reActAgent)
+                || !(reActAgent.getMemory() instanceof AutoContextMemory memory)) {
+            return List.of();
+        }
+
+        int compressionEvents = memory.getCompressionEvents().size();
+        List<AguiEvent> events = new ArrayList<>();
+
+        if (compressionEvents > state.compressionEventCount) {
+            // ObservableAutoContextMemory 会在压缩模型调用前推送 STARTED；非包装记忆保留兜底。
+            if (!state.compressionStarted) {
+                Map<String, Object> usage = contextUsagePayload(memory, "COMPRESSION", false);
+                usage.put("status", "STARTED");
+                events.add(new AguiEvent.Custom(
+                        state.threadId,
+                        state.runId,
+                        "CONTEXT_COMPRESSION",
+                        usage));
+            }
+            Map<String, Object> finishedUsage = contextUsagePayload(memory, "COMPRESSION", true);
+            finishedUsage.put("status", "FINISHED");
+            finishedUsage.put("compressed", true);
+            events.add(new AguiEvent.Custom(
+                    state.threadId,
+                    state.runId,
+                    "CONTEXT_COMPRESSION",
+                    finishedUsage));
+            state.compressionEventCount = compressionEvents;
+            state.compressionStarted = false;
+        }
+
+        String phase = switch (type) {
+            case REASONING -> "REASONING";
+            case TOOL_RESULT -> "TOOL";
+            case AGENT_RESULT -> "ANSWER";
+            default -> "UNKNOWN";
+        };
+        Map<String, Object> usage = contextUsagePayload(memory, phase, compressionEvents > 0);
+        events.add(new AguiEvent.Custom(
+                state.threadId,
+                state.runId,
+                "CONTEXT_USAGE",
+                usage));
+        return events;
+    }
+
+    /** 将记忆快照转换为前端可识别的压缩压力数据。 */
+    private Map<String, Object> contextUsagePayload(
+            ObservableAutoContextMemory.ContextUsageSnapshot snapshot,
+            String phase,
+            boolean compressed) {
+        Map<String, Object> usage = new LinkedHashMap<>();
+        usage.put("usedTokens", snapshot.usedTokens());
+        usage.put("totalTokens", snapshot.totalTokens());
+        usage.put("tokenThreshold", snapshot.tokenThreshold());
+        usage.put("messageCount", snapshot.messageCount());
+        usage.put("messageThreshold", snapshot.messageThreshold());
+        usage.put("tokenPressure", snapshot.tokenPressure());
+        usage.put("messagePressure", snapshot.messagePressure());
+        usage.put("compressionPressure", snapshot.compressionPressure());
+        usage.put("ratio", snapshot.compressionPressure());
+        usage.put("triggerReason", snapshot.triggerReason());
+        usage.put("phase", phase);
+        usage.put("estimated", true);
+        usage.put("compressed", compressed);
+        usage.put("timestamp", System.currentTimeMillis());
+        return usage;
+    }
+
+    private Map<String, Object> contextUsagePayload(
+            AutoContextMemory memory, String phase, boolean compressed) {
+        if (memory instanceof ObservableAutoContextMemory observableMemory) {
+            return contextUsagePayload(observableMemory.getContextUsageSnapshot(), phase, compressed);
+        }
+        long totalTokens = resolveContextLimit();
+        int usedTokens = TokenCounterUtil.calculateToken(memory.getMessages());
+        // 与 AutoContextMemory 的 int 阈值计算保持一致，避免前端显示与实际触发点偏移。
+        long tokenThreshold = (int) (totalTokens * resolveCompressionTokenRatio());
+        int messageCount = memory.getMessages().size();
+        int messageThreshold = resolveCompressionMessageThreshold();
+        double tokenPressure = tokenThreshold <= 0 ? 1D : usedTokens / (double) tokenThreshold;
+        double messagePressure = messageThreshold <= 0 ? 1D : messageCount / (double) messageThreshold;
+        Map<String, Object> usage = new LinkedHashMap<>();
+        usage.put("usedTokens", usedTokens);
+        usage.put("totalTokens", totalTokens);
+        usage.put("tokenThreshold", tokenThreshold);
+        usage.put("messageCount", messageCount);
+        usage.put("messageThreshold", messageThreshold);
+        usage.put("tokenPressure", tokenPressure);
+        usage.put("messagePressure", messagePressure);
+        usage.put("compressionPressure", Math.min(1D, Math.max(tokenPressure, messagePressure)));
+        usage.put("ratio", usage.get("compressionPressure"));
+        usage.put("triggerReason", tokenPressure >= messagePressure ? "TOKEN" : "MESSAGE");
+        usage.put("phase", phase);
+        usage.put("estimated", true);
+        usage.put("compressed", compressed);
+        usage.put("timestamp", System.currentTimeMillis());
+        return usage;
+    }
+
+    /** 从当前 Agent 配置中读取上下文上限，读取失败时使用 AgentScope 默认值。 */
+    private long resolveContextLimit() {
+        return AgentContext.getIfExists()
+                .map(AgentContext::getAgentDefinition)
+                .map(definition -> definition.getMemoryCompressionConfig())
+                .map(config -> com.hxh.apboa.common.util.JsonUtils.getLongValue(
+                        config, "maxToken", 131072L))
+                .orElse(131072L);
+    }
+
+    /** 从 Agent 配置读取 token 压缩阈值比例。 */
+    private double resolveCompressionTokenRatio() {
+        return AgentContext.getIfExists()
+                .map(AgentContext::getAgentDefinition)
+                .map(definition -> definition.getMemoryCompressionConfig())
+                .map(config -> com.hxh.apboa.common.util.JsonUtils.getDoubleValue(config, "tokenRatio", 0.75D))
+                .orElse(0.75D);
+    }
+
+    /** 从 Agent 配置读取消息数量压缩阈值。 */
+    private int resolveCompressionMessageThreshold() {
+        return AgentContext.getIfExists()
+                .map(AgentContext::getAgentDefinition)
+                .map(definition -> definition.getMemoryCompressionConfig())
+                .map(config -> com.hxh.apboa.common.util.JsonUtils.getIntValue(config, "msgThreshold", 100))
+                .orElse(100);
     }
 
     /**
@@ -447,6 +653,8 @@ public class AguiAgentAdapter {
         private final Set<String> startedReasoningMessages = new LinkedHashSet<>();
         private final Set<String> endedReasoningMessages = new LinkedHashSet<>();
         private String currentTextMessageId = null;
+        private int compressionEventCount = 0;
+        private boolean compressionStarted = false;
 
         EventConversionState(String threadId, String runId) {
             this.threadId = threadId;

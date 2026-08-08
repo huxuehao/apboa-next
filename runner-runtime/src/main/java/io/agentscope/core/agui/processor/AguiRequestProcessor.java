@@ -227,19 +227,6 @@ public class AguiRequestProcessor {
      * HITL 刷新恢复（配合前端刷新/重进会话）：从持久 Session 的暂停态重建「待确认工具」列表，
      * 供前端在没有内存态（RunTracker 已 markCompleted、或跨实例/重启）时重建确认 UI。
      *
-     * <p><b>只读</b>：仅 {@code loadFrom} 加载暂停态用于读取，<b>不</b> saveTo / delete，
-     * 暂停态原封不动，后续真正 {@link #resume} 时仍可从暂停点续跑。
-     *
-     * <p><b>暂停态判据</b>：序列化后的 {@code Msg} 不保留 {@code generateReason}
-     * （实测 MysqlSession 的 memory JSON 无该字段），故不能靠 {@code REASONING_STOP_REQUESTED} 判断，
-     * 改用结构判据——memory 最后一条为 {@code ASSISTANT} 且含 {@link ToolUseBlock}
-     * （确认暂停发生在工具执行前，其后不会再有 TOOL 结果消息）。再用
-     * {@link IConfirmationHook#isNeedConfirm} 过滤，与 {@code AguiAgentAdapter} 推送
-     * {@code TOOL_CONFIRM_REQUIRED} 的口径一致（排除同轮被 stopAgent 连累的普通/MCP 工具，修「MCP 确认假象」）。
-     *
-     * <p>调用前需已初始化最小 {@link AgentContext}（resolveAgent 重建时经 setTenantInfo 回填），
-     * 与 {@link #resume} 的租户/上下文处理一致。
-     *
      * @param threadId 会话 ID（暂停态的 key）
      * @return 待确认工具 [{toolUseId,name,input}]；无暂停态返回空列表
      */
@@ -251,21 +238,9 @@ public class AguiRequestProcessor {
         if (session == null || !session.exists(SimpleSessionKey.of(threadId))) {
             return List.of();
         }
-        ResumeContext rc = loadResumeContext(threadId);
-        if (rc == null) {
-            return List.of();
-        }
-        TenantUtils.setCurrentTenant(rc.tenantId, rc.tenantCode);
+        List<Msg> messages = null;
         try {
-            // 重建 agent 会重新构建 toolkit → 重新登记 need_confirm 工具（isNeedConfirm 才有依据），
-            // 再 loadFrom 加载暂停态。二者顺序不能反。
-            Agent agent = agentResolver.resolveAgent(rc.agentCode, threadId);
-            if (!(agent instanceof ReActAgent reActAgent) || reActAgent.getMemory() == null) {
-                return List.of();
-            }
-            reActAgent.loadFrom(session, threadId);
-
-            List<Msg> messages = reActAgent.getMemory().getMessages();
+            messages = session.getList(SimpleSessionKey.of(threadId), "memory_messages", Msg.class);
             if (messages == null || messages.isEmpty()) {
                 return List.of();
             }
@@ -289,7 +264,9 @@ public class AguiRequestProcessor {
             logger.warn("恢复暂停态待确认列表失败 threadId={}: {}", threadId, e.getMessage());
             return List.of();
         } finally {
-            TenantUtils.clear();
+            if (messages != null) {
+                messages.clear();
+            }
         }
     }
 

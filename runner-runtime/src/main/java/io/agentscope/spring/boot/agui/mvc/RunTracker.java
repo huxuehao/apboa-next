@@ -65,12 +65,16 @@ public class RunTracker {
      * @param subscription Flux 订阅（用于 dispose）
      */
     public void registerRun(String threadId, Agent agent, Disposable subscription) {
-        ActiveRun existing = activeRuns.get(threadId);
-        if (existing != null && !existing.completed) {
-            logger.warn("Thread {} already has an active run, interrupting old one", threadId);
-            stopRun(threadId);
+        synchronized (activeRuns) {
+            ActiveRun existing = activeRuns.get(threadId);
+            if (existing != null && existing.state != RunState.COMPLETED) {
+                throw new IllegalStateException(
+                        existing.state == RunState.STOPPING
+                                ? "Agent is stopping, please wait for it to finish"
+                                : "Agent is still running, please wait for it to finish");
+            }
+            activeRuns.put(threadId, new ActiveRun(agent, subscription));
         }
-        activeRuns.put(threadId, new ActiveRun(agent, subscription));
         logger.debug("Registered active run for thread {}", threadId);
     }
 
@@ -84,6 +88,10 @@ public class RunTracker {
         ActiveRun run = activeRuns.get(threadId);
         if (run != null) {
             run.subscription = subscription;
+            // 停止请求可能早于 Flux 订阅完成，补发一次中断信号，避免订阅时重置中断标志。
+            if (run.state == RunState.STOPPING) {
+                interruptAgent(run, threadId);
+            }
             logger.debug("Updated subscription for thread {}", threadId);
         }
     }
@@ -179,7 +187,7 @@ public class RunTracker {
         }
 
         // 如果已经完成，立即关闭
-        if (run.completed) {
+        if (run.state == RunState.COMPLETED) {
             try {
                 emitter.complete();
             } catch (Exception ignored) {
@@ -195,36 +203,22 @@ public class RunTracker {
      */
     public void stopRun(String threadId) {
         ActiveRun run = activeRuns.get(threadId);
-        if (run == null || run.completed) {
+        if (run == null || run.state == RunState.COMPLETED) {
             return;
         }
 
+        run.state = RunState.STOPPING;
+        interruptAgent(run, threadId);
+        // 不在这里关闭 SSE 或标记完成，必须等待 Agent 流真正结束后再释放运行占用。
+        logger.info("Stop requested for thread {}", threadId);
+    }
+
+    private void interruptAgent(ActiveRun run, String threadId) {
         try {
             run.agent.interrupt();
         } catch (Exception e) {
             logger.warn("Error interrupting agent for thread {}: {}", threadId, e.getMessage());
         }
-
-        try {
-            if (run.subscription != null && !run.subscription.isDisposed()) {
-                run.subscription.dispose();
-            }
-        } catch (Exception e) {
-            logger.warn("Error disposing subscription for thread {}: {}", threadId, e.getMessage());
-        }
-
-        run.completed = true;
-
-        // 关闭所有 SSE 连接
-        for (SseEmitter emitter : run.emitters) {
-            try {
-                emitter.complete();
-            } catch (Exception ignored) {
-            }
-        }
-        run.emitters.clear();
-
-        logger.info("Stopped run for thread {}", threadId);
     }
 
     /**
@@ -235,7 +229,13 @@ public class RunTracker {
      */
     public boolean getStatus(String threadId) {
         ActiveRun run = activeRuns.get(threadId);
-        return run != null && !run.completed;
+        return run != null && run.state != RunState.COMPLETED;
+    }
+
+    /** 获取运行生命周期状态，停止请求期间仍返回 STOPPING。 */
+    public RunState getRunState(String threadId) {
+        ActiveRun run = activeRuns.get(threadId);
+        return run == null ? RunState.COMPLETED : run.state;
     }
 
     /**
@@ -245,7 +245,7 @@ public class RunTracker {
      */
     public Set<String> getActiveRuns() {
         return activeRuns.entrySet().stream()
-                .filter(e -> !e.getValue().completed)
+                .filter(e -> e.getValue().state != RunState.COMPLETED)
                 .map(Map.Entry::getKey)
                 .collect(Collectors.toSet());
     }
@@ -260,7 +260,10 @@ public class RunTracker {
         if (run == null) {
             return;
         }
-        run.completed = true;
+        if (run.state == RunState.COMPLETED) {
+            return;
+        }
+        run.state = RunState.COMPLETED;
 
         // 关闭所有 SSE 连接
         for (SseEmitter emitter : run.emitters) {
@@ -273,7 +276,8 @@ public class RunTracker {
 
         // 延迟清理
         cleanupExecutor.schedule(() -> {
-            activeRuns.remove(threadId);
+            // 只清理原运行记录，避免新运行已经注册后被旧任务误删。
+            activeRuns.remove(threadId, run);
             logger.debug("Cleaned up completed run for thread {}", threadId);
         }, CLEANUP_DELAY_MINUTES, TimeUnit.MINUTES);
     }
@@ -310,11 +314,18 @@ public class RunTracker {
         final List<AguiEvent> eventBuffer = new ArrayList<>();
         final List<SseEmitter> emitters = new CopyOnWriteArrayList<>();
         final Object bufferLock = new Object();
-        volatile boolean completed = false;
+        volatile RunState state = RunState.RUNNING;
 
         ActiveRun(Agent agent, Disposable subscription) {
             this.agent = agent;
             this.subscription = subscription;
         }
+    }
+
+    /** 运行生命周期状态。 */
+    public enum RunState {
+        RUNNING,
+        STOPPING,
+        COMPLETED
     }
 }

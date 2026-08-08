@@ -73,13 +73,15 @@ const formatTime = (dateStr?: string): string => {
 
 const props = defineProps<{
   id: string
-  role: 'user' | 'assistant' | 'system' | 'tool' | 'error' | 'thinking'
+  role: 'user' | 'assistant' | 'system' | 'tool' | 'error' | 'thinking' | 'subagent'
   content: string
   currentIndex: number
   totalMessages: number
   createdAt?: string
   agentHasResult?: boolean
   isStreaming?: boolean
+  isMemoryCompression?: boolean
+  readonlyInteraction?: boolean
 }>()
 
 defineEmits<{
@@ -94,6 +96,7 @@ const isThinking = computed(() => props.role === 'thinking')
 const isAssistant = computed(() => props.role === 'assistant')
 const isTool = computed(() => props.role === 'tool')
 const isError = computed(() => props.role === 'error')
+const isMemoryCompression = computed(() => props.isMemoryCompression)
 
 const parsedUserContent = computed(() => parseUserContent(props.content))
 const formattedTime = computed(() => formatTime(props.createdAt))
@@ -231,19 +234,19 @@ const openPreview = (index: number) => {
         <div v-if="isThinking" class="chat-reasoning-panel">
           <div class="chat-reasoning-header" @click="reasoningExpanded = !reasoningExpanded">
             <span class="chat-reasoning-icon">
-              <LoadingOutlined v-if="isStreaming" spin />
+              <LoadingOutlined v-if="isStreaming || isMemoryCompression" spin />
               <BulbOutlined v-else />
             </span>
             <span class="chat-reasoning-title">
-              {{ isStreaming ? '思考中...' : '思考过程' }}
+              {{ isMemoryCompression ? '记忆压缩中...' : (isStreaming ? '思考中...' : '思考过程') }}
             </span>
-            <span class="chat-reasoning-arrow">
+            <span class="chat-reasoning-arrow" v-if="!isMemoryCompression">
               <DownOutlined v-if="reasoningExpanded" />
               <RightOutlined v-else />
             </span>
           </div>
-          <div class="chat-reasoning-content" :class="{ 'is-expanded': reasoningExpanded }">
-            {{content}}
+          <div v-if="!isMemoryCompression" class="chat-reasoning-content" :class="{ 'is-expanded': reasoningExpanded }">
+            {{ content }}
           </div>
         </div>
       </div>
@@ -258,7 +261,8 @@ const openPreview = (index: number) => {
           <MarkdownRenderer
             :content="content"
             :is-streaming="isStreaming"
-            :disabled="currentIndex !== totalMessages - 1"
+            :disabled="currentIndex !== totalMessages - 1 || readonlyInteraction"
+            :readonly-interaction="readonlyInteraction"
             @interaction-submit="$emit('interactionSubmit', $event)"
             @uip-retry="$emit('uipRetry', $event)"
             @vep-retry="$emit('vepRetry', $event)" />

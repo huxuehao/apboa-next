@@ -23,6 +23,7 @@ import type {
   TenantJoinRequestStatus
 } from './enums'
 import type { AgentA2A, HookConfig, JobInfo } from '@/types/entity.ts'
+import type { SubAgentRunVO } from './subagent'
 
 /**
  * 租户VO
@@ -474,6 +475,7 @@ export interface ChatMessageVO {
   path: string
   depth: number
   createdAt: string
+  subAgentRun?: SubAgentRunVO | null
 }
 
 /**

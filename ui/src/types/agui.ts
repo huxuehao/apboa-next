@@ -141,6 +141,47 @@ export interface CustomEvent extends BaseEvent {
   value: unknown
 }
 
+/** 上下文空间使用量事件。 */
+export interface ContextUsageEvent extends CustomEvent {
+  name: 'CONTEXT_USAGE'
+  value: {
+    usedTokens: number
+    totalTokens: number
+    tokenThreshold: number
+    messageCount: number
+    messageThreshold: number
+    tokenPressure: number
+    messagePressure: number
+    compressionPressure: number
+    ratio: number
+    triggerReason: 'TOKEN' | 'MESSAGE'
+    phase: 'RUN' | 'REASONING' | 'TOOL' | 'ANSWER' | 'COMPRESSION' | 'UNKNOWN'
+    estimated?: boolean
+    compressed?: boolean
+    timestamp?: number
+  }
+}
+
+/** 上下文压缩状态事件。 */
+export interface ContextCompressionEvent extends CustomEvent {
+  name: 'CONTEXT_COMPRESSION'
+  value: {
+    status: 'STARTED' | 'FINISHED'
+    usedTokens: number
+    totalTokens: number
+    tokenThreshold: number
+    messageCount: number
+    messageThreshold: number
+    tokenPressure: number
+    messagePressure: number
+    compressionPressure: number
+    ratio: number
+    triggerReason: 'TOKEN' | 'MESSAGE'
+    phase: 'COMPRESSION'
+    compressed?: boolean
+  }
+}
+
 /** 推理消息开始 */
 export interface ReasoningMessageStartEvent extends BaseEvent {
   type: 'REASONING_MESSAGE_START'

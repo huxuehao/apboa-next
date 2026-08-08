@@ -339,6 +339,11 @@ public class AguiMvcController {
         return runTracker.getStatus(threadId);
     }
 
+    /** 获取指定会话的完整运行状态。 */
+    public RunTracker.RunState getRunState(String threadId) {
+        return runTracker.getRunState(threadId);
+    }
+
     /**
      * 强制停止指定会话的智能体。
      *

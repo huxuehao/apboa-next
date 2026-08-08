@@ -186,23 +186,29 @@ public class AguiRestController {
     @SkAccess
     @ChatKeyAccess
     @GetMapping(value = "${agentscope.agui.path-prefix:/agui}/status/{threadId}", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<Map<String, Boolean>> getStatus(@PathVariable("threadId") String threadId) {
+    public ResponseEntity<Map<String, Object>> getStatus(@PathVariable("threadId") String threadId) {
         boolean running = aguiMvcController.getStatus(threadId);
-        return ResponseEntity.ok(Map.of("running", running));
+        return ResponseEntity.ok(Map.of(
+                "running", running,
+                "state", aguiMvcController.getRunState(threadId).name()));
     }
 
     /**
      * 强制停止端点。
      *
      * @param threadId 会话 ID
-     * @return { stopped: true }
+     * @return { accepted: true, state: "STOPPING" }
      */
     @SkAccess
     @ChatKeyAccess
     @PostMapping(value = "${agentscope.agui.path-prefix:/agui}/stop/{threadId}", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<Map<String, Boolean>> stop(@PathVariable("threadId") String threadId) {
+    public ResponseEntity<Map<String, Object>> stop(@PathVariable("threadId") String threadId) {
         aguiMvcController.stop(threadId);
-        return ResponseEntity.ok(Map.of("stopped", true));
+        RunTracker.RunState state = aguiMvcController.getRunState(threadId);
+        return ResponseEntity.ok(Map.of(
+                "accepted", true,
+                "stopped", state == RunTracker.RunState.COMPLETED,
+                "state", state.name()));
     }
 
     /**

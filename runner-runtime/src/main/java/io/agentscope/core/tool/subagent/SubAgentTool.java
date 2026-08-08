@@ -17,27 +17,38 @@ package io.agentscope.core.tool.subagent;
 
 import com.hxh.apboa.common.util.AgentMetadataStore;
 import com.hxh.apboa.common.util.TenantUtils;
+import com.hxh.apboa.common.subagent.SubAgentTraceEvent;
+import com.hxh.apboa.common.subagent.SubAgentTraceEventType;
 import com.hxh.apboa.engine.agui.AgentContext;
 import io.agentscope.core.agent.Agent;
 import io.agentscope.core.agent.AgentBase;
 import io.agentscope.core.agent.Event;
 import io.agentscope.core.agent.StreamOptions;
+import io.agentscope.core.message.ContentBlock;
+import io.agentscope.core.message.GenerateReason;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
 import io.agentscope.core.message.TextBlock;
+import io.agentscope.core.message.ThinkingBlock;
 import io.agentscope.core.message.ToolResultBlock;
+import io.agentscope.core.message.ToolUseBlock;
 import io.agentscope.core.session.Session;
 import io.agentscope.core.state.StateModule;
 import io.agentscope.core.tool.AgentTool;
 import io.agentscope.core.tool.ToolCallParam;
 import io.agentscope.core.tool.ToolEmitter;
-import io.agentscope.core.util.JsonUtils;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -68,6 +79,12 @@ public class SubAgentTool implements AgentTool {
 
     /** Parameter name for message. */
     private static final String PARAM_MESSAGE = "message";
+    private static final String POLICY_REJECTED_METADATA_KEY = "apboa.subagent.policy-rejected";
+    private static final Pattern UIP_BLOCK_PATTERN = Pattern.compile("(?is)```\\s*uip\\b");
+
+    /** @deprecated Use {@link SubAgentTraceEvent#FINAL_RESULT_METADATA_KEY}. */
+    @Deprecated
+    public static final String FINAL_TRACE_METADATA_KEY = SubAgentTraceEvent.FINAL_RESULT_METADATA_KEY;
 
     private final String name;
     private final String description;
@@ -175,13 +192,19 @@ public class SubAgentTool implements AgentTool {
 
                         // Get emitter for event forwarding
                         ToolEmitter emitter = param.getEmitter();
+                        // The trace captures the immutable invocation identity before streaming starts.
+                        SubAgentTraceContext trace = SubAgentTraceContext.create(
+                                param.getToolUseBlock(), param.getAgent(), agentContext, agent, finalSessionId);
+                        emitTrace(emitter, trace, SubAgentTraceEventType.STARTED, Map.of(
+                                "task", message,
+                                "toolName", name));
 
                         // Execute and save state after completion
                         Mono<ToolResultBlock> result;
                         if (config.isForwardEvents()) {
-                            result = executeWithStreaming(agent, userMsg, finalSessionId, emitter);
+                            result = executeWithStreaming(agent, userMsg, finalSessionId, emitter, trace);
                         } else {
-                            result = executeWithoutStreaming(agent, userMsg, finalSessionId);
+                            result = executeWithoutStreaming(agent, userMsg, finalSessionId, trace);
                         }
 
                         // 设置 AgentId 到 AgentMetadataStore
@@ -194,6 +217,10 @@ public class SubAgentTool implements AgentTool {
                             AgentMetadataStore.put(childAgentId, "tenantId", agentContext.getTenantId());
                             AgentMetadataStore.put(childAgentId, "tenantCode", agentContext.getTenantCode());
                             AgentMetadataStore.put(childAgentId, "cleanUpOnOwn", true);
+                            AgentMetadataStore.put(
+                                    childAgentId,
+                                    "subagentInvocationId",
+                                    param.getToolUseBlock() == null ? null : param.getToolUseBlock().getId());
                         } else {
                             childAgentId = null;
                         }
@@ -204,7 +231,27 @@ public class SubAgentTool implements AgentTool {
                                     if (agent instanceof StateModule) {
                                         saveAgentState(finalSessionId, (StateModule) agent);
                                     }
-                                }).doFinally(signalType -> {
+                                    if (isPolicyRejected(r)) {
+                                        emitTrace(emitter, trace, SubAgentTraceEventType.BLOCKED, Map.of(
+                                                "message", extractResultText(r),
+                                                "summary", extractResultText(r),
+                                                "status", "BLOCKED"));
+                                    } else {
+                                        emitTrace(emitter, trace, SubAgentTraceEventType.FINISHED, Map.of(
+                                                "summary", extractResultText(r),
+                                                "status", "SUCCESS"));
+                                    }
+                                }).onErrorResume(error -> {
+                                    logger.error("Error in sub-agent execution: {}", safeMessage(error), error);
+                                    emitTrace(emitter, trace, SubAgentTraceEventType.FAILED, Map.of(
+                                            "message", safeMessage(error),
+                                            "status", "FAILED"));
+                                    return Mono.just(ToolResultBlock.error(
+                                            "Execution error: " + safeMessage(error)));
+                                })
+                                .doOnCancel(() -> emitTrace(emitter, trace, SubAgentTraceEventType.CANCELLED, Map.of(
+                                        "status", "CANCELLED")))
+                                .doFinally(signalType -> {
                                     if (childAgentId != null) {
                                         AgentMetadataStore.removeOnOwn(childAgentId);
                                     }
@@ -271,7 +318,11 @@ public class SubAgentTool implements AgentTool {
      * @return A Mono emitting the tool result block
      */
     private Mono<ToolResultBlock> executeWithStreaming(
-            Agent agent, Msg userMsg, String sessionId, ToolEmitter emitter) {
+            Agent agent,
+            Msg userMsg,
+            String sessionId,
+            ToolEmitter emitter,
+            SubAgentTraceContext trace) {
 
         StreamOptions streamOptions =
                 config.getStreamOptions() != null
@@ -281,25 +332,12 @@ public class SubAgentTool implements AgentTool {
         return Mono.deferContextual(
                 ctxView ->
                         agent.stream(List.of(userMsg), streamOptions)
-                                .doOnNext(event -> forwardEvent(event, emitter, agent, sessionId))
+                                .doOnNext(event -> forwardEvent(event, emitter, trace))
                                 .filter(Event::isLast)
                                 .last()
-                                .map(
-                                        lastEvent -> {
-                                            Msg response = lastEvent.getMessage();
-                                            return buildResult(response, sessionId);
-                                        })
-                                .contextWrite(context -> context.putAll(ctxView))
-                                .onErrorResume(
-                                        e -> {
-                                            logger.error(
-                                                    "Error in streaming execution:" + " {}",
-                                                    e.getMessage(),
-                                                    e);
-                                            return Mono.just(
-                                                    ToolResultBlock.error(
-                                                            "Execution error: " + e.getMessage()));
-                                        }));
+                                .map(lastEvent -> buildTerminalResult(
+                                        lastEvent.getMessage(), sessionId, trace))
+                                .contextWrite(context -> context.putAll(ctxView)));
     }
 
     /**
@@ -313,20 +351,12 @@ public class SubAgentTool implements AgentTool {
      * @return A Mono emitting the tool result block
      */
     private Mono<ToolResultBlock> executeWithoutStreaming(
-            Agent agent, Msg userMsg, String sessionId) {
+            Agent agent, Msg userMsg, String sessionId, SubAgentTraceContext trace) {
 
         return Mono.deferContextual(
                 ctxView ->
                         agent.call(List.of(userMsg))
-                                .map(response -> buildResult(response, sessionId))
-                                .onErrorResume(
-                                        e -> {
-                                            logger.error(
-                                                    "Error in execution: {}", e.getMessage(), e);
-                                            return Mono.just(
-                                                    ToolResultBlock.error(
-                                                            "Execution error: " + e.getMessage()));
-                                        })
+                                .map(response -> buildTerminalResult(response, sessionId, trace))
                                 .contextWrite(context -> context.putAll(ctxView)));
     }
 
@@ -341,19 +371,43 @@ public class SubAgentTool implements AgentTool {
      * @param agent The agent
      * @param sessionId Current session ID
      */
-    private void forwardEvent(Event event, ToolEmitter emitter, Agent agent, String sessionId) {
+    private void forwardEvent(Event event, ToolEmitter emitter, SubAgentTraceContext trace) {
+        if (event == null || event.getMessage() == null) {
+            return;
+        }
         try {
-            String json = JsonUtils.getJsonCodec().toJson(event);
-            Map<String, Object> metadata = new HashMap<>();
-            metadata.put("subagent_event", event == null ? "" : event);
-            metadata.put("subagent_name", agent.getName() == null ? "" : agent.getName());
-            metadata.put("subagent_id", agent.getAgentId() == null ? "" : agent.getAgentId());
-            metadata.put("subagent_session_id", sessionId == null ? "" : sessionId);
-            emitter.emit(
-                    new ToolResultBlock(
-                            null, null, List.of(TextBlock.builder().text(json).build()), metadata));
+            for (ContentBlock block : event.getMessage().getContent()) {
+                if (block instanceof TextBlock textBlock) {
+                    emitTrace(emitter, trace,
+                            event.isLast() ? SubAgentTraceEventType.MESSAGE_COMPLETED : SubAgentTraceEventType.MESSAGE_DELTA,
+                            Map.of("messageId", event.getMessage().getId(), "role", "assistant",
+                                    "content", textBlock.getText(), "isLast", event.isLast()));
+                } else if (block instanceof ThinkingBlock thinkingBlock) {
+                    emitTrace(emitter, trace,
+                            event.isLast() ? SubAgentTraceEventType.MESSAGE_COMPLETED : SubAgentTraceEventType.MESSAGE_DELTA,
+                            Map.of("messageId", event.getMessage().getId(), "role", "thinking",
+                                    "content", thinkingBlock.getThinking(), "isLast", event.isLast()));
+                } else if (block instanceof ToolUseBlock toolUse) {
+                    String toolCallId = toolUse.getId();
+                    if (trace.markToolStarted(toolCallId)) {
+                        emitTrace(emitter, trace, SubAgentTraceEventType.TOOL_STARTED, payload(
+                                "toolCallId", toolCallId,
+                                "name", toolUse.getName(),
+                                "args", toolUse.getContent()));
+                    } else {
+                        emitTrace(emitter, trace, SubAgentTraceEventType.TOOL_ARGUMENTS, payload(
+                                "toolCallId", toolCallId,
+                                "args", toolUse.getContent()));
+                    }
+                } else if (block instanceof ToolResultBlock toolResult) {
+                    emitTrace(emitter, trace, SubAgentTraceEventType.TOOL_COMPLETED, payload(
+                            "toolCallId", toolResult.getId(),
+                            "name", toolResult.getName(),
+                            "result", extractToolResultText(toolResult)));
+                }
+            }
         } catch (Exception e) {
-            logger.warn("Failed to serialize event to JSON: {}", e.getMessage());
+            logger.warn("Failed to forward sub-agent trace event: {}", e.getMessage());
         }
     }
 
@@ -367,14 +421,176 @@ public class SubAgentTool implements AgentTool {
      * @param sessionId The session ID to include in the result
      * @return A tool result block containing the formatted response
      */
-    private ToolResultBlock buildResult(Msg response, String sessionId) {
+    private ToolResultBlock buildResult(Msg response, String sessionId, SubAgentTraceContext trace) {
         String textContent = response.getTextContent();
 
         // Return response with session context
-        return ToolResultBlock.text(
-                String.format(
+        return new ToolResultBlock(
+                null,
+                null,
+                List.of(TextBlock.builder().text(String.format(
                         "session_id: %s\n\n%s",
-                        sessionId, textContent != null ? textContent : "(No response)"));
+                        sessionId, textContent != null ? textContent : "(No response)")) .build()),
+                Map.of(SubAgentTraceEvent.FINAL_RESULT_METADATA_KEY, trace.getInvocationId()));
+    }
+
+    /**
+     * A SubAgentTool is a normal parent-tool call. It must never translate a child pause or a
+     * UIP browser round-trip into a successful result, because the parent would then continue
+     * reasoning with an unfinished delegation.
+     */
+    private ToolResultBlock buildTerminalResult(Msg response, String sessionId, SubAgentTraceContext trace) {
+        String policyMessage = rejectionMessage(response);
+        return policyMessage == null
+                ? buildResult(response, sessionId, trace)
+                : buildPolicyRejectedResult(policyMessage, trace);
+    }
+
+    private static String rejectionMessage(Msg response) {
+        if (response == null) {
+            return null;
+        }
+        if (response.getGenerateReason() == GenerateReason.REASONING_STOP_REQUESTED) {
+            return "Sub-agent execution was blocked because it requested human confirmation. "
+                    + "Delegated agents cannot wait for confirmation; ask the user from the root agent instead.";
+        }
+        String text = response.getTextContent();
+        if (text != null && UIP_BLOCK_PATTERN.matcher(text).find()) {
+            return "Sub-agent execution was blocked because it emitted a UIP interaction. "
+                    + "Delegated agents cannot receive browser form input; ask the user from the root agent instead.";
+        }
+        return null;
+    }
+
+    private static ToolResultBlock buildPolicyRejectedResult(
+            String message, SubAgentTraceContext trace) {
+        return new ToolResultBlock(
+                null,
+                null,
+                List.of(TextBlock.builder().text(message).build()),
+                Map.of(
+                        SubAgentTraceEvent.FINAL_RESULT_METADATA_KEY, trace.getInvocationId(),
+                        POLICY_REJECTED_METADATA_KEY, true));
+    }
+
+    private static boolean isPolicyRejected(ToolResultBlock result) {
+        return result != null
+                && result.getMetadata() != null
+                && Boolean.TRUE.equals(result.getMetadata().get(POLICY_REJECTED_METADATA_KEY));
+    }
+
+    private static Map<String, Object> payload(Object... pairs) {
+        Map<String, Object> result = new HashMap<>();
+        for (int i = 0; i + 1 < pairs.length; i += 2) {
+            if (pairs[i] != null && pairs[i + 1] != null) {
+                result.put(String.valueOf(pairs[i]), pairs[i + 1]);
+            }
+        }
+        return result;
+    }
+
+    private static String extractResultText(ToolResultBlock result) {
+        return result == null ? "" : extractToolResultText(result);
+    }
+
+    private static String extractToolResultText(ToolResultBlock result) {
+        StringBuilder text = new StringBuilder();
+        for (ContentBlock block : result.getOutput()) {
+            if (block instanceof TextBlock textBlock && textBlock.getText() != null) {
+                if (text.length() > 0) text.append('\n');
+                text.append(textBlock.getText());
+            }
+        }
+        return text.toString();
+    }
+
+    private static String safeMessage(Throwable error) {
+        if (error == null || error.getMessage() == null) return "Sub-agent execution failed";
+        return error.getMessage();
+    }
+
+    private static void emitTrace(
+            ToolEmitter emitter,
+            SubAgentTraceContext trace,
+            SubAgentTraceEventType eventType,
+            Map<String, Object> eventPayload) {
+        if (emitter == null || trace == null) return;
+        emitter.emit(new ToolResultBlock(
+                null,
+                null,
+                List.of(),
+                Map.of(SubAgentTraceEvent.METADATA_KEY, trace.next(eventType, eventPayload))));
+    }
+
+    private static final class SubAgentTraceContext {
+        private final String invocationId;
+        private final String rootRunId;
+        private final String parentInvocationId;
+        private final SubAgentTraceEvent.Agent agent;
+        private final AtomicLong sequence = new AtomicLong();
+        private final Set<String> startedToolCallIds = ConcurrentHashMap.newKeySet();
+
+        private SubAgentTraceContext(
+                String invocationId,
+                String rootRunId,
+                String parentInvocationId,
+                SubAgentTraceEvent.Agent agent) {
+            this.invocationId = invocationId == null || invocationId.isBlank() ? UUID.randomUUID().toString() : invocationId;
+            this.rootRunId = rootRunId;
+            this.parentInvocationId = parentInvocationId;
+            this.agent = agent;
+        }
+
+        static SubAgentTraceContext create(
+                ToolUseBlock toolUse,
+                Agent parentAgent,
+                AgentContext context,
+                Agent agent,
+                String subagentSessionId) {
+            SubAgentTraceEvent.Agent traceAgent = new SubAgentTraceEvent.Agent();
+            traceAgent.setRuntimeId(agent == null ? null : agent.getAgentId());
+            traceAgent.setCode(agent == null ? null : agent.getName());
+            // Keep the card header concise and stable; the execution task carries the full context.
+            traceAgent.setTitle(agent == null ? null : agent.getName());
+            traceAgent.setSubagentSessionId(subagentSessionId);
+
+            String parentInvocationId = null;
+            if (parentAgent != null) {
+                parentInvocationId = AgentMetadataStore.get(parentAgent.getAgentId(), "subagentInvocationId");
+            }
+            return new SubAgentTraceContext(
+                    toolUse == null ? null : toolUse.getId(),
+                    context == null ? null : context.getRunId(),
+                    parentInvocationId,
+                    traceAgent);
+        }
+
+        SubAgentTraceEvent next(SubAgentTraceEventType type, Map<String, Object> eventPayload) {
+            long currentSequence = sequence.incrementAndGet();
+            SubAgentTraceEvent event = new SubAgentTraceEvent();
+            event.setInvocationId(invocationId);
+            event.setRootRunId(rootRunId);
+            event.setParentInvocationId(parentInvocationId);
+            event.setSequence(currentSequence);
+            event.setEventId(invocationId + ":" + currentSequence);
+            event.setOccurredAt(LocalDateTime.now(ZoneId.of("Asia/Shanghai")));
+            event.setEventType(type);
+            event.setAgent(agent);
+            event.setPayload(eventPayload);
+            return event;
+        }
+
+        String getInvocationId() {
+            return invocationId;
+        }
+
+        boolean markToolStarted(String toolCallId) {
+            // ToolUseBlock ids are expected, but retain a deterministic per-trace fallback.
+            String key = toolCallId == null || toolCallId.isBlank()
+                    ? "anonymous"
+                    : toolCallId;
+            return startedToolCallIds.add(key);
+        }
     }
 
     /**

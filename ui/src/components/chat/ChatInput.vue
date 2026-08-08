@@ -13,6 +13,7 @@ import ChatInputToolbar from './ChatInputToolbar.vue'
 import { useChatAttachments } from '@/composables/chat/useChatAttachments'
 import type { FlatFileItem } from '@/composables/chat/useWorkspaceFiles'
 import type { UploadedFileItem } from '@/types'
+import type { ContextUsageEvent } from '@/types'
 
 const props = withDefaults(
   defineProps<{
@@ -20,6 +21,7 @@ const props = withDefaults(
     agentId: string
     uploadedFiles?: UploadedFileItem[]
     isRunning?: boolean
+    isStopping?: boolean
     placeholder?: string
     memoryActive?: boolean
     planActive?: boolean
@@ -31,6 +33,8 @@ const props = withDefaults(
     sessionId?: string | null
     mentionAllowed?: boolean
     needInit?: boolean
+    contextUsage?: ContextUsageEvent['value'] | null
+    memoryCompressionActive?: boolean
   }>(),
   {
     uploadedFiles: () => [],
@@ -150,7 +154,8 @@ onMounted(() => {
         :placeholder="placeholder || '输入消息...'"
         :session-id="sessionId"
         :mention-allowed="mentionAllowed"
-        :is-running="isRunning"
+        :is-running="isRunning || isStopping"
+        :is-stopping="isStopping"
         @update:model-value="handleEditorUpdate"
         @send="emit('send')"
         @input-tag-preview="(item) => emit('inputTagPreview', item)"
@@ -158,6 +163,7 @@ onMounted(() => {
 
       <ChatInputToolbar
         :is-running="isRunning"
+        :is-stopping="isStopping"
         :can-send="canSend"
         :enable-memory="enableMemory"
         :memory-active="memoryActive"
@@ -165,6 +171,8 @@ onMounted(() => {
         :tool-process-active="toolProcessActive"
         :mention-allowed="mentionAllowed"
         :allow-upload-file-type="allowUploadFileType"
+        :context-usage="contextUsage"
+        :memory-compression-active="memoryCompressionActive"
         @memory="(v) => emit('memory', v)"
         @tool-process="(v) => emit('toolProcess', v)"
         @mention-trigger="editorRef?.triggerMention()"

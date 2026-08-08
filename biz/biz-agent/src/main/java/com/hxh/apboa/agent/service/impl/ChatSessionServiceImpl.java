@@ -16,6 +16,7 @@ import com.hxh.apboa.common.mp.support.PageParams;
 import com.hxh.apboa.common.util.BeanUtils;
 import com.hxh.apboa.common.util.FolderUtils;
 import com.hxh.apboa.common.util.UserUtils;
+import com.hxh.apboa.common.util.JsonUtils;
 import com.hxh.apboa.common.vo.ChatMessageVO;
 import com.hxh.apboa.common.vo.ChatMessagePageVO;
 import com.hxh.apboa.common.vo.ChatSessionVO;
@@ -28,6 +29,7 @@ import io.agentscope.spring.boot.agui.common.ThreadSessionManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -48,6 +50,8 @@ public class ChatSessionServiceImpl extends ServiceImpl<ChatSessionMapper, ChatS
     private final ThreadSessionManager sessionManager;
     private final AgentScopeSessionMapper agentScopeSessionMapper;
     private final AgentDefinitionService agentDefinitionService;
+    private final com.hxh.apboa.agent.service.SubAgentTraceHistoryService subAgentTraceHistoryService;
+    private final JdbcTemplate jdbcTemplate;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -156,7 +160,9 @@ public class ChatSessionServiceImpl extends ServiceImpl<ChatSessionMapper, ChatS
             ids.add(curId);
         }
         List<ChatMessage> list = chatMessageService.listByIdsOrderByDepth(ids, session.getMessageTable());
-        return BeanUtils.copyList(list, ChatMessageVO.class);
+        List<ChatMessageVO> result = BeanUtils.copyList(list, ChatMessageVO.class);
+        hydrateSubAgentRuns(sessionId, result);
+        return result;
     }
     @Override
     public ChatMessagePageVO getCurrentMessagesPaged(Long sessionId, Integer beforeDepth, int size) {
@@ -215,10 +221,40 @@ public class ChatSessionServiceImpl extends ServiceImpl<ChatSessionMapper, ChatS
             hasMore = allMessages.stream().anyMatch(m -> m.getDepth() < earliestDepth);
         }
 
-        result.setMessages(BeanUtils.copyList(page, ChatMessageVO.class));
+        List<ChatMessageVO> pageMessages = BeanUtils.copyList(page, ChatMessageVO.class);
+        hydrateSubAgentRuns(sessionId, pageMessages);
+        result.setMessages(pageMessages);
         result.setHasMore(hasMore);
         result.setNextBeforeDepth(page.isEmpty() ? null : page.getFirst().getDepth());
         return result;
+    }
+
+    private void hydrateSubAgentRuns(Long sessionId, List<ChatMessageVO> messages) {
+        if (messages == null || messages.isEmpty()) return;
+        List<String> invocationIds = messages.stream()
+                .filter(message -> "subagent".equals(message.getRole()))
+                .map(message -> {
+                    try {
+                        var node = JsonUtils.parse(message.getContent());
+                        return node == null ? null : JsonUtils.getStringValue(node, "invocationId", false);
+                    } catch (Exception ignored) {
+                        return null;
+                    }
+                })
+                .filter(java.util.Objects::nonNull)
+                .toList();
+        var runs = subAgentTraceHistoryService.loadByInvocations(sessionId, invocationIds);
+        messages.stream()
+                .filter(message -> "subagent".equals(message.getRole()))
+                .forEach(message -> {
+                    try {
+                        var node = JsonUtils.parse(message.getContent());
+                        String invocationId = node == null ? null : JsonUtils.getStringValue(node, "invocationId", false);
+                        message.setSubAgentRun(invocationId == null ? null : runs.get(invocationId));
+                    } catch (Exception ignored) {
+                        // A malformed legacy anchor remains visible as a normal system card.
+                    }
+                });
     }
 
 
@@ -376,6 +412,9 @@ public class ChatSessionServiceImpl extends ServiceImpl<ChatSessionMapper, ChatS
         }
         // 再删除主表 chat_message 中的消息
         chatMessageService.lambdaUpdate().eq(ChatMessage::getSessionId, session.getId()).remove();
+        // Trace rows are a projection owned by the chat session and must not outlive a deletion.
+        jdbcTemplate.update("DELETE FROM chat_subagent_event WHERE session_id = ?", session.getId());
+        jdbcTemplate.update("DELETE FROM chat_subagent_run WHERE session_id = ?", session.getId());
         removeById(id);
 
         agentScopeSessionMapper.deleteById(String.valueOf(session.getId()));

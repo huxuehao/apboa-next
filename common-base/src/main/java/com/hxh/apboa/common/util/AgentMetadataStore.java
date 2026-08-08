@@ -21,6 +21,9 @@ public final class AgentMetadataStore {
      * @param value   元数据值
      */
     public static void put(String agentId, String key, Object value) {
+        if (agentId == null || key == null || value == null) {
+            return;
+        }
         STORE.computeIfAbsent(agentId, k -> new ConcurrentHashMap<>()).put(key, value);
     }
 

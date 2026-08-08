@@ -48,7 +48,10 @@ public class IMemoryFactory {
      */
     public static AutoContextMemory createAutoContextMemory(AutoContextConfig config, Model model, String nodeId, String parentNodeId) {
 
-        return (AutoContextMemory) createMemory(nodeId, parentNodeId, new AutoContextMemory(config, model));
+        return (AutoContextMemory) createMemory(
+                nodeId,
+                parentNodeId,
+                new ObservableAutoContextMemory(config, model));
     }
 
     /**

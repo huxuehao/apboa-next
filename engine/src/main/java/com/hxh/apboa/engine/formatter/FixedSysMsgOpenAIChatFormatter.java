@@ -25,6 +25,8 @@ public class FixedSysMsgOpenAIChatFormatter extends OpenAIChatFormatter {
             return new ArrayList<>();
         }
 
+        msgs = ToolCallMessageSanitizer.sanitize(msgs);
+
         // 分离 system消息和其他消息
         List<Msg> otherMsgs = new ArrayList<>();
         List<List<ContentBlock>> allSystemContents = new ArrayList<>();

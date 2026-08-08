@@ -27,6 +27,8 @@ public class FixedSysMsgOpenAIMultiAgentFormatter extends OpenAIMultiAgentFormat
             return new ArrayList<>();
         }
 
+        msgs = ToolCallMessageSanitizer.sanitize(msgs);
+
         // 分离 system消息和其他消息
         List<List<ContentBlock>> allSystemContents = new ArrayList<>();
         List<Msg> otherMsgs = new ArrayList<>();
