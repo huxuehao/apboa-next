@@ -147,7 +147,14 @@ export interface ContextUsageEvent extends CustomEvent {
   value: {
     usedTokens: number
     totalTokens: number
+    tokenThreshold: number
+    messageCount: number
+    messageThreshold: number
+    tokenPressure: number
+    messagePressure: number
+    compressionPressure: number
     ratio: number
+    triggerReason: 'TOKEN' | 'MESSAGE'
     phase: 'RUN' | 'REASONING' | 'TOOL' | 'ANSWER' | 'COMPRESSION' | 'UNKNOWN'
     estimated?: boolean
     compressed?: boolean
@@ -162,6 +169,14 @@ export interface ContextCompressionEvent extends CustomEvent {
     status: 'STARTED' | 'FINISHED'
     usedTokens: number
     totalTokens: number
+    tokenThreshold: number
+    messageCount: number
+    messageThreshold: number
+    tokenPressure: number
+    messagePressure: number
+    compressionPressure: number
+    ratio: number
+    triggerReason: 'TOKEN' | 'MESSAGE'
     phase: 'COMPRESSION'
     compressed?: boolean
   }

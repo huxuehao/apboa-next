@@ -390,15 +390,13 @@ public class AguiAgentAdapter {
         }
         memory.setCompressionListener(started -> {
             state.compressionStarted = true;
+            Map<String, Object> usage = contextUsagePayload(started, "COMPRESSION", false);
+            usage.put("status", "STARTED");
             lifecycleEvents.tryEmitNext(new AguiEvent.Custom(
                     state.threadId,
                     state.runId,
                     "CONTEXT_COMPRESSION",
-                    Map.of(
-                            "status", "STARTED",
-                            "usedTokens", started.usedTokens(),
-                            "totalTokens", started.totalTokens(),
-                            "phase", "COMPRESSION")));
+                    usage));
         });
     }
 
@@ -425,20 +423,12 @@ public class AguiAgentAdapter {
                 || !(reActAgent.getMemory() instanceof AutoContextMemory memory)) {
             return List.of();
         }
-        long totalTokens = resolveContextLimit();
-        int usedTokens = TokenCounterUtil.calculateToken(memory.getMessages());
+        Map<String, Object> usage = contextUsagePayload(memory, "RUN", memory.getCompressionEvents().size() > 0);
         return List.of(new AguiEvent.Custom(
                 state.threadId,
                 state.runId,
                 "CONTEXT_USAGE",
-                Map.of(
-                        "usedTokens", usedTokens,
-                        "totalTokens", totalTokens,
-                        "ratio", totalTokens > 0 ? Math.min(1D, usedTokens / (double) totalTokens) : 0D,
-                        "phase", "RUN",
-                        "estimated", true,
-                        "compressed", memory.getCompressionEvents().size() > 0,
-                        "timestamp", System.currentTimeMillis())));
+                usage));
     }
 
     /** 构建上下文使用量事件，并在检测到压缩后补发压缩完成事件。 */
@@ -448,34 +438,28 @@ public class AguiAgentAdapter {
             return List.of();
         }
 
-        long totalTokens = resolveContextLimit();
-        int usedTokens = TokenCounterUtil.calculateToken(memory.getMessages());
         int compressionEvents = memory.getCompressionEvents().size();
         List<AguiEvent> events = new ArrayList<>();
 
         if (compressionEvents > state.compressionEventCount) {
             // ObservableAutoContextMemory 会在压缩模型调用前推送 STARTED；非包装记忆保留兜底。
             if (!state.compressionStarted) {
+                Map<String, Object> usage = contextUsagePayload(memory, "COMPRESSION", false);
+                usage.put("status", "STARTED");
                 events.add(new AguiEvent.Custom(
                         state.threadId,
                         state.runId,
                         "CONTEXT_COMPRESSION",
-                        Map.of(
-                                "status", "STARTED",
-                                "usedTokens", usedTokens,
-                                "totalTokens", totalTokens,
-                                "phase", "COMPRESSION")));
+                        usage));
             }
+            Map<String, Object> finishedUsage = contextUsagePayload(memory, "COMPRESSION", true);
+            finishedUsage.put("status", "FINISHED");
+            finishedUsage.put("compressed", true);
             events.add(new AguiEvent.Custom(
                     state.threadId,
                     state.runId,
                     "CONTEXT_COMPRESSION",
-                    Map.of(
-                            "status", "FINISHED",
-                            "usedTokens", usedTokens,
-                            "totalTokens", totalTokens,
-                            "phase", "COMPRESSION",
-                            "compressed", true)));
+                    finishedUsage));
             state.compressionEventCount = compressionEvents;
             state.compressionStarted = false;
         }
@@ -486,19 +470,67 @@ public class AguiAgentAdapter {
             case AGENT_RESULT -> "ANSWER";
             default -> "UNKNOWN";
         };
+        Map<String, Object> usage = contextUsagePayload(memory, phase, compressionEvents > 0);
         events.add(new AguiEvent.Custom(
                 state.threadId,
                 state.runId,
                 "CONTEXT_USAGE",
-                Map.of(
-                        "usedTokens", usedTokens,
-                        "totalTokens", totalTokens,
-                        "ratio", totalTokens > 0 ? Math.min(1D, usedTokens / (double) totalTokens) : 0D,
-                        "phase", phase,
-                        "estimated", true,
-                        "compressed", compressionEvents > 0,
-                        "timestamp", System.currentTimeMillis())));
+                usage));
         return events;
+    }
+
+    /** 将记忆快照转换为前端可识别的压缩压力数据。 */
+    private Map<String, Object> contextUsagePayload(
+            ObservableAutoContextMemory.ContextUsageSnapshot snapshot,
+            String phase,
+            boolean compressed) {
+        Map<String, Object> usage = new LinkedHashMap<>();
+        usage.put("usedTokens", snapshot.usedTokens());
+        usage.put("totalTokens", snapshot.totalTokens());
+        usage.put("tokenThreshold", snapshot.tokenThreshold());
+        usage.put("messageCount", snapshot.messageCount());
+        usage.put("messageThreshold", snapshot.messageThreshold());
+        usage.put("tokenPressure", snapshot.tokenPressure());
+        usage.put("messagePressure", snapshot.messagePressure());
+        usage.put("compressionPressure", snapshot.compressionPressure());
+        usage.put("ratio", snapshot.compressionPressure());
+        usage.put("triggerReason", snapshot.triggerReason());
+        usage.put("phase", phase);
+        usage.put("estimated", true);
+        usage.put("compressed", compressed);
+        usage.put("timestamp", System.currentTimeMillis());
+        return usage;
+    }
+
+    private Map<String, Object> contextUsagePayload(
+            AutoContextMemory memory, String phase, boolean compressed) {
+        if (memory instanceof ObservableAutoContextMemory observableMemory) {
+            return contextUsagePayload(observableMemory.getContextUsageSnapshot(), phase, compressed);
+        }
+        long totalTokens = resolveContextLimit();
+        int usedTokens = TokenCounterUtil.calculateToken(memory.getMessages());
+        // 与 AutoContextMemory 的 int 阈值计算保持一致，避免前端显示与实际触发点偏移。
+        long tokenThreshold = (int) (totalTokens * resolveCompressionTokenRatio());
+        int messageCount = memory.getMessages().size();
+        int messageThreshold = resolveCompressionMessageThreshold();
+        double tokenPressure = tokenThreshold <= 0 ? 1D : usedTokens / (double) tokenThreshold;
+        double messagePressure = messageThreshold <= 0 ? 1D : messageCount / (double) messageThreshold;
+        Map<String, Object> usage = new LinkedHashMap<>();
+        usage.put("usedTokens", usedTokens);
+        usage.put("totalTokens", totalTokens);
+        usage.put("tokenThreshold", tokenThreshold);
+        usage.put("messageCount", messageCount);
+        usage.put("messageThreshold", messageThreshold);
+        usage.put("tokenPressure", tokenPressure);
+        usage.put("messagePressure", messagePressure);
+        usage.put("compressionPressure", Math.min(1D, Math.max(tokenPressure, messagePressure)));
+        usage.put("ratio", usage.get("compressionPressure"));
+        usage.put("triggerReason", tokenPressure >= messagePressure ? "TOKEN" : "MESSAGE");
+        usage.put("phase", phase);
+        usage.put("estimated", true);
+        usage.put("compressed", compressed);
+        usage.put("timestamp", System.currentTimeMillis());
+        return usage;
     }
 
     /** 从当前 Agent 配置中读取上下文上限，读取失败时使用 AgentScope 默认值。 */
@@ -509,6 +541,24 @@ public class AguiAgentAdapter {
                 .map(config -> com.hxh.apboa.common.util.JsonUtils.getLongValue(
                         config, "maxToken", 131072L))
                 .orElse(131072L);
+    }
+
+    /** 从 Agent 配置读取 token 压缩阈值比例。 */
+    private double resolveCompressionTokenRatio() {
+        return AgentContext.getIfExists()
+                .map(AgentContext::getAgentDefinition)
+                .map(definition -> definition.getMemoryCompressionConfig())
+                .map(config -> com.hxh.apboa.common.util.JsonUtils.getDoubleValue(config, "tokenRatio", 0.75D))
+                .orElse(0.75D);
+    }
+
+    /** 从 Agent 配置读取消息数量压缩阈值。 */
+    private int resolveCompressionMessageThreshold() {
+        return AgentContext.getIfExists()
+                .map(AgentContext::getAgentDefinition)
+                .map(definition -> definition.getMemoryCompressionConfig())
+                .map(config -> com.hxh.apboa.common.util.JsonUtils.getIntValue(config, "msgThreshold", 100))
+                .orElse(100);
     }
 
     /**

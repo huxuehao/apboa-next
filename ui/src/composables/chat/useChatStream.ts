@@ -281,9 +281,7 @@ export function useChatStream(
           contextUsage.value = {
             ...contextUsage.value,
             ...compressionEvent.value,
-            ratio: compressionEvent.value.totalTokens > 0
-              ? compressionEvent.value.usedTokens / compressionEvent.value.totalTokens
-              : 0
+            ratio: compressionEvent.value.compressionPressure
           } as ContextUsageEvent['value']
           if (compressionNoticeTimer) {
             clearTimeout(compressionNoticeTimer)

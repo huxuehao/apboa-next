@@ -124,11 +124,11 @@ const uploadTooltip = computed(() => {
       </ATooltip>
     </div>
     <div class="chat-input-toolbar-right">
-      <!-- @ 添加上下文按钮 -->
       <ContextUsageIndicator
         :usage="contextUsage"
         :compression-active="memoryCompressionActive"
       />
+      <!-- @ 添加上下文按钮 -->
       <ATooltip placement="bottom" title="添加上下文">
         <button
           :disabled="!mentionAllowed"
