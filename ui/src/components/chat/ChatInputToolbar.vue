@@ -12,6 +12,8 @@ import {
   PaperClipOutlined,
   ThunderboltOutlined
 } from '@ant-design/icons-vue'
+import ContextUsageIndicator from './ContextUsageIndicator.vue'
+import type { ContextUsageEvent } from '@/types'
 
 const props = withDefaults(
   defineProps<{
@@ -24,6 +26,8 @@ const props = withDefaults(
     toolProcessActive?: boolean
     mentionAllowed?: boolean
     allowUploadFileType?: string[]
+    contextUsage?: ContextUsageEvent['value'] | null
+    memoryCompressionActive?: boolean
   }>(),
   {
     isRunning: false,
@@ -121,6 +125,10 @@ const uploadTooltip = computed(() => {
     </div>
     <div class="chat-input-toolbar-right">
       <!-- @ 添加上下文按钮 -->
+      <ContextUsageIndicator
+        :usage="contextUsage"
+        :compression-active="memoryCompressionActive"
+      />
       <ATooltip placement="bottom" title="添加上下文">
         <button
           :disabled="!mentionAllowed"

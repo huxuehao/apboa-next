@@ -17,13 +17,17 @@ package io.agentscope.core.agui.adapter;
 
 import com.hxh.apboa.engine.hook.builtins.IConfirmationHook;
 import com.hxh.apboa.common.subagent.SubAgentTraceEvent;
+import com.hxh.apboa.engine.agui.AgentContext;
 import io.agentscope.core.agent.Agent;
 import io.agentscope.core.agent.Event;
 import io.agentscope.core.agent.EventType;
 import io.agentscope.core.agent.StreamOptions;
+import io.agentscope.core.ReActAgent;
 import io.agentscope.core.agui.converter.AguiMessageConverter;
 import io.agentscope.core.agui.event.AguiEvent;
 import io.agentscope.core.agui.model.RunAgentInput;
+import io.agentscope.core.memory.autocontext.AutoContextMemory;
+import io.agentscope.core.memory.autocontext.TokenCounterUtil;
 import io.agentscope.core.message.ContentBlock;
 import io.agentscope.core.message.GenerateReason;
 import io.agentscope.core.message.Msg;
@@ -110,10 +114,13 @@ public class AguiAgentAdapter {
 
         // Track state for event conversion
         EventConversionState state = new EventConversionState(threadId, runId);
+        state.compressionEventCount = currentCompressionEventCount();
 
         return Flux.concat(
-                        // Emit RUN_STARTED
-                        Flux.just(new AguiEvent.RunStarted(threadId, runId)),
+                        // Emit RUN_STARTED and the initial context snapshot
+                        Flux.concat(
+                                Flux.just(new AguiEvent.RunStarted(threadId, runId)),
+                                Flux.fromIterable(buildInitialContextUsageEvent(state))),
                         // Stream agent events and convert to AG-UI events
                         // Use concatMapIterable to preserve strict event ordering
                         agent.stream(msgs, options)
@@ -353,7 +360,112 @@ public class AguiAgentAdapter {
             }
         }
 
+        // 在一轮思考、工具执行或正文输出完成后推送上下文使用量。
+        if (event.isLast()
+                && (type == EventType.REASONING
+                        || type == EventType.TOOL_RESULT
+                        || type == EventType.AGENT_RESULT)) {
+            events.addAll(buildContextUsageEvents(state, type));
+        }
+
         return events;
+    }
+
+    /** 获取当前记忆中的压缩事件数量，用于区分本轮新增压缩。 */
+    private int currentCompressionEventCount() {
+        if (agent instanceof ReActAgent reActAgent
+                && reActAgent.getMemory() instanceof AutoContextMemory memory) {
+            return memory.getCompressionEvents().size();
+        }
+        return 0;
+    }
+
+    /** 构建本轮运行开始时的上下文快照。 */
+    private List<AguiEvent> buildInitialContextUsageEvent(EventConversionState state) {
+        if (!(agent instanceof ReActAgent reActAgent)
+                || !(reActAgent.getMemory() instanceof AutoContextMemory memory)) {
+            return List.of();
+        }
+        long totalTokens = resolveContextLimit();
+        int usedTokens = TokenCounterUtil.calculateToken(memory.getMessages());
+        return List.of(new AguiEvent.Custom(
+                state.threadId,
+                state.runId,
+                "CONTEXT_USAGE",
+                Map.of(
+                        "usedTokens", usedTokens,
+                        "totalTokens", totalTokens,
+                        "ratio", totalTokens > 0 ? Math.min(1D, usedTokens / (double) totalTokens) : 0D,
+                        "phase", "RUN",
+                        "estimated", true,
+                        "compressed", memory.getCompressionEvents().size() > 0,
+                        "timestamp", System.currentTimeMillis())));
+    }
+
+    /** 构建上下文使用量事件，并在检测到压缩后补发压缩完成事件。 */
+    private List<AguiEvent> buildContextUsageEvents(EventConversionState state, EventType type) {
+        if (!(agent instanceof ReActAgent reActAgent)
+                || !(reActAgent.getMemory() instanceof AutoContextMemory memory)) {
+            return List.of();
+        }
+
+        long totalTokens = resolveContextLimit();
+        int usedTokens = TokenCounterUtil.calculateToken(memory.getMessages());
+        int compressionEvents = memory.getCompressionEvents().size();
+        List<AguiEvent> events = new ArrayList<>();
+
+        if (compressionEvents > state.compressionEventCount) {
+            events.add(new AguiEvent.Custom(
+                    state.threadId,
+                    state.runId,
+                    "CONTEXT_COMPRESSION",
+                    Map.of(
+                            "status", "STARTED",
+                            "usedTokens", usedTokens,
+                            "totalTokens", totalTokens,
+                            "phase", "COMPRESSION")));
+            events.add(new AguiEvent.Custom(
+                    state.threadId,
+                    state.runId,
+                    "CONTEXT_COMPRESSION",
+                    Map.of(
+                            "status", "FINISHED",
+                            "usedTokens", usedTokens,
+                            "totalTokens", totalTokens,
+                            "phase", "COMPRESSION",
+                            "compressed", true)));
+            state.compressionEventCount = compressionEvents;
+        }
+
+        String phase = switch (type) {
+            case REASONING -> "REASONING";
+            case TOOL_RESULT -> "TOOL";
+            case AGENT_RESULT -> "ANSWER";
+            default -> "UNKNOWN";
+        };
+        events.add(new AguiEvent.Custom(
+                state.threadId,
+                state.runId,
+                "CONTEXT_USAGE",
+                Map.of(
+                        "usedTokens", usedTokens,
+                        "totalTokens", totalTokens,
+                        "ratio", totalTokens > 0 ? Math.min(1D, usedTokens / (double) totalTokens) : 0D,
+                        "phase", phase,
+                        "estimated", true,
+                        "compressed", compressionEvents > 0,
+                        "timestamp", System.currentTimeMillis())));
+        return events;
+    }
+
+    /** 从当前 Agent 配置中读取上下文上限，读取失败时使用 AgentScope 默认值。 */
+    private long resolveContextLimit() {
+        return AgentContext.getIfExists()
+                .map(AgentContext::getAgentDefinition)
+                .map(definition -> definition.getMemoryCompressionConfig())
+                .map(config -> com.hxh.apboa.common.util.JsonUtils.getLongValue(
+                        config, "maxToken", 131072L))
+                .orElse(131072L);
     }
 
     /**
@@ -448,6 +560,7 @@ public class AguiAgentAdapter {
         private final Set<String> startedReasoningMessages = new LinkedHashSet<>();
         private final Set<String> endedReasoningMessages = new LinkedHashSet<>();
         private String currentTextMessageId = null;
+        private int compressionEventCount = 0;
 
         EventConversionState(String threadId, String runId) {
             this.threadId = threadId;

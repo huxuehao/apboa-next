@@ -146,6 +146,7 @@ public class ReActAgentHelper {
                         .build();
                 builder.memory(new AutoContextMemory(autoContextConfig, model));
                 hooks.add(new AutoContextHook());
+                hooks.add(new ToolCallSequenceRepairHook());
             } else {
                 builder.memory(new InMemoryMemory());
             }

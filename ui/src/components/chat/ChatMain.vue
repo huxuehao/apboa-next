@@ -12,6 +12,7 @@ import ChatInput from './ChatInput.vue'
 import Welcome from './Welcome.vue'
 import PlanPanel from './PlanPanel.vue'
 import type { DisplayMessage, UploadedFileItem, PlanInfo } from '@/types'
+import type { ContextUsageEvent } from '@/types'
 import type {FlatFileItem} from "@/composables/chat/useWorkspaceFiles.ts";
 import type { InteractionSubmitPayload } from '@/components/markdown/uip/types'
 import WorkspaceFilePreview from "@/components/workspace/WorkspaceFilePreview.vue";
@@ -45,6 +46,8 @@ const props = defineProps<{
   historyLoading?: boolean
   /** 当前计划信息 */
   currentPlan?: PlanInfo | null
+  contextUsage?: ContextUsageEvent['value'] | null
+  memoryCompressionActive?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -340,6 +343,8 @@ defineExpose({
             :show-tool-process="showToolProcess"
             :tool-process-active="toolProcessActive"
             :session-id="sessionId"
+            :context-usage="contextUsage"
+            :memory-compression-active="memoryCompressionActive"
             :mention-allowed="true"
             @inputTagPreview="inputTagPreviewHandle"
             @update:model-value="$emit('update:inputValue', $event)"

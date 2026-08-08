@@ -13,6 +13,7 @@ import ChatInputToolbar from './ChatInputToolbar.vue'
 import { useChatAttachments } from '@/composables/chat/useChatAttachments'
 import type { FlatFileItem } from '@/composables/chat/useWorkspaceFiles'
 import type { UploadedFileItem } from '@/types'
+import type { ContextUsageEvent } from '@/types'
 
 const props = withDefaults(
   defineProps<{
@@ -31,6 +32,8 @@ const props = withDefaults(
     sessionId?: string | null
     mentionAllowed?: boolean
     needInit?: boolean
+    contextUsage?: ContextUsageEvent['value'] | null
+    memoryCompressionActive?: boolean
   }>(),
   {
     uploadedFiles: () => [],
@@ -165,6 +168,8 @@ onMounted(() => {
         :tool-process-active="toolProcessActive"
         :mention-allowed="mentionAllowed"
         :allow-upload-file-type="allowUploadFileType"
+        :context-usage="contextUsage"
+        :memory-compression-active="memoryCompressionActive"
         @memory="(v) => emit('memory', v)"
         @tool-process="(v) => emit('toolProcess', v)"
         @mention-trigger="editorRef?.triggerMention()"

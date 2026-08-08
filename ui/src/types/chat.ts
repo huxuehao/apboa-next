@@ -5,5 +5,7 @@ export interface DisplayMessage {
   content: string
   createdAt?: string
   isStreaming?: boolean
+  /** 仅前端显示的上下文压缩提示，不会持久化。 */
+  isMemoryCompression?: boolean
   subAgentRun?: import('./subagent').SubAgentRunVO | null
 }

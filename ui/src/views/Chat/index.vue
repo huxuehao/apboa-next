@@ -136,6 +136,8 @@ const {
   subAgentRuns,
   isRunning,
   currentPlan,
+  contextUsage,
+  memoryCompressionActive,
   sendMessage,
   decideConfirm,
   restorePending,
@@ -255,6 +257,16 @@ const displayMessages = computed<DisplayMessage[]>(() => {
         isStreaming: true,
       })
     }
+  }
+
+  if (memoryCompressionActive.value) {
+    list.push({
+      id: 'memory-compression',
+      role: 'thinking',
+      content: '',
+      isStreaming: true,
+      isMemoryCompression: true,
+    })
   }
 
   return list
@@ -655,6 +667,8 @@ watch(isRunning, (running) => {
       :has-more-history="hasMoreHistory"
       :history-loading="historyLoading"
       :current-plan="currentPlan"
+      :context-usage="contextUsage"
+      :memory-compression-active="memoryCompressionActive"
       @update:input-value="inputText = $event"
       @update:uploaded-files="uploadedFiles = $event"
       @memory="handleMemoryChange"

@@ -4,7 +4,7 @@ import { useAgentClient } from '@/composables/useAgentClient'
 import { usePlanTracking } from '@/composables/chat/usePlanTracking'
 import { useSubAgentRuns } from '@/composables/chat/useSubAgentRuns'
 import { buildToolCallsContent } from '@/utils/chat/format'
-import type {ChatMessageVO, RawEvent} from '@/types'
+import type {ChatMessageVO, RawEvent, ContextUsageEvent, ContextCompressionEvent} from '@/types'
 import { useAccountStore } from '@/stores'
 import { stopRun } from '@/api/agui'
 
@@ -51,6 +51,9 @@ export function useChatStream(
   const streamingMessageId = ref<string | null>(null)
   const streamingRole = ref<'user' | 'assistant' | 'system' | 'tool' | 'thinking'>('system')
   const streamingContent = ref('')
+  const contextUsage = ref<ContextUsageEvent['value'] | null>(null)
+  const memoryCompressionActive = ref(false)
+  let compressionNoticeTimer: ReturnType<typeof setTimeout> | null = null
 
   // 工具调用进度
   const toolCallsInProgress = ref<
@@ -95,6 +98,12 @@ export function useChatStream(
         toolCallsInProgress.value = []
         streamingContent.value = ''
         streamingMessageId.value = null
+        contextUsage.value = null
+        memoryCompressionActive.value = false
+        if (compressionNoticeTimer) {
+          clearTimeout(compressionNoticeTimer)
+          compressionNoticeTimer = null
+        }
         resetSubAgentRuns()
       },
       onTextMessageStart: (e) => {
@@ -263,6 +272,32 @@ export function useChatStream(
         }
      },
       onCustom: (event) => {
+        if (event.name === 'CONTEXT_USAGE') {
+          contextUsage.value = (event as ContextUsageEvent).value
+          return
+        }
+        if (event.name === 'CONTEXT_COMPRESSION') {
+          const compressionEvent = event as ContextCompressionEvent
+          contextUsage.value = {
+            ...contextUsage.value,
+            ...compressionEvent.value,
+            ratio: compressionEvent.value.totalTokens > 0
+              ? compressionEvent.value.usedTokens / compressionEvent.value.totalTokens
+              : 0
+          } as ContextUsageEvent['value']
+          if (compressionNoticeTimer) {
+            clearTimeout(compressionNoticeTimer)
+            compressionNoticeTimer = null
+          }
+          memoryCompressionActive.value = true
+          if (compressionEvent.value.status === 'FINISHED') {
+            compressionNoticeTimer = setTimeout(() => {
+              memoryCompressionActive.value = false
+              compressionNoticeTimer = null
+            }, 800)
+          }
+          return
+        }
         // Keep sub-agent CUSTOM events out of the normal text/tool message buffers.
         if (acceptCustomEvent(event)) {
           const trace = event.value as { eventType?: string; invocationId?: string }
@@ -424,6 +459,12 @@ export function useChatStream(
     resetSubAgentRuns()
     agentHasResult.value = true
     currentPlan.value = null
+    contextUsage.value = null
+    memoryCompressionActive.value = false
+    if (compressionNoticeTimer) {
+      clearTimeout(compressionNoticeTimer)
+      compressionNoticeTimer = null
+    }
   }
 
   return {
@@ -436,6 +477,8 @@ export function useChatStream(
     isRunning,
     isReplaying,
     currentPlan,
+    contextUsage,
+    memoryCompressionActive,
     hasPlan,
     abortRun,
     sendMessage,

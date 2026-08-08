@@ -80,6 +80,7 @@ const props = defineProps<{
   createdAt?: string
   agentHasResult?: boolean
   isStreaming?: boolean
+  isMemoryCompression?: boolean
   readonlyInteraction?: boolean
 }>()
 
@@ -95,6 +96,7 @@ const isThinking = computed(() => props.role === 'thinking')
 const isAssistant = computed(() => props.role === 'assistant')
 const isTool = computed(() => props.role === 'tool')
 const isError = computed(() => props.role === 'error')
+const isMemoryCompression = computed(() => props.isMemoryCompression === true)
 
 const parsedUserContent = computed(() => parseUserContent(props.content))
 const formattedTime = computed(() => formatTime(props.createdAt))
@@ -232,19 +234,19 @@ const openPreview = (index: number) => {
         <div v-if="isThinking" class="chat-reasoning-panel">
           <div class="chat-reasoning-header" @click="reasoningExpanded = !reasoningExpanded">
             <span class="chat-reasoning-icon">
-              <LoadingOutlined v-if="isStreaming" spin />
+              <LoadingOutlined v-if="isStreaming || isMemoryCompression" spin />
               <BulbOutlined v-else />
             </span>
             <span class="chat-reasoning-title">
-              {{ isStreaming ? '思考中...' : '思考过程' }}
+              {{ isMemoryCompression ? '记忆压缩中' : (isStreaming ? '思考中...' : '思考过程') }}
             </span>
             <span class="chat-reasoning-arrow">
               <DownOutlined v-if="reasoningExpanded" />
               <RightOutlined v-else />
             </span>
           </div>
-          <div class="chat-reasoning-content" :class="{ 'is-expanded': reasoningExpanded }">
-            {{content}}
+          <div v-if="!isMemoryCompression" class="chat-reasoning-content" :class="{ 'is-expanded': reasoningExpanded }">
+            {{ content }}
           </div>
         </div>
       </div>
