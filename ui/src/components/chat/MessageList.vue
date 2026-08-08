@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import {
-  BulbOutlined,
   CheckCircleOutlined,
   DownOutlined,
   LoadingOutlined
@@ -155,7 +154,7 @@ function subAgentRunFor(message: DisplayMessage): SubAgentRunVO {
       <!-- 单条消息 -->
       <SubAgentCard
         v-else-if="isSubAgentMessage(firstMessage(group))"
-        :key="firstMessage(group).id"
+        :key="`subagent-${firstMessage(group).id}`"
         :run="subAgentRunFor(firstMessage(group))"
         @inputTagPreview="$emit('inputTagPreview', $event as FlatFileItem)"
         @interaction-submit="$emit('interactionSubmit', $event)"
@@ -164,7 +163,7 @@ function subAgentRunFor(message: DisplayMessage): SubAgentRunVO {
       />
       <MessageItem
         v-else
-        :key="firstMessage(group).id"
+        :key="`message-${firstMessage(group).id}`"
         :id="firstMessage(group).id"
         :current-index="gIdx"
         :total-messages="messageGroups.length"

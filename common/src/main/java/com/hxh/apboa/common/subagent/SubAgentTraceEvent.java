@@ -5,10 +5,10 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Versioned wire and persistence contract for one sub-agent execution event.
+ * 描述：子智能体执行事件的序列化与持久化契约，携带协议版本号。
+ *      invocationId 取自父级 ToolUseBlock.id，同一子智能体会话被多次调用时仍保持唯一。
  *
- * <p>The invocation id is always the parent {@code ToolUseBlock.id}; it identifies one displayed
- * card even when the same sub-agent session is reused by later calls.
+ * @author huxuehao
  */
 public class SubAgentTraceEvent {
 

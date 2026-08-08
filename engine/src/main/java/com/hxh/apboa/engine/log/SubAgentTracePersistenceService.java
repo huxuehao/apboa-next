@@ -9,9 +9,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 /**
- * Durable projection for sub-agent cards. It is intentionally independent from the mutable
- * chat-message cursor: a card is anchored once in chat_message while its dense trace is stored
- * here and queried in one batch during history hydration.
+ * 描述：子智能体卡片的持久化存储服务。卡片锚点写入 chat_message 后不再变动，
+ *      密集的追踪事件独立存储于此，历史查询时批量加载。
+ *
+ * @author huxuehao
  */
 @Service
 public class SubAgentTracePersistenceService {

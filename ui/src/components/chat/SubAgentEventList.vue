@@ -26,7 +26,14 @@ type TimelineItem =
       content: string
       completed: boolean
     }
-  | { key: string; kind: 'tool'; name: string; args?: unknown; result?: unknown; completed: boolean }
+  | {
+      key: string
+      kind: 'tool'
+      name: string
+      args?: unknown
+      result?: unknown
+      completed: boolean
+    }
   | { key: string; kind: 'status'; content: string; failed: boolean }
 
 const scrollRef = ref<HTMLElement | null>(null)
@@ -59,12 +66,12 @@ const timeline = computed<TimelineItem[]>(() => {
       if (content && event.eventType === 'MESSAGE_DELTA') {
         item.content += content
       } else if (content) {
-        // The terminal AgentScope chunk may carry either the full aggregate or a final delta.
+        // 最后的 AgentScope 数据块可能包含完整的聚合内容或最终的增量内容。
         if (content.startsWith(item.content)) item.content = content
         else if (!item.content.startsWith(content)) item.content += content
       }
-      // Completion belongs to one concrete message, not to the whole sub-agent card. This keeps
-      // an earlier thinking panel from showing a spinner while a later reasoning round is active.
+      // 完成状态仅属于单条具体消息，而非整个子智能体卡片。这样可以避免在后续推理轮次活跃时，
+      // 较早的思考面板继续显示加载动画。
       if (event.eventType === 'MESSAGE_COMPLETED') item.completed = true
     } else if (event.eventType === 'TOOL_STARTED') {
       const toolCallId = typeof payload.toolCallId === 'string' ? payload.toolCallId : event.eventId
@@ -96,14 +103,22 @@ const timeline = computed<TimelineItem[]>(() => {
           completed: true,
         })
       }
-    } else if (event.eventType === 'BLOCKED' || event.eventType === 'FAILED' || event.eventType === 'CANCELLED') {
+    } else if (
+      event.eventType === 'BLOCKED' ||
+      event.eventType === 'FAILED' ||
+      event.eventType === 'CANCELLED'
+    ) {
       items.push({
         key: `status:${event.eventId}`,
         kind: 'status',
-        content: typeof payload.message === 'string'
-          ? payload.message
-          : event.eventType === 'BLOCKED' ? '子智能体执行被交互策略拦截'
-            : event.eventType === 'CANCELLED' ? '子智能体已取消' : '子智能体运行失败',
+        content:
+          typeof payload.message === 'string'
+            ? payload.message
+            : event.eventType === 'BLOCKED'
+              ? '子智能体执行被交互策略拦截'
+              : event.eventType === 'CANCELLED'
+                ? '子智能体已取消'
+                : '子智能体运行失败',
         failed: true,
       })
     }
@@ -142,9 +157,20 @@ function toolHistoryContent(item: Extract<TimelineItem, { kind: 'tool' }>): stri
   })
 }
 
-watch(() => props.events, () => nextTick(scrollToTail), { deep: true, flush: 'post' })
-watch(() => props.active, (active) => { if (active && isNearBottom()) followTail.value = true })
-onBeforeUnmount(() => { if (scrollRaf !== null) cancelAnimationFrame(scrollRaf) })
+watch(
+  () => props.events,
+  () => nextTick(scrollToTail),
+  { deep: true, flush: 'post' },
+)
+watch(
+  () => props.active,
+  (active) => {
+    if (active && isNearBottom()) followTail.value = true
+  },
+)
+onBeforeUnmount(() => {
+  if (scrollRaf !== null) cancelAnimationFrame(scrollRaf)
+})
 </script>
 
 <template>
@@ -200,7 +226,22 @@ onBeforeUnmount(() => { if (scrollRaf !== null) cancelAnimationFrame(scrollRaf) 
 </template>
 
 <style scoped lang="scss">
-.subagent-event-list { max-height: 320px; overflow-y: auto; overscroll-behavior: contain; padding: 2px; }
-.subagent-event + .subagent-event { margin-top: 6px; }
-.subagent-event-empty { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 10px; color: #98a2b3; font-size: 13px; }
+.subagent-event-list {
+  max-height: 320px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 2px;
+}
+.subagent-event + .subagent-event {
+  margin-top: 6px;
+}
+.subagent-event-empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 10px;
+  color: #98a2b3;
+  font-size: 13px;
+}
 </style>

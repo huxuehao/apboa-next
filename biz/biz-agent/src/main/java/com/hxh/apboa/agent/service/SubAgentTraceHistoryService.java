@@ -14,7 +14,11 @@ import java.util.Map;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
-/** Batch hydrates sub-agent card details for chat-history timeline anchors. */
+/**
+ * 描述：子智能体追踪历史查询服务，批量加载子智能体卡片详情用于聊天记录时间线锚点渲染。
+ *
+ * @author huxuehao
+ */
 @Service
 public class SubAgentTraceHistoryService {
 

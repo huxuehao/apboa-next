@@ -1,8 +1,10 @@
 package com.hxh.apboa.common.subagent;
 
 /**
- * Stable, project-owned event kinds used to expose a sub-agent invocation to clients and history
- * readers. These values deliberately do not mirror AgentScope's internal EventType enum.
+ * 描述：子智能体调用的追踪事件类型，用于向客户端和历史记录暴露调用过程中的关键节点。
+ *       刻意不映射 AgentScope 内部的 EventType 枚举，以保持稳定和解耦。
+ *
+ * @author huxuehao
  */
 public enum SubAgentTraceEventType {
     STARTED,

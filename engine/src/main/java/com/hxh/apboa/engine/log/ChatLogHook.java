@@ -34,8 +34,8 @@ public class ChatLogHook implements Hook {
             }
         }
 
-        // Child agents are persisted through their parent ActingChunkEvent above. Persisting their
-        // own hook callbacks as ordinary chat messages would interleave cards and duplicate rows.
+        // 子代理已通过其父级的 ActingChunkEvent 进行持久化。若将其自身的 hook 回调作为普通聊天消息持久化，
+        // 会导致卡片交错与数据重复。
         if (isSubAgentChild(event)) {
             return Mono.just(event);
         }
@@ -169,8 +169,8 @@ public class ChatLogHook implements Hook {
 
         BeanUtils.getBean(SubAgentTracePersistenceService.class).record(tenantId, sessionId, traceEvent);
 
-        // The anchor participates in the normal chat branch path; dense details stay in the
-        // dedicated trace table and are hydrated in a batch when history is read.
+        // 锚点参与正常的聊天分支路径；详细信息保留在专用的追踪表中，
+        // 并在读取历史记录时批量加载。
         if (traceEvent.getEventType() == SubAgentTraceEventType.STARTED) {
             Map<String, Object> anchor = new HashMap<>();
             anchor.put("invocationId", traceEvent.getInvocationId());

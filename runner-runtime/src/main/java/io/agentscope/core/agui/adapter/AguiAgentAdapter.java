@@ -327,30 +327,6 @@ public class AguiAgentAdapter {
                     }
                 }
             }
-            /**
-             * 【子Agent流式事件发送】
-             * 此处可以实现子Agent流式事件包装成AguiEvent并发送，但是目前前端适配效果不好。
-             * 此处若想可用，需要对AguiEvent事件进行扩展，同时前端要实现合理的子Agent交互效果，并且支持多个子Agent并行运行。
-             * TODO: 待前端适配完善后再启用
-             */
-//            else {
-//                for (ContentBlock block : msg.getContent()) {
-//                    if (block instanceof ToolResultBlock toolResult) {
-//                        Object o = toolResult.getMetadata().get("subagent_id");
-//                        if (o != null) {
-//                            List<ContentBlock> output = toolResult.getOutput();
-//                            for (ContentBlock contentBlock : output) {
-//                                if (contentBlock instanceof TextBlock textBlock){
-//                                    String text = textBlock.getText();
-//                                    Event subEvent = JsonUtils.getJsonCodec().fromJson(text, Event.class);
-//                                    events.addAll(convertEvent(subEvent, state));
-//                                }
-//                            }
-//                        }
-//                    }
-//                }
-//            }
-
         } else if (type == EventType.AGENT_RESULT) {
             // pending 精确为 need_confirm 工具——过滤掉同轮被 stopAgent 连累的普通/MCP 工具。
             // 前端据此逐工具渲染「允许/禁止」，决策齐了调 /agui/resume。
