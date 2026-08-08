@@ -21,6 +21,7 @@ const props = withDefaults(
     agentId: string
     uploadedFiles?: UploadedFileItem[]
     isRunning?: boolean
+    isStopping?: boolean
     placeholder?: string
     memoryActive?: boolean
     planActive?: boolean
@@ -153,7 +154,8 @@ onMounted(() => {
         :placeholder="placeholder || '输入消息...'"
         :session-id="sessionId"
         :mention-allowed="mentionAllowed"
-        :is-running="isRunning"
+        :is-running="isRunning || isStopping"
+        :is-stopping="isStopping"
         @update:model-value="handleEditorUpdate"
         @send="emit('send')"
         @input-tag-preview="(item) => emit('inputTagPreview', item)"
@@ -161,6 +163,7 @@ onMounted(() => {
 
       <ChatInputToolbar
         :is-running="isRunning"
+        :is-stopping="isStopping"
         :can-send="canSend"
         :enable-memory="enableMemory"
         :memory-active="memoryActive"

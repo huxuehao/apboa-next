@@ -6,7 +6,7 @@ import { useSubAgentRuns } from '@/composables/chat/useSubAgentRuns'
 import { buildToolCallsContent } from '@/utils/chat/format'
 import type {ChatMessageVO, RawEvent, ContextUsageEvent, ContextCompressionEvent} from '@/types'
 import { useAccountStore } from '@/stores'
-import { stopRun } from '@/api/agui'
+import { getRunStatus, stopRun } from '@/api/agui'
 
 let lastIdBig = BigInt(Date.now()) << 12n;
 function nextIdBig() {
@@ -53,7 +53,22 @@ export function useChatStream(
   const streamingContent = ref('')
   const contextUsage = ref<ContextUsageEvent['value'] | null>(null)
   const memoryCompressionActive = ref(false)
+  const isStopping = ref(false)
+  let stopRequestId = 0
   let compressionNoticeTimer: ReturnType<typeof setTimeout> | null = null
+
+  /** 等待后端确认 Agent 真正结束，避免停止请求返回后立即复用仍在运行的 Agent。 */
+  const waitForRunStopped = async (sessionId: string): Promise<boolean> => {
+    while (true) {
+      try {
+        const status = await getRunStatus(sessionId)
+        if (!status.running || status.state === 'COMPLETED') return true
+      } catch {
+        // 短暂网络错误不改变停止状态，下一轮继续查询。
+      }
+      await new Promise(resolve => setTimeout(resolve, 500))
+    }
+  }
 
   // 工具调用进度
   const toolCallsInProgress = ref<
@@ -352,40 +367,44 @@ export function useChatStream(
   }
 
   // 中止运行
-  const abortRun = async  () => {
-    // 先调用后端 stop API 强制中断
+  const abortRun = async () => {
+    if (isStopping.value || !isRunning.value) return
     const sid = currentSessionId.value
-    if (sid) {
-      try { await stopRun(sid) } catch { /* 忽略 stop API 错误 */ }
-    }
-    await abort()
-    agentHasResult.value = true
+    isStopping.value = true
+    const requestId = ++stopRequestId
+    let stoppedConfirmed = !sid
+    try {
+      // 先通知后端进入 STOPPING，再断开当前浏览器 SSE 连接。
+      if (sid) {
+        try { await stopRun(sid) } catch { /* 状态轮询仍会继续确认后端结果 */ }
+      }
+      await abort()
+      agentHasResult.value = true
 
-    // 重置计划状态
-    resetPlan()
+      // 重置计划状态
+      resetPlan()
 
-    if (sid) {
-      // 保存所有进行中的工具调用消息（按顺序逐个保存）
-      if (toolCallsInProgress.value.length > 0) {
-        for (const tool of toolCallsInProgress.value) {
-          const contentToSave = buildToolCallsContent([tool])
-          if (contentToSave) {
-            onMessageSaved?.({
-              id: nextIdBig(),
-              sessionId: sid,
-              role: 'tool',
-              content: contentToSave,
-              parentId: '',
-              path: '',
-              depth: 0,
-              createdAt: ''
-            } as ChatMessageVO)
+      if (sid) {
+        // 保存所有进行中的工具调用消息（按顺序逐个保存）
+        if (toolCallsInProgress.value.length > 0) {
+          for (const tool of toolCallsInProgress.value) {
+            const contentToSave = buildToolCallsContent([tool])
+            if (contentToSave) {
+              onMessageSaved?.({
+                id: nextIdBig(),
+                sessionId: sid,
+                role: 'tool',
+                content: contentToSave,
+                parentId: '',
+                path: '',
+                depth: 0,
+                createdAt: ''
+              } as ChatMessageVO)
+            }
           }
         }
-      }
-      // 保存AI回复消息
-      else {
-        if (streamingContent.value) {
+        // 保存 AI 回复消息
+        else if (streamingContent.value) {
           onMessageSaved?.({
             id: streamingMessageId.value,
             sessionId: sid,
@@ -399,14 +418,25 @@ export function useChatStream(
         }
       }
 
+      // 只有后端确认 Agent 真正结束后，才清理思考、工具和压缩临时状态。
+      stoppedConfirmed = sid ? await waitForRunStopped(sid) : true
+    } finally {
+      // 会话切换后旧停止请求的轮询不能清理新会话的界面状态。
+      if (requestId !== stopRequestId || currentSessionId.value !== sid) return
       toolCallsInProgress.value = []
+      pendingConfirms.value = {}
+      resetSubAgentRuns()
       streamingMessageId.value = null
       streamingContent.value = ''
       streamingRole.value = 'system'
-      isRunning.value = false
-
+      memoryCompressionActive.value = false
+      if (compressionNoticeTimer) {
+        clearTimeout(compressionNoticeTimer)
+        compressionNoticeTimer = null
+      }
+      // 超时后继续保持停止中状态，防止后端仍占用 Agent 时再次发送请求。
+      if (stoppedConfirmed) isStopping.value = false
     }
-
   }
 
   // 发送消息（可选传入 fileIds 覆盖，用于发送时已清空输入框的场景）
@@ -418,7 +448,7 @@ export function useChatStream(
     const effectiveFileIds = overrideFileIds ?? fileIds?.value ?? []
     if (!agentId.value) return
     if (!inputText.trim() && !effectiveFileIds.length) return
-    if (isRunning.value) return
+    if (isRunning.value || isStopping.value) return
     if (!agentDetail.value?.agentCode) {
       message.error('智能体信息未加载完成，请稍后再试')
       return
@@ -450,6 +480,8 @@ export function useChatStream(
    * 重置所有流式状态，用于会话切换时清理旧 session 残留。
    */
   function resetStreamingState() {
+    stopRequestId++
+    isStopping.value = false
     streamingMessageId.value = null
     streamingContent.value = ''
     streamingRole.value = 'system'
@@ -473,6 +505,7 @@ export function useChatStream(
     toolCallsInProgress,
     subAgentRuns,
     isRunning,
+    isStopping,
     isReplaying,
     currentPlan,
     contextUsage,

@@ -135,6 +135,7 @@ const {
   toolCallsInProgress,
   subAgentRuns,
   isRunning,
+  isStopping,
   currentPlan,
   contextUsage,
   memoryCompressionActive,
@@ -372,7 +373,7 @@ const handleSessionMenu = async (key: string, session: ChatSessionVO) => {
     return
   }
   if (key === 'delete') {
-    if (isRunning.value) {
+    if (isRunning.value || isStopping.value) {
       message.info('请等待当前对话完成')
       return
     }
@@ -411,7 +412,7 @@ const handelToolContent = (value: any) => {
 
 // 处理交互提交
 const handleInteractionSubmit = async (payload: InteractionSubmitPayload) => {
-  if (!currentSessionId.value || isRunning.value) return
+  if (!currentSessionId.value || isRunning.value || isStopping.value) return
 
   const sid = currentSessionId.value
   const data = payload.data as Record<string, unknown>
@@ -450,7 +451,7 @@ const handleInteractionSubmit = async (payload: InteractionSubmitPayload) => {
 
 // 处理 UIP 卡片渲染失败重试
 const handleUIPRetry = async (uipCode: string) => {
-  if (!currentSessionId.value || isRunning.value) return
+  if (!currentSessionId.value || isRunning.value || isStopping.value) return
 
   // 构造重试消息：提示文本 + 原始 UIP 内容，让智能体参考修正
   const retryText = `上一条消息中的交互卡片生成有误，请重新生成。\n\n原始卡片内容：\n${uipCode}`
@@ -460,7 +461,7 @@ const handleUIPRetry = async (uipCode: string) => {
 
 // 处理 VEP 视觉卡片渲染失败重试
 const handleVEPRetry = async (vepCode: string) => {
-  if (!currentSessionId.value || isRunning.value) return
+  if (!currentSessionId.value || isRunning.value || isStopping.value) return
 
   // 构造重试消息：提示文本 + 原始 VEP 内容，让智能体参考修正
   const retryText = `上一条消息中的视觉卡片生成有误，请重新生成。\n\n原始卡片内容：\n${vepCode}`
@@ -473,7 +474,7 @@ const handleSend = async () => {
   const text = inputText.value.trim()
   const filesToSend = uploadedFiles.value.filter((f) => !f.uploading)
   const hasFiles = filesToSend.length > 0
-  if ((!text && !hasFiles) || !agentId.value || isRunning.value) return
+  if ((!text && !hasFiles) || !agentId.value || isRunning.value || isStopping.value) return
 
   const finalText = hasFiles ? buildFilesPrefix(filesToSend) + text : text
   const fileIdsToSend = filesToSend.map((f) => f.id)
@@ -594,12 +595,12 @@ onBeforeUnmount(() => {
   disconnectStream()
 })
 
-// 运行状态变化时更新 runningSessions
-watch(isRunning, (running) => {
+// 运行状态变化时更新 runningSessions，停止确认期间仍保持会话忙碌标记。
+watch([isRunning, isStopping], ([running, stopping]) => {
   const sid = currentSessionId.value
   if (!sid) return
   const next = new Set(runningSessions.value)
-  if (running) {
+  if (running || stopping) {
     next.add(sid)
     startPolling()
   } else {
@@ -651,6 +652,7 @@ watch(isRunning, (running) => {
       :input-value="inputText"
       :uploaded-files="uploadedFiles"
       :isRunning="isRunning"
+      :is-stopping="isStopping"
       :agent-id="agentId"
       :memory-active="memoryActive"
       :plan-active="planActive"

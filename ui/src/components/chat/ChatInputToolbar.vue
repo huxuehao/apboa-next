@@ -9,6 +9,7 @@ import { computed } from 'vue'
 import {
   ArrowUpOutlined,
   ClockCircleOutlined,
+  LoadingOutlined,
   PaperClipOutlined,
   ThunderboltOutlined
 } from '@ant-design/icons-vue'
@@ -18,6 +19,7 @@ import type { ContextUsageEvent } from '@/types'
 const props = withDefaults(
   defineProps<{
     isRunning?: boolean
+    isStopping?: boolean
     /** 是否允许触发发送（综合上传中、内容、附件等条件） */
     canSend: boolean
     enableMemory?: boolean
@@ -31,6 +33,7 @@ const props = withDefaults(
   }>(),
   {
     isRunning: false,
+    isStopping: false,
     enableMemory: false,
     memoryActive: false,
     showToolProcess: false,
@@ -97,7 +100,7 @@ const uploadTooltip = computed(() => {
           <span v-else>不支持记忆持久化</span>
         </template>
         <button
-          :disabled="!enableMemory"
+          :disabled="isStopping || !enableMemory"
           type="button"
           class="chat-toolbar-btn chat-toolbar-btn-icon chat-toolbar-btn-circle"
           :class="{ 'is-active': memoryActive && enableMemory }"
@@ -113,7 +116,7 @@ const uploadTooltip = computed(() => {
           <span v-else>不支持控制工具调用显示</span>
         </template>
         <button
-          :disabled="!showToolProcess"
+          :disabled="isStopping || !showToolProcess"
           type="button"
           class="chat-toolbar-btn chat-toolbar-btn-icon chat-toolbar-btn-circle"
           :class="{ 'is-active': toolProcessActive && showToolProcess }"
@@ -124,6 +127,7 @@ const uploadTooltip = computed(() => {
       </ATooltip>
     </div>
     <div class="chat-input-toolbar-right">
+      <!-- 上下文使用情况提示 -->
       <ContextUsageIndicator
         :usage="contextUsage"
         :compression-active="memoryCompressionActive"
@@ -131,7 +135,7 @@ const uploadTooltip = computed(() => {
       <!-- @ 添加上下文按钮 -->
       <ATooltip placement="bottom" title="添加上下文">
         <button
-          :disabled="!mentionAllowed"
+          :disabled="isStopping || !mentionAllowed"
           type="button"
           class="chat-toolbar-btn chat-toolbar-btn-icon chat-toolbar-btn-circle"
           @mousedown.prevent
@@ -142,6 +146,7 @@ const uploadTooltip = computed(() => {
       </ATooltip>
       <ATooltip placement="bottom" :title="uploadTooltip">
         <button
+          :disabled="isStopping"
           type="button"
           class="chat-toolbar-btn chat-toolbar-btn-icon chat-toolbar-btn-circle"
           style="margin-right: 15px"
@@ -150,15 +155,24 @@ const uploadTooltip = computed(() => {
           <PaperClipOutlined />
         </button>
       </ATooltip>
-      <button
-        type="button"
-        class="chat-send-btn-inner"
-        :disabled="!isRunning && !canSend"
-        @click="isRunning ? emit('abort') : emit('send')"
-      >
-        <template v-if="isRunning"><div class="send"></div></template>
-        <ArrowUpOutlined v-else />
-      </button>
+      <ATooltip placement="bottom">
+        <template #title>
+          <span v-if="isStopping">正在中断中，请稍候</span>
+          <span v-else-if="isRunning">正在运行中</span>
+          <span v-else-if="canSend">点击发送消息</span>
+          <span v-else>输入内容后可发送</span>
+        </template>
+        <button
+          type="button"
+          class="chat-send-btn-inner"
+          :disabled="isStopping || (!isRunning && !canSend)"
+          @click="isStopping ? undefined : (isRunning ? emit('abort') : emit('send'))"
+        >
+          <LoadingOutlined v-if="isStopping" spin style="color: #0F74FF; font-weight: bolder"/>
+          <template v-else-if="isRunning"><div class="send"></div></template>
+          <ArrowUpOutlined v-else />
+        </button>
+      </ATooltip>
     </div>
   </div>
 </template>

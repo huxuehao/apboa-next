@@ -27,6 +27,7 @@ const props = defineProps<{
   inputValue: string
   uploadedFiles?: UploadedFileItem[]
   isRunning: boolean
+  isStopping?: boolean
   agentId: string
   memoryActive?: boolean
   planActive?: boolean
@@ -335,6 +336,7 @@ defineExpose({
             :agent-id="agentId"
             :uploaded-files="uploadedFiles"
             :isRunning="isRunning"
+            :is-stopping="isStopping"
             :memory-active="memoryActive"
             :plan-active="planActive"
             :enable-memory="enableMemory"
