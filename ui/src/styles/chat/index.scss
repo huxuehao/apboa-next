@@ -553,6 +553,8 @@ $small-mobile-breakpoint: 375px;
 }
 
 .chat-tool-call {
+  margin-right: 14px;
+  margin-left: 14px;
   margin-top: var(--spacing-sm);
   padding: var(--spacing-sm) var(--spacing-base);
   font-size: var(--font-size-sm);
