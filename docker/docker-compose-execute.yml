@@ -20,6 +20,7 @@ services:
     cpus: ${RUNTIME_CPU_LIMIT:-8}
     environment:
       SPRING_PROFILES_ACTIVE: docker
+      GATEWAY_ENABLED: "false"
       MYSQL_HOST: ${MYSQL_HOST}
       MYSQL_PORT: ${MYSQL_PORT}
       MYSQL_DATABASE: ${MYSQL_DATABASE}
@@ -62,6 +63,55 @@ services:
       - "${RUNTIME_PORT:-3061}:3061"
     networks:
       - apboa_execute
+
+  # ==================== 网关数据面（runner-gateway） ====================
+  apboa-gateway:
+    build:
+      context: ..
+      dockerfile: docker/gateway/Dockerfile
+      args:
+        MAVEN_IMAGE: ${DOCKER_REGISTRY}maven:3.9-eclipse-temurin-21
+        JRE_IMAGE: ${DOCKER_REGISTRY}eclipse-temurin:21-jre
+    container_name: apboa-gateway
+    restart: unless-stopped
+    network_mode: host
+    mem_limit: ${GATEWAY_MEM_LIMIT:-4g}
+    cpus: ${GATEWAY_CPU_LIMIT:-4}
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      MYSQL_HOST: ${MYSQL_HOST}
+      MYSQL_PORT: ${MYSQL_PORT}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_DATABASE: ${REDIS_DATABASE}
+      JWT_SECRET: ${JWT_SECRET}
+      VECTOR_STORE_TYPE: ${VECTOR_STORE_TYPE}
+      PG_HOST: ${PG_HOST}
+      PG_PORT: ${PG_PORT}
+      PG_DATABASE: ${PG_DATABASE}
+      PG_USER: ${PG_USER}
+      PG_PASSWORD: ${PG_PASSWORD}
+      CONSOLE_HOST: ${CONSOLE_HOST}
+      PROXY_HOST: 127.0.0.1
+      PROXY_PORT: "3062"
+      SHELL_PROXY_ENABLED: "true"
+      GATEWAY_ENABLED: "true"
+      GATEWAY_JAVA_HEAP_PERCENTAGE: ${GATEWAY_JAVA_HEAP_PERCENTAGE:-75.0}
+      APBOA_NODE_ID: ${APBOA_NODE_ID}
+      APBOA_HOST_NAME: ${APBOA_HOST_NAME}
+      APBOA_HOST_IP: ${APBOA_HOST_IP}
+      TZ: Asia/Shanghai
+    volumes:
+      - ${LOG_PATH:-./logs}/gateway:/app/logs
+      - ${DATA_PATH:-./data}/.apboa:/app/.apboa
+      - ${DATA_PATH:-./data}/runtime-tools:/opt/tools
+    depends_on:
+      - apboa-runtime
+      - apboa-proxy
 
   # ==================== Shell 执行代理（runner-proxy） ====================
   apboa-proxy:
@@ -110,6 +160,8 @@ services:
       - ${LOG_PATH:-./logs}/proxy:/app/logs
       - ${DATA_PATH:-./data}/.apboa:/app/.apboa
       - ${DATA_PATH:-./data}/proxy-tools:/opt/tools
+    ports:
+      - "3062:3062"
     networks:
       - apboa_execute
 

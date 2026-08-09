@@ -13,7 +13,7 @@ import lombok.Setter;
 @Getter
 public class ServiceInfo {
 
-    /** 服务类型：FILE / PROXY / RUNTIME */
+    /** 服务类型：FILE / PROXY / RUNTIME / GATEWAY */
     private String serviceType;
 
     /** 服务状态：UP / DOWN */

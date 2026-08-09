@@ -11,7 +11,7 @@ public class HeartbeatPayload {
     /** 节点唯一标识 */
     private String nodeId;
 
-    /** 服务类型：FILE / PROXY / RUNTIME */
+    /** 服务类型：FILE / PROXY / RUNTIME / GATEWAY */
     private String serviceType;
 
     /** 主机名 */

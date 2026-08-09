@@ -603,7 +603,7 @@ export interface CheckModelResult {
 
 /** 服务状态信息 */
 export interface ServiceStatusInfo {
-  serviceType: 'FILE' | 'PROXY' | 'RUNTIME'
+  serviceType: 'FILE' | 'PROXY' | 'RUNTIME' | 'GATEWAY'
   status: 'UP' | 'DOWN'
   port: number | null
   lastHeartbeat: string

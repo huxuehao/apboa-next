@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, nextTick, onMounted } from 'vue'
 import {
   CheckCircleFilled,
   DownOutlined,
@@ -42,6 +42,52 @@ const statusText = computed(
     })[props.run.status] || '运行中',
 )
 
+// 任务区域折叠相关逻辑
+const taskRef = ref<HTMLElement | null>(null)
+const taskCollapsed = ref(false)
+const taskNeedCollapse = ref(false)
+const isTaskHovered = ref(false)
+const MAX_AUTO_COLLAPSE_HEIGHT = 80
+
+// 检查任务内容高度，决定是否需要折叠
+const checkTaskHeight = () => {
+  if (!taskRef.value) return
+  taskNeedCollapse.value = taskRef.value.scrollHeight > MAX_AUTO_COLLAPSE_HEIGHT
+  if (taskNeedCollapse.value) {
+    taskCollapsed.value = true
+  }
+}
+
+// 切换任务区域的折叠状态
+const toggleTaskCollapse = () => {
+  if (!taskNeedCollapse.value) return
+  taskCollapsed.value = !taskCollapsed.value
+}
+
+// 监听 run.task 变化，重新检查高度
+watch(
+  () => props.run.task,
+  async () => {
+    await nextTick()
+    checkTaskHeight()
+  }
+)
+
+onMounted(() => {
+  checkTaskHeight()
+})
+
+// 监听卡片主体折叠状态，当卡片展开时重新检查任务高度
+watch(
+  () => collapsed.value,
+  async (newVal) => {
+    if (!newVal) {
+      await nextTick()
+      checkTaskHeight()
+    }
+  }
+)
+
 watch(
   () => props.run.status,
   (next, previous) => {
@@ -78,25 +124,53 @@ watch(
       </ATooltip>
       <span class="subagent-card-heading">
         <span class="subagent-card-title"
-          >{{ running ? '正在执行' : '' }}智能体（{{ title }}）</span
+        >{{ running ? '正在执行' : '' }}智能体（{{ title }}）</span
         >
         <span class="subagent-card-subtitle">{{
-          running ? run.task || '正在执行任务' : summary
-        }}</span>
+            running ? run.task || '正在执行任务' : summary
+          }}</span>
       </span>
       <DownOutlined class="subagent-card-arrow" :class="{ 'is-collapsed': collapsed }" />
     </button>
-    <div v-show="!collapsed" class="subagent-card-details">
-      <div v-if="run.task" class="subagent-card-task"><span>任务</span>{{ run.task }}</div>
-      <SubAgentEventList
-        :events="run.events"
-        :active="running"
-        @inputTagPreview="$emit('inputTagPreview', $event)"
-        @interaction-submit="$emit('interactionSubmit', $event)"
-        @uip-retry="$emit('uipRetry', $event)"
-        @vep-retry="$emit('vepRetry', $event)"
-      />
-    </div>
+    <Transition name="collapse">
+      <div v-show="!collapsed" class="subagent-card-details">
+        <div
+          v-if="run.task"
+          ref="taskRef"
+          class="subagent-card-task"
+          :class="{
+            'is-collapsed': taskCollapsed,
+            'is-expandable': taskNeedCollapse,
+          }"
+          @click="toggleTaskCollapse"
+          @mouseenter="isTaskHovered = true"
+          @mouseleave="isTaskHovered = false"
+        >
+          <span class="task-label">任务: </span>
+          <span class="task-content">{{ run.task }}</span>
+
+          <!-- 悬停提示遮罩 -->
+          <div
+            v-if="taskNeedCollapse"
+            class="task-hint-overlay"
+          >
+          <Transition name="hint-fade">
+            <span class="task-hint-text" v-if="isTaskHovered">
+              {{ taskCollapsed ? '点击展开任务' : '点击折叠任务' }}
+            </span>
+          </Transition>
+          </div>
+        </div>
+        <SubAgentEventList
+          :events="run.events"
+          :active="running"
+          @inputTagPreview="$emit('inputTagPreview', $event)"
+          @interaction-submit="$emit('interactionSubmit', $event)"
+          @uip-retry="$emit('uipRetry', $event)"
+          @vep-retry="$emit('vepRetry', $event)"
+        />
+      </div>
+    </Transition>
   </section>
 </template>
 
@@ -104,9 +178,10 @@ watch(
 .subagent-card {
   margin: 12px 14px;
   overflow: hidden;
-  border: 1px solid #e4e7ec;
-  border-radius: 10px;
+  border: 1px solid #f0f0f0;
+  border-radius: 12px;
   background: #fff;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.03);
 }
 
 .subagent-card.is-running {
@@ -132,10 +207,6 @@ watch(
   color: inherit;
   text-align: left;
   cursor: pointer;
-}
-
-.subagent-card-header:hover {
-  background: #fafafa;
 }
 
 .card-avatar {
@@ -223,22 +294,111 @@ watch(
 
 .subagent-card-details {
   border-top: 1px solid #f0f0f0;
-  padding: 8px 10px 10px;
   background: #fcfcfd;
+  overflow: hidden;
 }
 
 .subagent-card-task {
-  margin: 0 2px 8px;
+  position: relative;
   color: #475467;
   font-size: 13px;
   line-height: 1.55;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  background-color: #ffffff;
+  padding: 8px 10px;
+  border: 1px solid #f0f0f0;
+  margin: 5px;
+  border-radius: 10px;
+  transition: max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+  cursor: default;
+
+  &.is-expandable {
+    cursor: pointer;
+
+    &.is-collapsed {
+      max-height: 80px;
+    }
+
+    &:not(.is-collapsed) {
+      max-height: 800px;
+    }
+  }
 }
 
-.subagent-card-task span {
+.task-label {
   margin-right: 8px;
-  color: #98a2b3;
+  color: #828282;
+  font-weight: bolder;
+  font-size: 13px;
+}
+
+.task-content {
+  position: relative;
+  z-index: 1;
+}
+
+/* 悬停提示遮罩 */
+.task-hint-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 40px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 6px;
+  background: linear-gradient(to top, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0) 100%);
+  border-radius: 0 0 6px 6px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.task-hint-text {
   font-size: 12px;
+  color: #1677ff;
+  font-weight: 500;
+  padding: 2px 10px;
+  background-color: white;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+/* 提示文字淡入淡出动画 */
+.hint-fade-enter-active {
+  transition: opacity 0.25s ease;
+}
+.hint-fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+.hint-fade-enter-from,
+.hint-fade-leave-to {
+  opacity: 0;
+}
+
+/* 折叠过渡动画 */
+.collapse-enter-active,
+.collapse-leave-active {
+  transition:
+    max-height var(--transition-base),
+    opacity var(--transition-fast),
+    padding var(--transition-fast);
+  overflow: hidden;
+}
+
+.collapse-enter-from,
+.collapse-leave-to {
+  max-height: 0;
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.collapse-enter-to,
+.collapse-leave-from {
+  max-height: 500px;
+  opacity: 1;
 }
 </style>

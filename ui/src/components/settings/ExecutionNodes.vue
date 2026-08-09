@@ -4,7 +4,7 @@
  *
  * @author huxuehao
  */
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import * as heartbeatApi from '@/api/heartbeat'
 import type { NodeStatusVO, ServiceStatusInfo, WebSocketNodeVO } from '@/types'
 
@@ -25,10 +25,22 @@ const serviceLabelMap: Record<string, string> = {
   RUNTIME: '运行时',
   FILE: '文件同步',
   PROXY: 'Shell代理',
+  GATEWAY: '网关服务',
 }
 
 /** 服务显示顺序（固定排列） */
 const serviceOrder = ['RUNTIME', 'FILE', 'PROXY']
+
+/** 网关服务卡片：一个网关 runner 对应一张卡片 */
+const gatewayNodes = computed<NodeStatusVO[]>(() => nodes.value.flatMap((node) => {
+  const gatewayServices = node.services.filter((service) => service.serviceType === 'GATEWAY')
+  return gatewayServices.map((service) => ({
+    ...node,
+    nodeId: `${node.nodeId}`,
+    services: [service],
+    nodeStatus: service.status === 'UP' ? 'HEALTHY' : 'DOWN',
+  }))
+}))
 
 /** 按固定顺序排列服务列表 */
 function sortedServices(services: ServiceStatusInfo[]): ServiceStatusInfo[] {
@@ -187,6 +199,72 @@ onUnmounted(() => {
               </div>
 
               <!-- 节点底部信息 -->
+              <div class="node-footer">
+                <span class="footer-item">首次发现：{{ node.firstSeenAt }}</span>
+                <span class="footer-item">最近更新：{{ node.lastUpdatedAt }}</span>
+              </div>
+            </div>
+          </div>
+        </ApboaSpin>
+      </ATabPane>
+
+      <!-- 网关服务 -->
+      <ATabPane key="gateway" tab="网关服务">
+        <div class="nodes-desc mb-lg">
+          监控所有网关 runner 的运行状态；每个网关节点负责暴露所在节点上的工作流 API 端口
+        </div>
+
+        <ApboaSpin :spinning="loading">
+          <div v-if="gatewayNodes.length === 0" class="empty-state">
+            <AEmpty description="暂无网关服务节点，请确保 runner-gateway 已启动并配置心跳上报" />
+          </div>
+
+          <div v-else class="node-list">
+            <div
+              v-for="node in gatewayNodes"
+              :key="node.nodeId"
+              class="node-card"
+              :class="`node-status-${node.nodeStatus.toLowerCase()}`"
+            >
+              <div class="node-header">
+                <div class="node-title-row">
+                  <div class="node-avatar">
+                    <span class="avatar-text">{{ getAvatarText(node.nodeId) }}</span>
+                  </div>
+                  <div class="node-info">
+                    <span class="node-id" :title="node.nodeId">{{ node.nodeId }}</span>
+                    <span class="node-host" :title="`${node.hostname} / ${node.ip}`">
+                      {{ node.hostname }}
+                      <span class="node-ip">{{ node.ip }}</span>
+                    </span>
+                  </div>
+                  <div class="node-status-badge" :class="`badge-${node.nodeStatus.toLowerCase()}`">
+                    <span class="status-dot"></span>
+                    {{ node.nodeStatus === 'HEALTHY' ? '正常' : '离线' }}
+                  </div>
+                </div>
+              </div>
+
+              <div class="services-row">
+                <div
+                  v-for="svc in node.services"
+                  :key="svc.serviceType"
+                  class="service-item"
+                  :class="{ 'service-down': svc.status === 'DOWN' }"
+                >
+                  <div class="service-indicator">
+                    <span class="indicator-dot" :class="svc.status === 'UP' ? 'dot-up' : 'dot-down'"></span>
+                  </div>
+                  <div class="service-detail">
+                    <span class="service-name">{{ serviceLabelMap[svc.serviceType] }}</span>
+                    <span class="service-meta">
+                      <template v-if="svc.status === 'UP'">运行 {{ formatUptime(svc.startedAt) }}</template>
+                      <template v-else>最后心跳 {{ svc.lastHeartbeat || '--' }}</template>
+                    </span>
+                  </div>
+                </div>
+              </div>
+
               <div class="node-footer">
                 <span class="footer-item">首次发现：{{ node.firstSeenAt }}</span>
                 <span class="footer-item">最近更新：{{ node.lastUpdatedAt }}</span>

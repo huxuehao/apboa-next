@@ -25,6 +25,10 @@
 │  │ :3061            │─►│ :3062           │  │ (web disabled)  │       │
 │  │ AI 运行时         │  │ Shell 执行代理   │  │ 文件同步服务     │       │
 │  └─────────────────┘  └─────────────────┘  └─────────────────┘       │
+│  ┌───────────────────────────────────────────────────────────────┐  │
+│  │ runner-gateway（host 网络）                                   │  │
+│  │ 用户动态创建的 API 端口直接监听本机宿主机                      │  │
+│  └───────────────────────────────────────────────────────────────┘  │
 └───────────────────────────────────────────────────────────────────────┘
                             │
                   MySQL/Redis/pgvector
@@ -72,11 +76,12 @@ docker compose -f docker-compose-simple.yml up -d --build
 
 启动完成后访问 `http://localhost:80`，账号密码：admin / Admin@123.com
 
-**包含的服务**（8 个容器）：
+**包含的服务**（9 个容器）：
 - MySQL 8.0 + Redis 7 + pgvector (pg16)
 - runner-console（管理控制台）
 - runner-runtime（AI 运行时）
 - runner-proxy（Shell 执行代理）
+- runner-gateway（网关数据面，host 网络，动态暴露工作流 API 端口）
 - runner-websocket（WebSocket 推送服务）
 - frontend（Nginx 前端）
 
@@ -134,11 +139,30 @@ cp .env.execute .env
 # 编辑 .env：
 #   MYSQL_HOST / REDIS_HOST / PG_HOST → 中间件服务器 IP
 #   CONSOLE_HOST → 控制台服务器 IP
+#   GATEWAY_JAVA_HEAP_PERCENTAGE / GATEWAY_MEM_LIMIT / GATEWAY_CPU_LIMIT → 网关 runner 资源配置
 # APBOA_NODE_ID/APBOA_HOST_NAME/APBOA_HOST_IP 由启动脚本自动注入
 docker compose -f docker-compose-execute.yml up -d --build
 ```
 
-**水平扩展**：每个执行节点必须使用唯一的 `NODE_ID`（启动脚本默认使用宿主机 IP，天然唯一）。
+**水平扩展**：每个执行节点会同时运行 `runner-runtime`、`runner-proxy`、`runner-file` 和 `runner-gateway`，必须使用唯一的 `APBOA_NODE_ID`（启动脚本默认使用宿主机 IP，天然唯一）。多个执行节点上的网关应用分别监听各自宿主机端口，前端可在“服务监控”的“网关服务”标签中查看每个网关节点。
+
+### 网关 API 端口访问说明
+
+`runner-gateway` 使用 Linux Docker Engine 的 `network_mode: host`。用户将网关应用上线后，Vert.x 会直接在执行节点宿主机上监听应用端口，不需要重新创建容器或增加 Compose `ports` 配置；应用下线、删除或重置时，关闭 `HttpServer` 后宿主机端口同步释放。
+
+访问地址为：
+
+```text
+http://<执行节点宿主机 IP>:<网关应用端口>/<API 路径>
+```
+
+请注意：
+
+- 生产环境应使用 Linux Docker Engine；Docker Desktop 的 host 网络行为取决于其虚拟机实现，不作为生产支持环境。
+- 每个执行节点的防火墙必须放行实际使用的网关端口。
+- 平台固定端口 `3060`、`3061`、`3062`、`3064` 以及单机中间件端口 `3306`、`5432`、`6379` 已保留，不能创建为网关应用端口。
+- 网关 runner 保留 `workflow -> engine` 的智能体执行依赖，API 调用工作流中的 Agent 节点时仍由 `WorkflowAgentNodeExecutor` 执行。
+- 网关 runner 不提供 AGUI 接口；AGUI 仍由 `runner-runtime` 提供。
 
 ### 多节点 HOST 配置要点
 
@@ -171,7 +195,7 @@ docker compose -f docker-compose-execute.yml up -d --build
 | `REDIS_PORT` | Redis 端口 | `6379` |
 | `REDIS_PASSWORD` | Redis 密码 | `redis` |
 | `REDIS_DATABASE` | Redis 数据库编号 | `7` |
-| `VECTOR_STORE_TYPE` | 向量存储类型（仅 runtime 使用） | `pgvector` |
+| `VECTOR_STORE_TYPE` | 向量存储类型（runtime/gateway 使用） | `pgvector` |
 | `PG_HOST` | pgvector 地址 | `apboa-pgvector` |
 | `PG_PORT` | pgvector 端口 | `5432` |
 | `PG_DATABASE` | pgvector 数据库名 | `apboa_vector` |
@@ -213,6 +237,9 @@ docker compose -f docker-compose-execute.yml up -d --build
 | `SHELLPROXY_MAX_TIMEOUT` | Shell 命令最大超时（秒） | `3600` |
 | `SHELLPROXY_MAX_OUTPUT_SIZE` | Shell 命令最大输出字节数 | `52428800` |
 | `SHELLPROXY_JAVA_HEAP_PERCENTAGE` | proxy JVM 堆占容器内存百分比 | `50.0` |
+| `GATEWAY_MEM_LIMIT` | gateway 容器内存限制 | `4g` |
+| `GATEWAY_CPU_LIMIT` | gateway 容器 CPU 限制 | `4` |
+| `GATEWAY_JAVA_HEAP_PERCENTAGE` | gateway JVM 堆占容器内存百分比 | `75.0` |
 | `FILE_MEM_LIMIT` | file 容器内存限制 | `512m` |
 | `FILE_CPU_LIMIT` | file 容器 CPU 限制 | `0.5` |
 | `FILE_JAVA_HEAP_PERCENTAGE` | file JVM 堆占容器内存百分比 | `60.0` |
@@ -231,6 +258,7 @@ docker compose -f docker-compose-execute.yml up -d --build
 docker/
 ├── console/                    # runner-console Dockerfile
 ├── runtime/                    # runner-runtime Dockerfile
+├── gateway/                    # runner-gateway Dockerfile（host 网络，动态暴露 API 端口）
 ├── proxy/                      # runner-proxy Dockerfile
 ├── file/                       # runner-file Dockerfile
 ├── websocket/                  # runner-websocket Dockerfile

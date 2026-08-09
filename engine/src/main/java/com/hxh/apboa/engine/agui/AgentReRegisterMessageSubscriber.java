@@ -3,6 +3,7 @@ package com.hxh.apboa.engine.agui;
 import com.hxh.apboa.common.cluster.core.ChannelSubscriber;
 import com.hxh.apboa.common.consts.RedisChannelTopic;
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.redis.listener.ChannelTopic;
 import org.springframework.data.redis.listener.Topic;
 import org.springframework.stereotype.Component;
@@ -14,6 +15,7 @@ import org.springframework.stereotype.Component;
  **/
 @Component
 @RequiredArgsConstructor
+@ConditionalOnProperty(prefix = "runtime", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class AgentReRegisterMessageSubscriber implements ChannelSubscriber {
 
     private final AguiAgentConfiguration aguiAgentConfiguration;

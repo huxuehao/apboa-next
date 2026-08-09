@@ -33,6 +33,11 @@ import java.util.regex.Pattern;
 @Service
 @RequiredArgsConstructor
 public class GatewayAppServiceImpl extends ServiceImpl<GatewayAppMapper, GatewayApp> implements GatewayAppService {
+    /** Docker 单机部署中由平台服务和中间件占用的宿主机端口 */
+    private static final Set<Integer> RESERVED_HOST_PORTS = Set.of(
+            3060, 3061, 3062, 3064,
+            3306, 5432, 6379
+    );
     private static final Pattern IPV4_PATTERN =
             Pattern.compile("^((25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.){3}(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)$");
 
@@ -141,6 +146,9 @@ public class GatewayAppServiceImpl extends ServiceImpl<GatewayAppMapper, Gateway
         }
         if (app.getPort() == null || app.getPort() < 1024 || app.getPort() > 65535) {
             throw new RuntimeException("端口必须在 1024-65535 之间");
+        }
+        if (RESERVED_HOST_PORTS.contains(app.getPort())) {
+            throw new RuntimeException("端口 " + app.getPort() + " 已被平台服务或中间件保留");
         }
         validateWhitelist(app.obtainConfig());
     }

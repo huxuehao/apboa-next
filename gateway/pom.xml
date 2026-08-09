@@ -11,7 +11,7 @@
     <packaging>jar</packaging>
 
     <name>gateway</name>
-    <description>API网关能力模块 - 基于Vert.x的异步非阻塞数据面，将已发布工作流暴露为API，由runner-runtime承载运行</description>
+    <description>API网关能力模块 - 基于Vert.x的异步非阻塞数据面，将已发布工作流暴露为API，由runner-gateway承载运行</description>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>

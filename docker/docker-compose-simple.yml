@@ -109,6 +109,8 @@ services:
     volumes:
       - ${LOG_PATH:-./logs}/console:/app/logs
       - ${DATA_PATH:-./data}/.apboa:/app/.apboa
+    ports:
+      - "3060:3060"
     depends_on:
       apboa-mysql:
         condition: service_healthy
@@ -116,6 +118,52 @@ services:
         condition: service_healthy
     networks:
       - apboa_simple
+
+  # ==================== 网关数据面（runner-gateway） ====================
+  apboa-gateway:
+    build:
+      context: ..
+      dockerfile: docker/gateway/Dockerfile
+      args:
+        MAVEN_IMAGE: ${DOCKER_REGISTRY}maven:3.9-eclipse-temurin-21
+        JRE_IMAGE: ${DOCKER_REGISTRY}eclipse-temurin:21-jre
+    container_name: apboa-gateway
+    restart: unless-stopped
+    network_mode: host
+    mem_limit: ${GATEWAY_MEM_LIMIT:-4g}
+    cpus: ${GATEWAY_CPU_LIMIT:-4}
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      MYSQL_HOST: 127.0.0.1
+      MYSQL_PORT: ${MYSQL_PORT:-3306}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_DATABASE: ${REDIS_DATABASE}
+      JWT_SECRET: ${JWT_SECRET}
+      CONSOLE_HOST: 127.0.0.1
+      PROXY_HOST: 127.0.0.1
+      PROXY_PORT: "3062"
+      GATEWAY_ENABLED: "true"
+      GATEWAY_JAVA_HEAP_PERCENTAGE: ${GATEWAY_JAVA_HEAP_PERCENTAGE:-75.0}
+      APBOA_NODE_ID: ${APBOA_NODE_ID:-gateway-simple}
+      APBOA_HOST_NAME: ${APBOA_HOST_NAME}
+      APBOA_HOST_IP: ${APBOA_HOST_IP}
+      TZ: Asia/Shanghai
+    volumes:
+      - ${LOG_PATH:-./logs}/gateway:/app/logs
+      - ${DATA_PATH:-./data}/.apboa:/app/.apboa
+      - ${DATA_PATH:-./data}/runtime-tools:/opt/tools
+    depends_on:
+      apboa-mysql:
+        condition: service_healthy
+      apboa-redis:
+        condition: service_healthy
+      apboa-proxy:
+        condition: service_started
 
   # ==================== AI 运行时（runner-runtime） ====================
   apboa-runtime:
@@ -132,6 +180,7 @@ services:
     cpus: ${RUNTIME_CPU_LIMIT:-4}
     environment:
       SPRING_PROFILES_ACTIVE: docker
+      GATEWAY_ENABLED: "false"
       MYSQL_HOST: apboa-mysql
       MYSQL_PORT: "3306"
       MYSQL_DATABASE: ${MYSQL_DATABASE}
@@ -225,6 +274,8 @@ services:
       - ${LOG_PATH:-./logs}/proxy:/app/logs
       - ${DATA_PATH:-./data}/.apboa:/app/.apboa
       - ${DATA_PATH:-./data}/proxy-tools:/opt/tools
+    ports:
+      - "3062:3062"
     networks:
       - apboa_simple
 
