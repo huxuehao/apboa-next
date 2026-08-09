@@ -1,0 +1,60 @@
+server:
+  port: ${GATEWAY_RUNNER_PORT:3065}
+
+spring:
+  main:
+    web-application-type: none
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:redis}
+      database: ${REDIS_DATABASE:7}
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+          max-wait: -1ms
+  datasource:
+    type: com.alibaba.druid.pool.DruidDataSource
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:apboa_next}?useSSL=false&useUnicode=true&characterEncoding=utf-8&zeroDateTimeBehavior=convertToNull&transformedBitIsBoolean=true&serverTimezone=GMT%2B8&nullCatalogMeansCurrent=true&allowPublicKeyRetrieval=true
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD:root}
+
+jwt:
+  secret: ${JWT_SECRET:ZJr8c2xF0y5b7yM+1H9v9cGZq6nZ5e0k5r3Cw7H8vJQ=}
+
+shell-proxy:
+  enabled: ${SHELL_PROXY_ENABLED:true}
+  base-url: http://${PROXY_HOST:127.0.0.1}:${PROXY_PORT:3062}
+
+websocket:
+  enabled: ${WEBSOCKET_ENABLED:false}
+  base-url: http://${WEBSOCKET_HOST:127.0.0.1}:${WEBSOCKET_PORT:3064}
+
+heartbeat:
+  enabled: true
+  console-url: http://${CONSOLE_HOST:127.0.0.1}:3060
+  service-type: GATEWAY
+
+runtime:
+  enabled: false
+
+mybatis-plus:
+  mapper-locations: classpath*:com/hxh/apboa/**/mapper/**/*.xml
+  type-aliases-package: com.hxh.apboa.**.entity
+  global-config:
+    db-config:
+      id-type: assign_id
+      update-strategy: not_null
+      insert-strategy: not_null
+      logic-delete-field: delFlag
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+  configuration:
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
+    map-underscore-to-camel-case: true
+    call-setters-on-nulls: true

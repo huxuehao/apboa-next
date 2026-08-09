@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -17,6 +18,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 @Slf4j
 @Configuration
 @RequiredArgsConstructor
+@ConditionalOnProperty(prefix = "runtime", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class AguiAgentConfiguration implements ApplicationRunner {
     private final IAgentFactory iAgentFactory;
     private final AguiAgentRegistry registry;

@@ -5,6 +5,7 @@ import com.hxh.apboa.agent.mapper.ChatSessionMapper;
 import com.hxh.apboa.agent.service.AgentDefinitionService;
 import com.hxh.apboa.agent.service.ChatMessageService;
 import com.hxh.apboa.agent.service.ChatSessionService;
+import com.hxh.apboa.agent.service.SubAgentTraceHistoryService;
 import com.hxh.apboa.common.consts.SysConst;
 import com.hxh.apboa.common.dto.ChatMessageAppendDTO;
 import com.hxh.apboa.common.dto.ChatSessionCreateDTO;
@@ -27,6 +28,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.hxh.apboa.common.mp.support.MP;
 import io.agentscope.spring.boot.agui.common.ThreadSessionManager;
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -50,7 +52,7 @@ public class ChatSessionServiceImpl extends ServiceImpl<ChatSessionMapper, ChatS
     private final ThreadSessionManager sessionManager;
     private final AgentScopeSessionMapper agentScopeSessionMapper;
     private final AgentDefinitionService agentDefinitionService;
-    private final com.hxh.apboa.agent.service.SubAgentTraceHistoryService subAgentTraceHistoryService;
+    private final SubAgentTraceHistoryService subAgentTraceHistoryService;
     private final JdbcTemplate jdbcTemplate;
 
     @Override

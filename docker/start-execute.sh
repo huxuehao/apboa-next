@@ -25,7 +25,7 @@ detect_host_info() {
   fi
   HOST_NAME=$(hostname)
 
-  # 同一台执行节点上的 runtime/proxy/file 必须使用相同的 APBOA_NODE_ID
+  # 同一台执行节点上的 runtime/proxy/file/gateway 必须使用相同的 APBOA_NODE_ID
   export APBOA_NODE_ID=${APBOA_NODE_ID:-${HOST_IP}}
   export APBOA_HOST_NAME=${APBOA_HOST_NAME:-${HOST_NAME}}
   export APBOA_HOST_IP=${APBOA_HOST_IP:-${HOST_IP}}
@@ -47,7 +47,7 @@ do_build() {
   echo ""
   echo "${SERVICE_NAME} 启动完成"
   echo "  NODE_ID: ${APBOA_NODE_ID}"
-  echo "  服务: runtime(:3061) + proxy(:3062) + file"
+  echo "  服务: runtime(:3061) + proxy(:3062) + file + gateway(动态端口)"
 }
 
 do_rebuild() {

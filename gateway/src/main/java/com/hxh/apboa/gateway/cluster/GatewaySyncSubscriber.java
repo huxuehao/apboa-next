@@ -10,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.listener.ChannelTopic;
 import org.springframework.data.redis.listener.Topic;
 import org.springframework.stereotype.Component;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 /**
  * 描述：网关集群同步订阅者
@@ -21,6 +22,7 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @Component
 @RequiredArgsConstructor
+@ConditionalOnProperty(prefix = "gateway", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class GatewaySyncSubscriber implements ChannelSubscriber {
     private final GatewayLifecycleManager lifecycleManager;
     private final GatewayDataService dataService;

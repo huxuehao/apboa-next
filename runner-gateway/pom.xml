@@ -7,10 +7,10 @@
         <version>1.0-SNAPSHOT</version>
     </parent>
 
-    <artifactId>runner-runtime</artifactId>
+    <artifactId>runner-gateway</artifactId>
     <packaging>jar</packaging>
-
-    <name>runtime</name>
+    <name>gateway-runner</name>
+    <description>网关数据面运行节点，负责将已发布工作流暴露为宿主机 HTTP 服务</description>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -19,23 +19,18 @@
     <dependencies>
         <dependency>
             <groupId>com.hxh.apboa.next</groupId>
-            <artifactId>scheduler</artifactId>
+            <artifactId>gateway</artifactId>
         </dependency>
         <dependency>
             <groupId>com.hxh.apboa.next</groupId>
-            <artifactId>biz-workflow</artifactId>
+            <artifactId>engine</artifactId>
         </dependency>
-        <dependency>
-            <groupId>com.hxh.apboa.next</groupId>
-            <artifactId>biz-sk</artifactId>
-        </dependency>
-
-        <!-- 心跳上报模块 -->
         <dependency>
             <groupId>com.hxh.apboa.next</groupId>
             <artifactId>heartbeat</artifactId>
         </dependency>
     </dependencies>
+
     <build>
         <plugins>
             <plugin>

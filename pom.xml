@@ -25,6 +25,7 @@
     <module>runner-proxy</module>
     <module>runner-file</module>
     <module>runner-websocket</module>
+    <module>runner-gateway</module>
     <module>common-base</module>
     <module>workflow</module>
   </modules>

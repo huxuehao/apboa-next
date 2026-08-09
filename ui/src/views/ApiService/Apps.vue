@@ -126,8 +126,13 @@ async function handleSubmit() {
     message.warning('请填写应用名称')
     return
   }
+  const reservedPorts = [3060, 3061, 3062, 3064, 3306, 5432, 6379]
   if (!formData.value.port || formData.value.port < 1024 || formData.value.port > 65535) {
     message.warning('端口必须在 1024-65535 之间')
+    return
+  }
+  if (reservedPorts.includes(formData.value.port)) {
+    message.warning(`端口 ${formData.value.port} 已被平台服务或中间件保留`)
     return
   }
   const whitelist = cleanWhitelist()

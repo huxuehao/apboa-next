@@ -24,7 +24,7 @@ public class HeartbeatProperties {
     /** 节点唯一标识（默认自动检测 hostname） */
     private String nodeId;
 
-    /** 服务类型：FILE / PROXY / RUNTIME */
+    /** 服务类型：FILE / PROXY / RUNTIME / GATEWAY */
     private String serviceType;
 
     /** 心跳发送间隔（秒） */
