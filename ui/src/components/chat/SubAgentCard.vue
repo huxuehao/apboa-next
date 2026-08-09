@@ -176,7 +176,7 @@ watch(
 
 <style scoped lang="scss">
 .subagent-card {
-  margin: 12px 14px;
+  margin: 0 14px;
   overflow: hidden;
   border: 1px solid #f0f0f0;
   border-radius: 12px;

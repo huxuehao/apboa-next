@@ -423,6 +423,8 @@ public class SubAgentTool implements AgentTool {
      */
     private ToolResultBlock buildResult(Msg response, String sessionId, SubAgentTraceContext trace) {
         String textContent = response.getTextContent();
+        Map<String, Object> metadata = new HashMap<>();
+        addFinalTraceMetadata(metadata, trace);
 
         // Return response with session context
         return new ToolResultBlock(
@@ -431,7 +433,7 @@ public class SubAgentTool implements AgentTool {
                 List.of(TextBlock.builder().text(String.format(
                         "session_id: %s\n\n%s",
                         sessionId, textContent != null ? textContent : "(No response)")) .build()),
-                Map.of(SubAgentTraceEvent.FINAL_RESULT_METADATA_KEY, trace.getInvocationId()));
+                metadata);
     }
 
     /**
@@ -462,15 +464,16 @@ public class SubAgentTool implements AgentTool {
         return null;
     }
 
-    private static ToolResultBlock buildPolicyRejectedResult(
+    private ToolResultBlock buildPolicyRejectedResult(
             String message, SubAgentTraceContext trace) {
+        Map<String, Object> metadata = new HashMap<>();
+        addFinalTraceMetadata(metadata, trace);
+        metadata.put(POLICY_REJECTED_METADATA_KEY, true);
         return new ToolResultBlock(
                 null,
                 null,
                 List.of(TextBlock.builder().text(message).build()),
-                Map.of(
-                        SubAgentTraceEvent.FINAL_RESULT_METADATA_KEY, trace.getInvocationId(),
-                        POLICY_REJECTED_METADATA_KEY, true));
+                metadata);
     }
 
     private static boolean isPolicyRejected(ToolResultBlock result) {
@@ -509,17 +512,23 @@ public class SubAgentTool implements AgentTool {
         return error.getMessage();
     }
 
-    private static void emitTrace(
+    private void emitTrace(
             ToolEmitter emitter,
             SubAgentTraceContext trace,
             SubAgentTraceEventType eventType,
             Map<String, Object> eventPayload) {
-        if (emitter == null || trace == null) return;
+        if (!config.isForwardEvents() || emitter == null || trace == null) return;
         emitter.emit(new ToolResultBlock(
                 null,
                 null,
                 List.of(),
                 Map.of(SubAgentTraceEvent.METADATA_KEY, trace.next(eventType, eventPayload))));
+    }
+
+    private void addFinalTraceMetadata(Map<String, Object> metadata, SubAgentTraceContext trace) {
+        if (config.isForwardEvents() && trace != null) {
+            metadata.put(SubAgentTraceEvent.FINAL_RESULT_METADATA_KEY, trace.getInvocationId());
+        }
     }
 
     private static final class SubAgentTraceContext {
