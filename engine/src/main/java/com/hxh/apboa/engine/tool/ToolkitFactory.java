@@ -144,7 +144,10 @@ public class ToolkitFactory {
     }
 
     private Toolkit createToolkit() {
-        Toolkit toolkit = new Toolkit(
+        // 是否允许并行执行多个工具
+        // 是否允许删除工具
+        // 设置工具执行超时时间
+        return new Toolkit(
                 ToolkitConfig.builder()
                         // 是否允许并行执行多个工具
                         .parallel(customToolkitConfig.isParallel())
@@ -153,7 +156,6 @@ public class ToolkitFactory {
                         // 设置工具执行超时时间
                         .executionConfig(customToolkitConfig.toExecutionConfig())
                         .build());
-        return toolkit;
     }
 
     /**
@@ -246,13 +248,13 @@ public class ToolkitFactory {
                     case CUSTOM:
                         toolkit.registration()
                                 .subAgent(() -> reActAgentHelper.getReActAgentAsSubAgent(definition),
-                                        createSubAgentConfig(definition))
+                                        createSubAgentConfig(definition, parentExecutionRole))
                                 .apply();
                         break;
                     case A2A:
                         toolkit.registration()
                                 .subAgent(() -> a2aAgentHelper.getA2aAgent(definition),
-                                        createSubAgentConfig(definition))
+                                        createSubAgentConfig(definition, parentExecutionRole))
                                 .apply();
                         break;
                     default:
@@ -265,12 +267,13 @@ public class ToolkitFactory {
         }
     }
 
-    private SubAgentConfig createSubAgentConfig(AgentDefinition definition) {
+    private SubAgentConfig createSubAgentConfig(AgentDefinition definition, AgentExecutionRole parentExecutionRole) {
         return SubAgentConfig.builder()
                 .toolName(definition.getAgentCode().toLowerCase())
                 .description(definition.getDescription() != null ?
                         definition.getDescription() : definition.getName())
-                .forwardEvents(true)
+                // 是否转发事件, 子Agent的子Agent不进行事件转发，前端也只显示一级子Agent的卡片
+                .forwardEvents(!parentExecutionRole.isSubAgent())
                 .build();
     }
 
