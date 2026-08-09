@@ -1,38 +1,62 @@
 <template>
-  <div class="uip-form-renderer">
-    <div v-if="interaction.props?.title" class="uip-form-title">
-      <span>{{ interaction.props.title }}</span>
-      <span v-if="disabled && interaction.submittedData" class="uip-form-status">已完成</span>
-    </div>
-    <a-form
-      :model="formData"
-      layout="vertical"
-      class="uip-form"
+  <div class="uip-form-renderer" :class="{ 'is-submitted': isSubmitted }">
+    <!-- 折叠/展开 触发器 -->
+    <button
+      v-if="isSubmitted"
+      type="button"
+      class="uip-form-collapse-trigger"
+      @click="collapsed = !collapsed"
     >
-      <template v-for="field in visibleFields" :key="field.name">
-        <component
-          :is="fieldComponent(field.type)"
-          :field="field"
-          :model-value="formData[field.name]"
-          :disabled="disabled"
-          @update:model-value="onFieldChange(field.name, $event)"
-        />
-      </template>
-    </a-form>
-    <div v-if="!disabled" class="uip-form-actions">
-      <a-button type="primary" :loading="submitting" @click="handleSubmit">
-        {{ interaction.props?.submitLabel || '提交' }}
-      </a-button>
-      <a-button v-if="showReset" style="margin-left: 8px" @click="handleReset">
-        重置
-      </a-button>
+      <div class="uip-form-title uip-form-title-clickable">
+        <div class="uip-form-title-left">
+          <span>{{ interaction.props?.title || '表单' }}</span>
+        </div>
+        <div class="uip-form-title-right">
+          <DownOutlined class="uip-form-arrow" :class="{ 'is-collapsed': collapsed }" />
+        </div>
+      </div>
+    </button>
+
+    <!-- 未提交状态或非折叠模式下的标题 -->
+    <div v-else-if="interaction.props?.title" class="uip-form-title">
+      <span>{{ interaction.props.title }}</span>
     </div>
+
+    <!-- 表单内容区域（带折叠动画） -->
+    <Transition name="form-collapse">
+      <div v-show="!collapsed" class="uip-form-content">
+        <a-form
+          :model="formData"
+          layout="vertical"
+          class="uip-form"
+        >
+          <template v-for="field in visibleFields" :key="field.name">
+            <component
+              :is="fieldComponent(field.type)"
+              :field="field"
+              :model-value="formData[field.name]"
+              :disabled="disabled"
+              @update:model-value="onFieldChange(field.name, $event)"
+            />
+          </template>
+        </a-form>
+        <div v-if="!disabled" class="uip-form-actions">
+          <a-button type="primary" :loading="submitting" @click="handleSubmit">
+            {{ interaction.props?.submitLabel || '提交' }}
+          </a-button>
+          <a-button v-if="showReset" style="margin-left: 8px" @click="handleReset">
+            重置
+          </a-button>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, reactive, watch } from 'vue'
 import { message } from 'ant-design-vue'
+import { DownOutlined } from '@ant-design/icons-vue'
 import type { FormField, FormInteraction } from './types'
 import { fieldRenderers } from './fields'
 import TextField from './fields/TextField.vue'
@@ -47,6 +71,30 @@ const emit = defineEmits<{
 }>()
 
 const submitting = ref(false)
+const collapsed = ref(false)
+
+// 判断是否已提交
+const isSubmitted = computed(() =>
+  !!(props.disabled && props.interaction.submittedData)
+)
+
+// 监听提交状态变化，自动折叠
+watch(isSubmitted, (newVal) => {
+  if (newVal) {
+    collapsed.value = true
+  }
+})
+
+// 初始化时检查状态
+watch(
+  () => props.interaction.submittedData,
+  (newVal) => {
+    if (newVal && props.disabled) {
+      collapsed.value = true
+    }
+  },
+  { immediate: true }
+)
 
 /** 初始化表单数据（回填 defaultValue 或 submittedData） */
 function initFormData(): Record<string, unknown> {
@@ -194,33 +242,72 @@ function handleReset() {
 <style scoped>
 .uip-form-renderer {
   margin: 12px 0;
-  border: 1px solid #e8ecf1;
+  border: 1px solid #f0f0f0;
   border-radius: 12px;
-  padding: 18px 20px;
   background: #fafbfc;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+
+/* 折叠触发器 */
+.uip-form-collapse-trigger {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
 }
 
 .uip-form-title {
+  padding: 14px 20px;
   font-size: 15px;
   font-weight: 600;
   color: #1d2129;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
   border-bottom: 1px solid #f0f1f3;
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
 }
 
-.uip-form-status {
+.uip-form-title-clickable {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  user-select: none;
+}
+
+.uip-form-title-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.uip-form-title-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.uip-form-arrow {
+  color: #8c8c8c;
   font-size: 12px;
-  font-weight: 400;
-  color: #52c41a;
-  letter-spacing: 0.5px;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.uip-form-arrow.is-collapsed {
+  transform: rotate(-90deg);
+}
+
+.uip-form-content {
+  padding: 0 20px 18px;
 }
 
 .uip-form {
   margin-bottom: 4px;
+  padding-top: 8px;
 }
 
 .uip-form-actions {
@@ -228,4 +315,29 @@ function handleReset() {
   padding-top: 12px;
   border-top: 1px solid #f0f1f3;
 }
+
+/* 折叠动画 */
+.form-collapse-enter-active,
+.form-collapse-leave-active {
+  transition:
+    max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.25s ease,
+    padding 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+
+.form-collapse-enter-from,
+.form-collapse-leave-to {
+  max-height: 0;
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.form-collapse-enter-to,
+.form-collapse-leave-from {
+  max-height: 2000px; /* 足够大的值 */
+  opacity: 1;
+}
+
 </style>

@@ -179,7 +179,7 @@ watch(
   margin: 12px 14px;
   overflow: hidden;
   border: 1px solid #f0f0f0;
-  border-radius: 10px;
+  border-radius: 12px;
   background: #fff;
   box-shadow: 0 0 10px rgba(0, 0, 0, 0.03);
 }
@@ -308,9 +308,8 @@ watch(
   background-color: #ffffff;
   padding: 8px 10px;
   border: 1px solid #f0f0f0;
-  box-shadow: 0 0 10px rgba(0, 0, 0, 0.03);
   margin: 5px;
-  border-radius: 8px;
+  border-radius: 10px;
   transition: max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
   cursor: default;
@@ -323,7 +322,7 @@ watch(
     }
 
     &:not(.is-collapsed) {
-      max-height: 400px;
+      max-height: 800px;
     }
   }
 }
@@ -351,7 +350,7 @@ watch(
   align-items: flex-end;
   justify-content: center;
   padding-bottom: 6px;
-  background: linear-gradient(to top, rgba(255, 255, 255, 0.75) 0%, rgba(255, 255, 255, 0) 100%);
+  background: linear-gradient(to top, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0) 100%);
   border-radius: 0 0 6px 6px;
   pointer-events: none;
   z-index: 2;

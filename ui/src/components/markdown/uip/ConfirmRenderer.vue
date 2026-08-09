@@ -70,7 +70,7 @@ function handleCancel() {
   margin: 12px 0;
   border: 1px solid #e8ecf1;
   border-radius: 12px;
-  padding: 18px 20px;
+  padding: 14px 20px;
   background: #fafbfc;
 }
 

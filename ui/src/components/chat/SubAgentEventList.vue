@@ -230,7 +230,7 @@ onBeforeUnmount(() => {
   max-height: 350px;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 8px 2px 2px 2px;
+  padding: 8px 10px;
 }
 .subagent-event + .subagent-event {
   margin-top: 6px;
