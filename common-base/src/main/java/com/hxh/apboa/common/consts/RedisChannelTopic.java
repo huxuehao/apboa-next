@@ -35,4 +35,10 @@ public class RedisChannelTopic {
     public static final String GATEWAY_SYNC_CHANNEL = "apboa:gateway:cluster:sync";
     /** 工作流发布/下线频道（发布、回滚、删除后广播工作流ID，订阅者刷新编译缓存并重注册关联API） */
     public static final String WORKFLOW_PUBLISHED_CHANNEL = "apboa:workflow:published";
+
+    /** Agent 会话缓存版本变更通知频道。 */
+    public static final String AGENT_SESSION_VERSION_CHANNEL = "apboa:agent:session:version";
+
+    /** 工作空间快照同步通知频道。 */
+    public static final String WORKSPACE_SYNC_CHANNEL = "apboa:workspace:sync";
 }

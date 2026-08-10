@@ -92,6 +92,7 @@ export class AgentClient {
   private middlewares: EventMiddleware[] = []
   /** TEXT_MESSAGE_CHUNK 展开时追踪当前消息 ID */
   private chunkCurrentMessageId: string | null = null
+  private activeThreadId: string | null = null
 
   constructor(
     private url: string,
@@ -99,6 +100,12 @@ export class AgentClient {
     private handlers: EventHandlers = {},
     private toolHandlers: Record<string, ToolHandler> = {}
   ) {}
+
+  /** 从 AG-UI 路径中提取会话标识。 */
+  private extractThreadId(url: string): string | null {
+    const match = url.match(/\/(?:reconnect|resume|pending|status|stop)\/([^/?#]+)/)
+    return match?.[1] ? decodeURIComponent(match[1]) : null
+  }
 
   /**
    * 注册事件中间件
@@ -139,12 +146,14 @@ export class AgentClient {
     const executeRequest = async (): Promise<void> => {
       try {
         const input: RunAgentInput = this.buildInput(overrides)
+        this.activeThreadId = input.threadId
         const response = await fetch(this.url + "/" + input.forwardedProps?.agentCode, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             Accept: 'text/event-stream',
-            ...this.headers
+            ...this.headers,
+            'X-Apboa-Thread-Id': input.threadId
           },
           body: JSON.stringify(input),
           signal: this.abortController?.signal
@@ -625,13 +634,15 @@ export class AgentClient {
   async reconnect(url: string): Promise<void> {
     this.abortController = new AbortController()
     this.isReplaying = true
+    this.activeThreadId = this.extractThreadId(url)
 
     try {
       const response = await fetch(url, {
         method: 'GET',
         headers: {
           Accept: 'text/event-stream',
-          ...this.headers
+          ...this.headers,
+          ...(this.activeThreadId ? { 'X-Apboa-Thread-Id': this.activeThreadId } : {})
         },
         signal: this.abortController.signal
       })
@@ -682,13 +693,15 @@ export class AgentClient {
     }
   ): Promise<void> {
     this.abortController = new AbortController()
+    this.activeThreadId = this.extractThreadId(url)
     try {
       const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Accept: 'text/event-stream',
-          ...this.headers
+          ...this.headers,
+          ...(this.activeThreadId ? { 'X-Apboa-Thread-Id': this.activeThreadId } : {})
         },
         body: JSON.stringify(body),
         signal: this.abortController.signal

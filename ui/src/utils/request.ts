@@ -22,6 +22,48 @@ const instance = axios.create({
   baseURL: import.meta.env.VITE_APP_BASE_API,
 });
 
+/**
+ * 从 runtime 请求中提取会话标识，供多节点 Nginx 一致性 Hash 使用。
+ */
+function resolveRuntimeThreadId(config: any): string | null {
+  const url = String(config.url || '')
+  if (!url.includes('/api/runtime')) {
+    return null
+  }
+
+  let requestData = config.data
+  if (typeof requestData === 'string') {
+    try {
+      requestData = JSON.parse(requestData)
+    } catch {
+      // 非 JSON 请求体不包含可提取的会话标识。
+    }
+  }
+  const candidates = [
+    config.params?.threadId,
+    config.params?.sessionId,
+    requestData?.threadId,
+    requestData?.sessionId
+  ]
+  try {
+    const query = new URL(url, window.location.origin).searchParams
+    candidates.push(query.get('threadId'), query.get('sessionId'))
+  } catch {
+    // URL 解析失败时继续使用请求参数中的会话标识。
+  }
+  const formData = requestData instanceof FormData ? requestData : null
+  if (formData) {
+    candidates.push(formData.get('threadId'), formData.get('sessionId'))
+  }
+
+  for (const candidate of candidates) {
+    if (candidate !== undefined && candidate !== null && String(candidate).length > 0) {
+      return String(candidate)
+    }
+  }
+  return null
+}
+
 // 用于标记是否正在刷新令牌，防止并发请求重复刷新
 let isRefreshing = false;
 // 存储等待刷新令牌完成后重试的请求
@@ -37,6 +79,11 @@ instance.interceptors.request.use(
     const token = getToken();
     if (needToken && token) {
       config.headers[setting.tokenHeader] = 'Bearer ' + token;
+    }
+
+    const threadId = resolveRuntimeThreadId(config)
+    if (threadId) {
+      config.headers['X-Apboa-Thread-Id'] = threadId
     }
 
     // 参数转换

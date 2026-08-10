@@ -61,7 +61,7 @@ export async function getStatus(threadId: string): Promise<boolean> {
 /** 查询指定会话的完整运行生命周期状态。 */
 export async function getRunStatus(threadId: string): Promise<AgentRunStatus> {
   const url = getStatusURL(threadId)
-  const headers = getRESTHeaders()
+  const headers = getRESTHeaders(threadId)
   const resp = await fetch(url, { headers })
   if (!resp.ok) throw new Error(`Status check failed: ${resp.status}`)
   const data = await resp.json() as Partial<AgentRunStatus>
@@ -77,7 +77,7 @@ export async function getRunStatus(threadId: string): Promise<AgentRunStatus> {
  */
 export async function stopRun(threadId: string): Promise<void> {
   const url = getStopURL(threadId)
-  const headers = getRESTHeaders()
+  const headers = getRESTHeaders(threadId)
   const resp = await fetch(url, { method: 'POST', headers })
   if (!resp.ok) throw new Error(`Stop failed: ${resp.status}`)
 }
@@ -103,7 +103,7 @@ export async function getPending(
   threadId: string
 ): Promise<Array<{ toolUseId: string; name: string; input?: Record<string, unknown> }>> {
   const url = getPendingURL(threadId)
-  const headers = getRESTHeaders()
+  const headers = getRESTHeaders(threadId)
   const resp = await fetch(url, { headers })
   if (!resp.ok) throw new Error(`Pending check failed: ${resp.status}`)
   const data = await resp.json()

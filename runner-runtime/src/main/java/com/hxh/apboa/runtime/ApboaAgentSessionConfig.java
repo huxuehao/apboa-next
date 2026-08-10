@@ -1,6 +1,8 @@
 package com.hxh.apboa.runtime;
 
 import com.hxh.apboa.common.consts.TableConst;
+import com.hxh.apboa.runtime.cluster.AgentSessionVersionService;
+import com.hxh.apboa.runtime.workspace.WorkspaceSyncService;
 import io.agentscope.core.agui.adapter.AguiAdapterConfig;
 import io.agentscope.core.agui.registry.AguiAgentRegistry;
 import io.agentscope.core.session.Session;
@@ -222,7 +224,9 @@ public class ApboaAgentSessionConfig {
             @Autowired(required = false) AguiAgentRegistry registry,
             @Autowired(required = false) ThreadSessionManager sessionManager,
             AguiProperties props,
-            Session session) {
+            Session session,
+            AgentSessionVersionService sessionVersionService,
+            @Autowired(required = false) WorkspaceSyncService workspaceSyncService) {
 
         if (registry == null) {
             log.warn("AguiAgentRegistry not found, skip AguiMvcController configuration");
@@ -238,6 +242,8 @@ public class ApboaAgentSessionConfig {
                 .sessionManager(sessionManager)
                 .serverSideMemory(props.isServerSideMemory())
                 .session(session)
+                .sessionVersionService(sessionVersionService)
+                .workspaceSyncService(workspaceSyncService)
                 .jdbcTemplate(jdbcTemplate)
                 .sseTimeout(600000L)
                 .config(buildAguiAdapterConfig(props))

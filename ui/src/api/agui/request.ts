@@ -24,7 +24,7 @@ export function getAgentRunURL(): string {
  * 获取 SSE 请求所需头（Content-Type、Accept、Authorization）
  * @returns 请求头对象
  */
-export function getSSEHeaders(): Record<string, string> {
+export function getSSEHeaders(threadId?: string): Record<string, string> {
   const token = getToken()
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -32,6 +32,9 @@ export function getSSEHeaders(): Record<string, string> {
   }
   if (token) {
     headers[setting.tokenHeader] = `Bearer ${token}`
+  }
+  if (threadId) {
+    headers['X-Apboa-Thread-Id'] = threadId
   }
   return headers
 }
@@ -41,7 +44,7 @@ export function getSSEHeaders(): Record<string, string> {
  * 用于 stop/status/active-runs 等 JSON 端点
  * @returns 请求头对象
  */
-export function getRESTHeaders(): Record<string, string> {
+export function getRESTHeaders(threadId?: string): Record<string, string> {
   const token = getToken()
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -49,6 +52,9 @@ export function getRESTHeaders(): Record<string, string> {
   }
   if (token) {
     headers[setting.tokenHeader] = `Bearer ${token}`
+  }
+  if (threadId) {
+    headers['X-Apboa-Thread-Id'] = threadId
   }
   return headers
 }

@@ -177,6 +177,16 @@ public class ThreadSessionManager {
         return sessions.remove(threadId) != null;
     }
 
+    /**
+     * 删除指定会话的内存 Agent。
+     *
+     * @param threadId 会话 ID
+     * @return 是否删除了已有会话
+     */
+    public boolean evict(String threadId) {
+        return removeSession(threadId);
+    }
+
     /** Clean up sessions that have been inactive for longer than the timeout. */
     public void cleanupExpiredSessions() {
         if (sessionTimeoutMinutes <= 0) {

@@ -6,6 +6,9 @@
 server:
   port: 3061
 
+apboa:
+  storage-mode: ${APBOA_STORAGE_MODE:shared}
+
 agentscope:
   agui:
     path-prefix: /runtime/agui
