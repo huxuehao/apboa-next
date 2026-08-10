@@ -1,9 +1,12 @@
 package com.hxh.apboa.engine.agent;
 
 import com.hxh.apboa.account.service.TenantService;
+import com.hxh.apboa.agent.service.AgentCodeExecutionService;
 import com.hxh.apboa.agent.service.AgentDefinitionService;
 import com.hxh.apboa.common.entity.AgentDefinition;
+import com.hxh.apboa.common.entity.CodeExecutionConfig;
 import com.hxh.apboa.common.entity.Tenant;
+import com.hxh.apboa.common.util.AgentMetadataStore;
 import com.hxh.apboa.common.util.TenantUtils;
 import com.hxh.apboa.engine.agui.AgentContext;
 import io.agentscope.core.ReActAgent;
@@ -24,6 +27,7 @@ public class IAgentFactory {
     private final A2aAgentHelper a2aAgentHelper;
     private final ReActAgentHelper reActAgentHelper;
     private final AgentDefinitionService agentDefinitionService;
+    private final AgentCodeExecutionService agentCodeExecutionService;
 
     /**
      * 根据Agent定义ID获取Agent
@@ -69,11 +73,22 @@ public class IAgentFactory {
      */
     private ReActAgent getReActAgent(AgentDefinition definition) {
         try {
-            return reActAgentHelper.getReActAgent(definition);
+            ReActAgent reActAgent = reActAgentHelper.getReActAgent(definition);
+            Long codeExecutionId = getCodeExecutionId(definition.getId());
+
+            // AgentMetadataStore 中不存在 workspace_enabled 则表示没有开启工作空间能力
+            if (codeExecutionId != null) {
+                AgentMetadataStore.put(reActAgent.getAgentId(), "workspace_enabled", true);
+            }
+            return reActAgent;
         } catch (Exception e) {
             AgentContext.clean();
             throw new RuntimeException(e);
         }
+    }
+
+    private Long getCodeExecutionId(Long agentDefinitionId) {
+        return agentCodeExecutionService.getCodeExecutionIdByAgentId(agentDefinitionId);
     }
 
 

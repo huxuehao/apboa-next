@@ -46,6 +46,7 @@ services:
       WEBSOCKET_HOST: ${WEBSOCKET_HOST:-apboa-websocket}
       WEBSOCKET_PORT: ${WEBSOCKET_PORT:-3064}
       WORKSPACE_CAPACITY_MB: ${WORKSPACE_CAPACITY_MB:-30}
+      APBOA_STORAGE_MODE: ${APBOA_STORAGE_MODE:-shared}
       # Python/Node 依赖安装落盘目录（容器重建后依赖持久化）
       PIP_TARGET: /opt/tools/pylib
       PYTHONPATH: /opt/tools/pylib
@@ -167,6 +168,8 @@ services:
 
   # ==================== 文件同步服务（runner-file） ====================
   apboa-file:
+    profiles:
+      - local-storage
     build:
       context: ..
       dockerfile: docker/file/Dockerfile

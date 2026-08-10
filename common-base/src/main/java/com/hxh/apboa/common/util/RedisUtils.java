@@ -102,6 +102,17 @@ public class RedisUtils {
     }
 
     /**
+     * 原子递增数值缓存。
+     *
+     * @param key 键
+     * @return 递增后的值
+     */
+    public long increment(String key) {
+        Long value = stringRedisTemplate.opsForValue().increment(key);
+        return value == null ? 0L : value;
+    }
+
+    /**
      * 尝试获取分布式锁（基于 SETNX + 过期时间）
      * @param key 锁的 Key
      * @param value 锁持有者标识（建议使用 UUID，用于释放时校验）

@@ -144,7 +144,51 @@ cp .env.execute .env
 docker compose -f docker-compose-execute.yml up -d --build
 ```
 
-**水平扩展**：每个执行节点会同时运行 `runner-runtime`、`runner-proxy`、`runner-file` 和 `runner-gateway`，必须使用唯一的 `APBOA_NODE_ID`（启动脚本默认使用宿主机 IP，天然唯一）。多个执行节点上的网关应用分别监听各自宿主机端口，前端可在“服务监控”的“网关服务”标签中查看每个网关节点。
+## 多节点部署与存储模式
+
+### 单机模式
+
+使用 `docker-compose-simple.yml`，启动 console、runtime、proxy、gateway、websocket、frontend 和中间件。所有服务在同一台主机，`runner-file` 不影响单机 workspace 使用。
+
+### 多节点共享存储模式（推荐）
+
+控制台主机启动 `runner-console`、`runner-websocket` 和 frontend；每个执行主机启动 `runner-runtime`、`runner-proxy`、`runner-gateway`，不启动 `runner-file`。所有主机将同一个 NFSv4 导出目录配置为 `DATA_PATH`，并设置 `APBOA_STORAGE_MODE=shared`。详细安装、权限和故障处理见 [shared-storage.md](shared-storage.md)。
+
+多节点负载均衡由部署者维护：在控制台主机的 `docker/nginx/nginx.conf` 中手工增加 runtime upstream 节点，并使用以下一致性 Hash：
+
+```nginx
+map $http_x_apboa_thread_id $runtime_hash_key {
+    default $http_x_apboa_thread_id;
+    ""      $remote_addr;
+}
+upstream apboa_runtime {
+    hash $runtime_hash_key consistent;
+    server 10.10.0.11:3061;
+    server 10.10.0.12:3061;
+}
+```
+
+所有前端请求和外部 AG-UI/API 调用都必须携带 `X-Apboa-Thread-Id`，值必须与请求体中的 `threadId` 一致。新增或移除 upstream 后需要校验并 reload Nginx；变更期间少量会话可能重新映射，正在执行的 SSE 连接不会迁移。
+
+### 多节点本地存储模式
+
+每个执行主机启动 `runner-runtime`、`runner-proxy`、`runner-gateway` 和 `runner-file`，设置 `APBOA_STORAGE_MODE=local`，并使用不同的本地 `DATA_PATH`。runtime 在 Agent 流真正结束后按 workspace 进行 30 秒尾部防抖，顺序生成 ZIP 上传 console；console 完成原子落盘后通过 Redis 广播版本，其他节点按版本下载覆盖。新节点启动时会主动向 console 补齐快照。
+
+本地模式不等价于实时共享文件系统：节点崩溃前尚未进入队列或尚未上传的变化可能丢失，且 Agent 执行过程中的内存状态仍是节点本地状态。因此仍需配置共享 MySQL/Redis、手工维护 Nginx upstream，并确保所有请求携带 `X-Apboa-Thread-Id`。同一套数据不要同时启用 NFS 和本地同步。
+
+### Agent 缓存一致性边界
+
+Agent 的上下文对象和 SSE/RunTracker 状态位于 runtime JVM 内存，无法在节点之间直接迁移。当前采用“threadId 一致性 Hash + Redis 版本校准”：Agent 成功持久化后递增 Redis 版本并广播，其他节点收到通知后淘汰本地 Agent；请求进入时还会读取 Redis 版本，因此 Redis Pub/Sub 丢消息不会永久使用旧缓存。该方案可以避免后续请求读取过期上下文，但不能保证节点切换瞬间已经在执行的两个请求自动合并，也不能在节点崩溃时无损续跑正在执行的 Agent。要做到严格线性一致，需要引入集中式 Agent 执行服务或跨节点锁并迁移运行态，成本和故障面显著增加，当前部署方案明确不承诺这两项能力。
+
+### 节点运维顺序
+
+新增执行节点：准备中间件连通性和 `DATA_PATH`，启动 execute compose，确认心跳卡片出现后再把 runtime 地址加入 Nginx upstream。下线节点：先从 upstream 删除或停用该节点，等待活动会话结束，再执行 `start-execute.sh down`。节点恢复后先确认 NFS 挂载或本地快照同步完成，再恢复流量。
+
+### 执行节点存储开关
+
+`docker/.env.execute` 默认是 `APBOA_STORAGE_MODE=shared`。脚本会根据该值选择 Compose profile：`shared` 不创建 `runner-file`，`local` 使用 `--profile local-storage` 启动 `runner-file`。可用 `bash start-execute.sh status` 检查实际服务集合。
+
+**水平扩展**：每个执行节点运行 `runner-runtime`、`runner-proxy` 和 `runner-gateway`；只有 `APBOA_STORAGE_MODE=local` 时才额外运行 `runner-file`。必须使用唯一的 `APBOA_NODE_ID`（启动脚本默认使用宿主机 IP，天然唯一）。多个执行节点上的网关应用分别监听各自宿主机端口，前端可在“服务监控”的“网关服务”标签中查看每个网关节点。
 
 ### 网关 API 端口访问说明
 
@@ -205,6 +249,7 @@ http://<执行节点宿主机 IP>:<网关应用端口>/<API 路径>
 | `WEBSOCKET_HOST` | WebSocket 服务地址 | `apboa-websocket` |
 | `WEBSOCKET_PORT` | WebSocket 服务端口 | `3064` |
 | `WORKSPACE_CAPACITY_MB` | 工作空间容量上限（MB） | `30` |
+| `APBOA_STORAGE_MODE` | 执行节点存储模式（shared 关闭 runner-file，local 启用 runner-file） | `shared` |
 
 ### 控制台节点变量
 

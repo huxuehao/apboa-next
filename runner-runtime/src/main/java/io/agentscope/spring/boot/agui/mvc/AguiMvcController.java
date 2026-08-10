@@ -1,6 +1,10 @@
 package io.agentscope.spring.boot.agui.mvc;
 
+import com.hxh.apboa.common.util.AgentMetadataStore;
 import com.hxh.apboa.engine.agui.AgentContext;
+import com.hxh.apboa.runtime.cluster.AgentSessionVersionService;
+import com.hxh.apboa.runtime.workspace.WorkspaceSyncService;
+import com.hxh.apboa.common.util.TenantUtils;
 import io.agentscope.core.agui.AguiException;
 import io.agentscope.core.agui.adapter.AguiAdapterConfig;
 import io.agentscope.core.agui.encoder.AguiEventEncoder;
@@ -39,6 +43,7 @@ public class AguiMvcController {
     private final ExecutorService executorService;
     private final ThreadSessionManager sessionManager;
     private final RunTracker runTracker;
+    private final WorkspaceSyncService workspaceSyncService;
 
     private AguiMvcController(Builder builder) {
         Session session = builder.session;
@@ -56,6 +61,7 @@ public class AguiMvcController {
                                         ? builder.config
                                         : AguiAdapterConfig.defaultConfig())
                         .session(session)
+                        .sessionVersionService(builder.sessionVersionService)
                         .jdbcTemplate(jdbcTemplate)
                         .build();
         this.encoder = new AguiEventEncoder();
@@ -65,6 +71,7 @@ public class AguiMvcController {
         this.executorService = Executors.newCachedThreadPool();
         this.sessionManager = builder.sessionManager;
         this.runTracker = builder.runTracker != null ? builder.runTracker : new RunTracker(this.encoder);
+        this.workspaceSyncService = builder.workspaceSyncService;
     }
 
     /**
@@ -106,9 +113,11 @@ public class AguiMvcController {
                         // Process request - returns both agent and event stream
                         AguiRequestProcessor.ProcessResult result =
                                 processor.process(input, headerAgentId, pathAgentId);
+                        String tenantCode = TenantUtils.getCurrentTenantCode();
+                        removeMarkCompletedAndSync(threadId, result.agent().getAgentId());
 
                         // 注册 RunTracker + 订阅 Flux 管道（与 resume 共用）
-                        subscribeAndTrack(emitter, threadId, runId, result);
+                        subscribeAndTrack(emitter, threadId, runId, tenantCode, result);
 
                     } catch (AguiException.AgentNotFoundException e) {
                         logger.error("Agent not found: {}", e.getMessage());
@@ -168,9 +177,11 @@ public class AguiMvcController {
 
                         AguiRequestProcessor.ProcessResult result =
                                 processor.resume(threadId, decisions, memoryActive);
+                        String tenantCode = TenantUtils.getCurrentTenantCode();
+                        removeMarkCompletedAndSync(threadId, result.agent().getAgentId());
 
                         // 注册 RunTracker + 订阅 Flux 管道（与 run 共用）
-                        subscribeAndTrack(emitter, threadId, runId, result);
+                        subscribeAndTrack(emitter, threadId, runId, tenantCode, result);
 
                     } catch (Exception e) {
                         logger.error("Error resuming AG-UI request: {}", e.getMessage());
@@ -230,6 +241,7 @@ public class AguiMvcController {
             SseEmitter emitter,
             String threadId,
             String runId,
+            String tenantCode,
             AguiRequestProcessor.ProcessResult result) {
         // 注册到 RunTracker（在订阅前完成，保证事件不丢失）
         runTracker.registerRun(threadId, result.agent(), null);
@@ -273,16 +285,33 @@ public class AguiMvcController {
                                             "Residual flux error for thread {}: {}",
                                             threadId,
                                             error != null ? error.getMessage() : "null");
-                                    runTracker.markCompleted(threadId);
+                                    markCompletedAndSync(threadId, tenantCode, result.agent().getAgentId());
                                 },
                                 () -> {
                                     logger.debug(
                                             "AG-UI run stream completed for thread {}", threadId);
-                                    runTracker.markCompleted(threadId);
+                                    markCompletedAndSync(threadId, tenantCode, result.agent().getAgentId());
                                 });
 
         // 更新 subscription 引用（不替换 ActiveRun，保住 buffer）
         runTracker.updateSubscription(threadId, subscription);
+    }
+
+    private void markCompletedAndSync(String threadId, String tenantCode, String baseAgentId) {
+        runTracker.markCompleted(threadId);
+        // 检查是否开启了工作区
+        Object workspaceEnabled = AgentMetadataStore.get(baseAgentId, "workspace_enabled");
+        if (workspaceSyncService != null && workspaceEnabled != null) {
+            workspaceSyncService.enqueue(tenantCode, threadId);
+        }
+    }
+
+    private void removeMarkCompletedAndSync(String threadId, String baseAgentId) {
+        // 检查是否开启了工作区
+        Object workspaceEnabled = AgentMetadataStore.get(baseAgentId, "workspace_enabled");
+        if (workspaceSyncService != null && workspaceEnabled != null) {
+            workspaceSyncService.cancelPending(threadId);
+        }
     }
 
     private void sendErrorAndComplete(
@@ -392,6 +421,8 @@ public class AguiMvcController {
         private Session session;
         private JdbcTemplate jdbcTemplate;
         private RunTracker runTracker;
+        private AgentSessionVersionService sessionVersionService;
+        private WorkspaceSyncService workspaceSyncService;
 
         /**
          * Set the agent registry.
@@ -478,6 +509,23 @@ public class AguiMvcController {
          */
         public Builder jdbcTemplate(JdbcTemplate jdbcTemplate) {
             this.jdbcTemplate = jdbcTemplate;
+            return this;
+        }
+
+        /**
+         * 设置 Agent 会话版本管理服务。
+         *
+         * @param service 会话版本管理服务
+         * @return 当前构建器
+         */
+        public Builder sessionVersionService(AgentSessionVersionService service) {
+            this.sessionVersionService = service;
+            return this;
+        }
+
+        /** 设置本地工作空间同步服务。 */
+        public Builder workspaceSyncService(WorkspaceSyncService service) {
+            this.workspaceSyncService = service;
             return this;
         }
 

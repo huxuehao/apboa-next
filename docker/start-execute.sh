@@ -36,25 +36,46 @@ init_env() {
   detect_host_info
   if [ -f "$ENV_FILE" ]; then
     cp "$ENV_FILE" .env
+    set -a
+    # shellcheck disable=SC1091
+    source .env
+    set +a
   fi
+}
+
+compose() {
+  if [ "${APBOA_STORAGE_MODE:-shared}" = "local" ]; then
+    docker compose --profile local-storage -f "$COMPOSE_FILE" "$@"
+  else
+    docker compose -f "$COMPOSE_FILE" "$@"
+  fi
+}
+
+compose_cleanup() {
+  docker compose --profile local-storage -f "$COMPOSE_FILE" "$@"
 }
 
 # ==================== 操作函数 ====================
 do_build() {
   echo ">> 构建并启动 ${SERVICE_NAME}..."
   init_env
-  docker compose -f "$COMPOSE_FILE" up -d --build
+  compose up -d --build
   echo ""
   echo "${SERVICE_NAME} 启动完成"
   echo "  NODE_ID: ${APBOA_NODE_ID}"
-  echo "  服务: runtime(:3061) + proxy(:3062) + file + gateway(动态端口)"
+  echo "  存储模式: ${APBOA_STORAGE_MODE:-shared}（local 模式启动 runner-file）"
+  if [ "${APBOA_STORAGE_MODE:-shared}" = "local" ]; then
+    echo "  服务: runtime(:3061) + proxy(:3062) + file + gateway(动态端口)"
+  else
+    echo "  服务: runtime(:3061) + proxy(:3062) + gateway(动态端口)"
+  fi
 }
 
 do_rebuild() {
   echo ">> 停止并删除容器，然后重新构建..."
   init_env
-  docker compose -f "$COMPOSE_FILE" down
-  docker compose -f "$COMPOSE_FILE" up -d --build
+  compose_cleanup down
+  compose up -d --build
   echo ""
   echo "${SERVICE_NAME} 重建完成"
 }
@@ -62,30 +83,34 @@ do_rebuild() {
 do_start() {
   echo ">> 启动 ${SERVICE_NAME}..."
   init_env
-  docker compose -f "$COMPOSE_FILE" start
+  compose start
   echo "${SERVICE_NAME} 已启动"
 }
 
 do_stop() {
+  init_env
   echo ">> 停止 ${SERVICE_NAME}..."
-  docker compose -f "$COMPOSE_FILE" stop
+  compose_cleanup stop
   echo "${SERVICE_NAME} 已停止"
 }
 
 do_restart() {
+  init_env
   echo ">> 重启 ${SERVICE_NAME}..."
-  docker compose -f "$COMPOSE_FILE" restart
+  compose_cleanup restart
   echo "${SERVICE_NAME} 已重启"
 }
 
 do_down() {
+  init_env
   echo ">> 停止并删除 ${SERVICE_NAME} 容器..."
-  docker compose -f "$COMPOSE_FILE" down
+  compose_cleanup down
   echo "${SERVICE_NAME} 容器已删除"
 }
 
 do_status() {
-  docker compose -f "$COMPOSE_FILE" ps
+  init_env
+  compose_cleanup ps
 }
 
 # ==================== 帮助信息 ====================
@@ -107,6 +132,7 @@ show_help() {
   echo "  脚本会自动检测宿主机 IP 和 hostname，注入 APBOA_NODE_ID / APBOA_HOST_NAME / APBOA_HOST_IP"
   echo "  如需手动指定，可在执行前设置环境变量，如："
   echo "  APBOA_NODE_ID=node-01 $0 build"
+  echo "  APBOA_STORAGE_MODE=shared|local 控制是否启动 runner-file"
   echo ""
   echo "示例："
   echo "  $0 build     # 首次部署或更新代码后使用"

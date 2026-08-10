@@ -8,6 +8,7 @@ import com.hxh.apboa.common.util.AgentMetadataStore;
 import com.hxh.apboa.common.util.TenantUtils;
 import com.hxh.apboa.engine.agui.AgentContext;
 import com.hxh.apboa.engine.hook.builtins.IConfirmationHook;
+import com.hxh.apboa.runtime.cluster.AgentSessionVersionService;
 import io.agentscope.core.ReActAgent;
 import io.agentscope.core.agent.Agent;
 import io.agentscope.core.agent.AgentBase;
@@ -46,6 +47,7 @@ public class AguiRequestProcessor {
     private final AguiAdapterConfig config;
     private final Session session;
     private final JdbcTemplate jdbcTemplate;
+    private final AgentSessionVersionService sessionVersionService;
 
     private AguiRequestProcessor(Builder builder) {
         this.agentResolver =
@@ -53,6 +55,7 @@ public class AguiRequestProcessor {
         this.config = builder.config != null ? builder.config : AguiAdapterConfig.defaultConfig();
         this.session = builder.session != null ? builder.session : new InMemorySession();
         this.jdbcTemplate = builder.jdbcTemplate;
+        this.sessionVersionService = builder.sessionVersionService;
     }
 
     /**
@@ -75,6 +78,9 @@ public class AguiRequestProcessor {
      */
     public ProcessResult process(RunAgentInput input, String headerAgentId, String pathAgentId) {
         String threadId = input.getThreadId();
+        if (sessionVersionService != null) {
+            sessionVersionService.ensureFresh(threadId);
+        }
 
         // Resolve agent ID
         String agentId = resolveAgentId(input, headerAgentId, pathAgentId);
@@ -164,6 +170,9 @@ public class AguiRequestProcessor {
                     if (shouldSave) {
                         try {
                             ((ReActAgent) agent).saveTo(session, threadId);
+                            if (sessionVersionService != null) {
+                                sessionVersionService.markPersisted(threadId);
+                            }
                         } catch (Exception ex) {
                             logger.error(ex.getMessage(), ex);
                         } finally {
@@ -194,6 +203,9 @@ public class AguiRequestProcessor {
         }
         TenantUtils.setCurrentTenant(rc.tenantId, rc.tenantCode);
 
+        if (sessionVersionService != null) {
+            sessionVersionService.ensureFresh(threadId);
+        }
         Agent agent = agentResolver.resolveAgent(rc.agentCode, threadId);
         if (agent instanceof ReActAgent reActAgent) {
             reActAgent.loadFrom(session, threadId);
@@ -209,6 +221,9 @@ public class AguiRequestProcessor {
                         if (agent instanceof ReActAgent reActAgent) {
                             if (memoryActive) {
                                 reActAgent.saveTo(session, threadId);          // 长期记忆：保留
+                                if (sessionVersionService != null) {
+                                    sessionVersionService.markPersisted(threadId);
+                                }
                             } else {
                                 session.delete(SimpleSessionKey.of(threadId)); // 临时暂存：用完即删
                             }
@@ -482,6 +497,7 @@ public class AguiRequestProcessor {
         private AguiAdapterConfig config;
         private Session session;
         private JdbcTemplate jdbcTemplate;
+        private AgentSessionVersionService sessionVersionService;
 
         /**
          * Set the agent resolver.
@@ -524,6 +540,17 @@ public class AguiRequestProcessor {
          */
         public Builder jdbcTemplate(JdbcTemplate jdbcTemplate) {
             this.jdbcTemplate = jdbcTemplate;
+            return this;
+        }
+
+        /**
+         * 设置 Agent 会话版本管理服务。
+         *
+         * @param service 会话版本管理服务
+         * @return 当前构建器
+         */
+        public Builder sessionVersionService(AgentSessionVersionService service) {
+            this.sessionVersionService = service;
             return this;
         }
 
