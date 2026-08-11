@@ -23,7 +23,7 @@ import java.util.*;
  * @author huxuehao
  **/
 @RestController
-@RequestMapping("/runtime/agent")
+@RequestMapping("/runtime/tool")
 @RequiredArgsConstructor
 public class ToolEndPoint {
     private final ToolService toolService;
@@ -31,7 +31,7 @@ public class ToolEndPoint {
 
     @SkAccess
     @ChatKeyAccess
-    @PostMapping("/do/{toolName}/tool")
+    @PostMapping("/{toolName}/do")
     public R<?> doTool(@PathVariable("toolName") String toolName , @RequestBody LinkedHashMap<String, Object> args) {
         ToolConfig toolConfig = toolService.getOne(new LambdaQueryWrapper<ToolConfig>().eq(ToolConfig::getToolId, toolName));
 

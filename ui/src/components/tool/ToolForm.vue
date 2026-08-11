@@ -10,13 +10,15 @@ import {
   PlusOutlined,
   MinusCircleOutlined,
   HolderOutlined,
-  ToolOutlined
+  ToolOutlined,
+  BugOutlined
 } from '@ant-design/icons-vue'
 import Sortable from 'sortablejs'
 import type { ToolVO, ToolConfig } from '@/types'
 import { ToolType, CodeLanguage } from '@/types'
 import * as toolApi from '@/api/tool'
 import SmartCodeEditor from '@/components/editor/SmartCodeEditor.vue'
+import ToolDebugDrawer from '@/components/tool/ToolDebugDrawer.vue'
 
 /**
  * Props定义
@@ -38,6 +40,7 @@ const emit = defineEmits<{
 const formRef = ref()
 const loading = ref<boolean>(false)
 const categorySearchText = ref<string>('')
+const debugOpen = ref<boolean>(false)
 
 /**
  * 输入参数schema项定义
@@ -564,7 +567,25 @@ const addItem = (e: Event) => {
         </AFormItem>
       </template>
     </AForm>
+
+    <!-- 调试入口：仅已保存的工具可用 -->
+    <template #footer-left-btn>
+      <ATooltip :title="isEdit ? '调试工具' : '保存工具后才能调试'">
+        <AButton :disabled="!isEdit" @click="debugOpen = true">
+          <template #icon>
+            <BugOutlined />
+          </template>
+          调试
+        </AButton>
+      </ATooltip>
+    </template>
   </ApboaModal>
+
+  <!-- 工具调试抽屉 -->
+  <ToolDebugDrawer
+    v-model:open="debugOpen"
+    :tool="props.data ?? null"
+  />
 </template>
 
 <style scoped lang="scss">

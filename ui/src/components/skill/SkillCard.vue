@@ -16,9 +16,13 @@ import {
   createEnableItem,
   createDeleteItem,
   createSetCategoryItem,
+  createEditAliasItem,
   createToolLinkItem,
   createDivider,
 } from '@/composables/useCardMenuItems'
+import { useAccountStore } from '@/stores'
+
+const accountStore = useAccountStore()
 
 /**
  * Props定义
@@ -37,8 +41,14 @@ const emit = defineEmits<{
   delete: [id: string]
   enable: [id: string]
   setCategory: [id: string, category: string]
+  setAlias: [id: string]
   toolLink: [id: string]
 }>()
+
+/**
+ * 展示名称：优先别名，别名不存在（未定义、为空、空字符）时使用技能名称
+ */
+const displayName = computed(() => props.data.alias?.trim() || props.data.name)
 
 /**
  * 格式化更新时间
@@ -62,6 +72,7 @@ const menuItems = computed(() => [
   createViewItem(),
   createEditItem(),
   createSetCategoryItem(),
+  createEditAliasItem(),
   createToolLinkItem(),
   createEnableItem(props.data.enabled),
   createDivider(),
@@ -73,6 +84,9 @@ const categoryModalVisible = ref(false)
 const categoryValue = ref('')
 const categorySearchText = ref('')
 const categoryNewName = ref('')
+// 别名设置弹窗
+const aliasModalVisible = ref(false)
+const aliasValue = ref('')
 // 本地分类列表副本，支持运行时新增
 const localCategories = ref<string[]>([...props.categories])
 
@@ -146,6 +160,25 @@ async function handleCategoryConfirm() {
 }
 
 /**
+ * 打开编辑别名弹窗
+ */
+function openAliasModal() {
+  aliasValue.value = props.data.alias || ''
+  aliasModalVisible.value = true
+}
+
+async function handleAliasConfirm() {
+  try {
+    await skillApi.updateAlias(String(props.data.id), aliasValue.value.trim())
+    message.success('别名设置成功')
+    aliasModalVisible.value = false
+    emit('setAlias', String(props.data.id))
+  } catch {
+    message.error('设置别名失败')
+  }
+}
+
+/**
  * 处理菜单点击
  */
 function handleMenuClick({ key }: { key: string }) {
@@ -159,6 +192,9 @@ function handleMenuClick({ key }: { key: string }) {
     case 'setCategory':
       openCategoryModal()
       break
+    case 'editAlias':
+      openAliasModal()
+      break
     case 'toolLink':
       emit('toolLink', props.data.id as string)
       break
@@ -168,6 +204,17 @@ function handleMenuClick({ key }: { key: string }) {
     case 'delete':
       emit('delete', props.data.id as string)
       break
+  }
+}
+
+/**
+ * 点击标题
+ */
+function handleTitleClick() {
+  if (accountStore.isReadOnly) {
+    emit('view', props.data.id as string)
+  } else {
+    emit('edit', props.data.id as string)
   }
 }
 </script>
@@ -186,7 +233,7 @@ function handleMenuClick({ key }: { key: string }) {
           </span>
         </div>
       </ATooltip>
-      <div class="card-name flex-1 truncate" :title="data.name" @click="emit('view', data.id as string)">{{ data.name }}</div>
+      <div class="card-name flex-1 truncate" :title="displayName" @click="handleTitleClick">{{ displayName }}</div>
       <ADropdown :trigger="['hover']">
         <AButton type="text" size="small" v-permission="['TENANT_EDITOR','TENANT_ADMIN','TENANT_OWNER']">
           <EllipsisOutlined />
@@ -243,6 +290,26 @@ function handleMenuClick({ key }: { key: string }) {
             </a-space>
           </template>
         </a-select>
+      </a-form-item>
+    </a-form>
+  </a-modal>
+
+  <!-- 编辑别名弹窗 -->
+  <a-modal
+    v-model:open="aliasModalVisible"
+    title="编辑别名"
+    :ok-text="'确定'"
+    :cancel-text="'取消'"
+    @ok="handleAliasConfirm"
+    destroyOnClose
+  >
+    <a-form layout="vertical">
+      <a-form-item label="技能别名">
+        <a-input
+          v-model:value="aliasValue"
+          placeholder="请输入技能别名，留空则显示技能名称"
+          :maxlength="200"
+        />
       </a-form-item>
     </a-form>
   </a-modal>

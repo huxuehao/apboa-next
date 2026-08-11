@@ -308,6 +308,7 @@ export interface SensitiveWordConfig extends BaseEntity {
  */
 export interface SkillPackage extends BaseEntity {
   name: string
+  alias?: string
   description: string
   skillContent: string
   category: string

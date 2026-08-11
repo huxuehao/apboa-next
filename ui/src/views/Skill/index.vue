@@ -106,6 +106,7 @@ async function handleView(id: string) {
       h('p', {}, [h('strong', '关联智能体: '), data.used?.length ? data.used.join('、') : '无']),
       h('p', {}, [h('strong', '分类: '), data.category]),
       h('p', {}, [h('strong', '名称: '), data.name]),
+      h('p', {}, [h('strong', '别名: '), data.alias?.trim() || '无']),
       h('p', {}, [h('strong', '描述: '), data.description]),
       h('p', {}, [h('strong', '是否关联工具: '), data.tools?.length ? '是' : '否']),
     ])
@@ -158,6 +159,13 @@ async function handleSetCategory() {
   await store.resetAndFetch()
   isFirstLoad.value = true
   infiniteLoadingKey.value++
+}
+
+/**
+ * 处理编辑别名成功（保持当前筛选条件刷新列表）
+ */
+function handleSetAlias() {
+  resetListAndRebuild()
 }
 
 /**
@@ -350,6 +358,7 @@ watch(() => route.query.refresh, (val) => {
           @view="handleView"
           @edit="handleEdit"
           @set-category="handleSetCategory"
+          @set-alias="handleSetAlias"
           @enable="handleEnable"
           @delete="handleDelete"
           @tool-link="handleToolLink"

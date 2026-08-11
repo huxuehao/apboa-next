@@ -32,6 +32,7 @@ const skillId = computed(() => route.params.id as string)
 const skillInfo = reactive({
   id: '' as string | number,
   name: '',
+  alias: '',
   description: '',
   category: '',
   enabled: true,
@@ -166,6 +167,7 @@ async function loadSkillDetail() {
     if (vo) {
       skillInfo.id = vo.id
       skillInfo.name = vo.name
+      skillInfo.alias = vo.alias || ''
       skillInfo.description = vo.description
       skillInfo.category = vo.category
       skillInfo.enabled = vo.enabled
@@ -399,12 +401,18 @@ async function handleSyncToFile() {
 }
 
 /**
+ * 展示名称：优先别名，别名不存在（未定义、为空、空字符）时使用技能名称
+ */
+const displayName = computed(() => skillInfo.alias?.trim() || skillInfo.name)
+
+/**
  * 显示创建技能包弹窗
  */
 function showCreateModal() {
   let name = ''
   let description = ''
   let category = ''
+  let alias = ''
 
   Modal.confirm({
     title: '新建技能包',
@@ -435,6 +443,13 @@ function showCreateModal() {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           } as any),
         ]),
+        h('div', [
+          h('label', { style: 'display: block; margin-bottom: 4px; font-size: 13px' }, '技能别名'),
+          h(Input, {
+            placeholder: '请输入技能别名（可选）',
+            onChange: (e: Event) => { alias = (e.target as HTMLInputElement).value },
+          }),
+        ]),
       ]),
     okText: '创建',
     cancelText: '取消',
@@ -445,6 +460,7 @@ function showCreateModal() {
       }
       const res = await skillApi.save({
         name: name.trim(),
+        alias: alias.trim(),
         description,
         category,
         enabled: true,
@@ -497,7 +513,7 @@ onBeforeUnmount(() => {
           <ArrowLeftOutlined />
         </a-button>
         <span class="skill-name">
-          <span v-if="!isNew" class="skill-name-text">{{ skillInfo.name }}</span>
+          <span v-if="!isNew" class="skill-name-text">{{ displayName }}</span>
           <span v-else>新建技能包</span>
         </span>
         <span style="flex:1"></span>

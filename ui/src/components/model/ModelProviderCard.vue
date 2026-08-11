@@ -78,9 +78,8 @@ const providerLogo = computed(() => {
 /**
  * 操作菜单项
  */
-const hasReadOnly = accountStore.isReadOnly
 const menuItems = computed(() => {
-  if (hasReadOnly) {
+  if (accountStore.isReadOnly) {
     return [
       createViewItem(),
       createDivider(),
@@ -127,13 +126,24 @@ function handleMenuClick({ key }: { key: string }) {
 function handleConfigClick() {
   emit('configModels', props.data.id as string, props.data.name, props.data.type, props.data.baseUrl)
 }
+
+/**
+ * 点击标题
+ */
+function handleTitleClick() {
+  if (accountStore.isReadOnly) {
+    emit('view', props.data.id as string)
+  } else {
+    emit('edit', props.data.id as string)
+  }
+}
 </script>
 
 <template>
   <div class="provider-card">
     <div class="card-header flex items-center gap-sm">
       <div class="card-avatar flex-center" :class="{ disabled: !data.enabled }"><img :src="providerLogo" alt="model" /></div>
-      <div class="card-name flex-1 truncate" :title="data.name" @click="emit('view', data.id as string)">{{ data.name }}</div>
+      <div class="card-name flex-1 truncate" :title="data.name" @click="handleTitleClick">{{ data.name }}</div>
       <ADropdown :trigger="['hover']">
         <AButton type="text" size="small">
           <EllipsisOutlined />
@@ -152,7 +162,7 @@ function handleConfigClick() {
       <div class="card-actions flex items-center gap-xs">
         <ATag color="default" class="tag">{{ providerTypeText }}</ATag>
       </div>
-      <div v-if="hasReadOnly" class="card-time text-placeholder text-xs">
+      <div v-if="accountStore.isReadOnly" class="card-time text-placeholder text-xs">
         更新于 {{ formattedTime }}
       </div>
      <div v-else class="card-time text-placeholder text-xs">

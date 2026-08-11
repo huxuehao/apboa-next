@@ -4,7 +4,7 @@
  * @author huxuehao
  */
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Modal, message } from 'ant-design-vue'
 import {
@@ -19,14 +19,18 @@ import * as skillHubApi from '@/api/skillHub'
 import type { SkillsHubVO } from '@/types'
 import { RouteNames } from '@/router/constants'
 import ApboaInfiniteLoading from '@/components/common/ApboaInfiniteLoading.vue'
+import cache from '@/utils/cache'
 
 const router = useRouter()
+
+/** 搜索表单 localStorage 缓存键 */
+const SEARCH_FORM_CACHE_KEY = 'skill-hub-search-form'
 
 /**
  * 搜索表单
  */
 const searchForm = reactive({
-  keyword: '',
+  keyword: '通用',
   category: undefined as string | undefined,
   source: undefined as string | undefined,
   labels: '',
@@ -98,6 +102,8 @@ function handleBack() {
  * 执行搜索（重置状态并触发无限加载）
  */
 function handleSearch() {
+  // 持久化当前搜索表单，下次进入页面自动恢复
+  cache.local.setJSON(SEARCH_FORM_CACHE_KEY, { ...searchForm })
   currentPage.value = 1
   skillList.value = []
   hasMore.value = true
@@ -194,6 +200,8 @@ async function handleInfiniteLoading($state: {
  * 重置搜索
  */
 function handleReset() {
+  // 用户显式重置后清除缓存，下次进入页面保持初始状态
+  cache.local.remove(SEARCH_FORM_CACHE_KEY)
   searchForm.keyword = ''
   searchForm.category = undefined
   searchForm.source = undefined
@@ -271,6 +279,31 @@ function handleImport(item: SkillsHubVO) {
     },
   })
 }
+
+/**
+ * 页面挂载时恢复缓存的搜索表单并自动执行搜索
+ */
+onMounted(() => {
+  let saved: Record<string, unknown> | null = null
+  try {
+    saved = cache.local.getJSON(SEARCH_FORM_CACHE_KEY) as Record<string, unknown> | null
+  } catch {
+    // 缓存数据损坏时静默忽略
+  }
+  if (!saved || typeof saved !== 'object' || Object.keys(saved).length === 0) {
+    handleSearch()
+    return
+  }
+  Object.assign(searchForm, {
+    keyword: saved.keyword ?? '通用',
+    category: saved.category ?? undefined,
+    source: saved.source ?? undefined,
+    labels: saved.labels ?? '',
+    sortBy: saved.sortBy ?? 'updated_at',
+    order: saved.order ?? 'desc',
+  })
+  handleSearch()
+})
 </script>
 
 <template>
