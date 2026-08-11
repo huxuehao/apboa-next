@@ -166,7 +166,7 @@ export interface ContextUsageEvent extends CustomEvent {
 export interface ContextCompressionEvent extends CustomEvent {
   name: 'CONTEXT_COMPRESSION'
   value: {
-    status: 'STARTED' | 'FINISHED'
+    status: 'STARTED' | 'FINISHED' | 'SKIPPED' | 'FAILED'
     usedTokens: number
     totalTokens: number
     tokenThreshold: number
@@ -179,6 +179,10 @@ export interface ContextCompressionEvent extends CustomEvent {
     triggerReason: 'TOKEN' | 'MESSAGE'
     phase: 'COMPRESSION'
     compressed?: boolean
+    beforeUsedTokens?: number
+    beforeMessageCount?: number
+    afterUsedTokens?: number
+    afterMessageCount?: number
   }
 }
 

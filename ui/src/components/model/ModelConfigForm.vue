@@ -11,6 +11,8 @@ import type { ModelConfigVO, ModelConfig, ModelProviderVO } from '@/types'
 import { ModelType, ModelProviderType } from '@/types'
 import * as modelApi from '@/api/model'
 import ExtendConfigEditor, { type ExtendConfigData } from './ExtendConfigEditor.vue'
+import ContextWindowHint from './ContextWindowHint.vue'
+import MaxTokensHint from './MaxTokensHint.vue'
 
 /**
  * Props定义
@@ -56,8 +58,8 @@ const formData = ref<{
   description: '',
   streaming: true,
   thinking: false,
-  contextWindow: 4096,
-  maxTokens: 2048,
+  contextWindow: 200000,
+  maxTokens: 8192,
   temperature: 0.7,
   topP: 0.9,
   topK: 50,
@@ -131,7 +133,7 @@ const rules = {
     { required: true, message: '请输入上下文窗口大小', trigger: 'blur' }
   ],
   maxTokens: [
-    { required: true, message: '请输入最大Token数', trigger: 'blur' }
+    { required: true, message: '请输入最大输出 Token 数', trigger: 'blur' }
   ],
   temperature: [
     { required: true, message: '请设置温度参数', trigger: 'blur' }
@@ -158,8 +160,8 @@ function resetForm() {
     description: '',
     streaming: true,
     thinking: false,
-    contextWindow: 4096,
-    maxTokens: 2048,
+    contextWindow: 200000,
+    maxTokens: 8192,
     temperature: 0.7,
     topP: 0.9,
     topK: 50,
@@ -350,7 +352,11 @@ async function handleViewProvider() {
 
         <ARow :gutter="16">
           <ACol :span="12">
-            <AFormItem label="上下文窗口" name="contextWindow">
+            <AFormItem name="contextWindow">
+              <template #label>
+                <span>上下文窗口</span>
+                <ContextWindowHint v-model="formData.contextWindow" />
+              </template>
               <AInputNumber
                 v-model:value="formData.contextWindow"
                 :min="1"
@@ -361,13 +367,17 @@ async function handleViewProvider() {
             </AFormItem>
           </ACol>
           <ACol :span="12">
-            <AFormItem label="最大Token数" name="maxTokens">
+            <AFormItem name="maxTokens">
+              <template #label>
+                <span>最大输出 Token 数</span>
+                <MaxTokensHint v-model="formData.maxTokens" />
+              </template>
               <AInputNumber
                 v-model:value="formData.maxTokens"
                 :min="1"
                 :max="1000000"
                 style="width: 100%"
-                placeholder="请输入最大Token数"
+                placeholder="请输入最大输出 Token 数"
               />
             </AFormItem>
           </ACol>

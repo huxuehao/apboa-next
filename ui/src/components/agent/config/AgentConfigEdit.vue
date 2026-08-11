@@ -306,6 +306,8 @@ defineExpose({ isDirty })
         ref="advancedFormRef"
         style="width: calc(100% - 10px);"
         v-model="formData.advanced"
+        :model-config-id="formData.model.modelConfigId"
+        :model-params-override="formData.model.modelParamsOverride"
       />
     </div>
 
