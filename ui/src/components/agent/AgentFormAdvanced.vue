@@ -8,7 +8,11 @@ import { ref, computed } from 'vue'
 import StudioConfigSelect from '@/components/studio/StudioConfigSelect.vue'
 import CodeExecutionConfigSelect from "@/components/codeExecution/CodeExecutionConfigSelect.vue";
 import LongTermMemoryConfigSelect from '@/components/longTermMemory/LongTermMemoryConfigSelect.vue'
-import {InfoCircleOutlined} from "@ant-design/icons-vue";
+import { InfoCircleOutlined, BulbOutlined, ReadOutlined } from '@ant-design/icons-vue'
+import { message } from 'ant-design-vue'
+import MemoryCompressionHelpModal from './MemoryCompressionHelpModal.vue'
+import MemoryCompressionAdvisorModal, { type MemoryCompressionConfig } from './MemoryCompressionAdvisorModal.vue'
+import * as modelApi from '@/api/model'
 
 /**
  * Props定义
@@ -30,6 +34,8 @@ const props = defineProps<{
     codeExecutionConfigId: string | null
     longTermMemoryConfigId: string | null
   }
+  modelConfigId?: string
+  modelParamsOverride?: Record<string, unknown> | null
 }>()
 
 /**
@@ -40,6 +46,11 @@ const emit = defineEmits<{
 }>()
 
 const formRef = ref()
+const helpVisible = ref(false)
+const advisorVisible = ref(false)
+const advisorLoading = ref(false)
+const contextWindow = ref(0)
+const maxOutputTokens = ref(0)
 
 /**
  * 表单数据
@@ -64,6 +75,7 @@ const memoryCompressionForm = computed({
         currentRoundCompressionRatio: 0.3,
         minConsecutiveToolMessages: 6,
         offloadSinglePreview: 200,
+        strategyType: 'balanced',
         largePayloadThreshold: 5120,
       }
     }
@@ -73,6 +85,15 @@ const memoryCompressionForm = computed({
     formData.value.memoryCompressionConfig = val
   }
 })
+
+const strategyTypeLabel = computed(() => ({
+  conservative: '稳健保真',
+  balanced: '通用平衡',
+  tool_heavy: '工具密集',
+  long_dialogue: '长对话',
+  document_heavy: '大内容卸载',
+  low_latency: '成本优先'
+}[String(memoryCompressionForm.value.strategyType)] || '自定义'))
 
 /**
  * 表单验证规则
@@ -126,11 +147,56 @@ function handleEnableMemoryCompressionToggle(checked: boolean) {
       currentRoundCompressionRatio: 0.3,
       minConsecutiveToolMessages: 6,
       offloadSinglePreview: 200,
+      strategyType: 'balanced',
       largePayloadThreshold: 5120,
     }
   } else if (!checked) {
     formData.value.memoryCompressionConfig = null
   }
+  if (checked) {
+    void openCompressionAdvisor()
+  }
+}
+
+/** 根据覆盖参数优先级解析模型的上下文窗口和最大输出 Token 数。 */
+async function resolveModelLimits(): Promise<{ contextWindow: number, maxOutputTokens: number }> {
+  const overrideWindow = Number(props.modelParamsOverride?.contextWindow)
+  const overrideMaxTokens = Number(props.modelParamsOverride?.maxTokens)
+  let modelContextWindow = 0
+  let modelMaxTokens = 0
+  if ((!overrideWindow || !overrideMaxTokens) && props.modelConfigId) {
+    const response = await modelApi.configDetail(props.modelConfigId)
+    modelContextWindow = Number(response.data.data?.contextWindow) || 0
+    modelMaxTokens = Number(response.data.data?.maxTokens) || 0
+  }
+  return {
+    contextWindow: overrideWindow > 0 ? overrideWindow : modelContextWindow,
+    maxOutputTokens: overrideMaxTokens > 0 ? overrideMaxTokens : modelMaxTokens
+  }
+}
+
+/** 打开智能配置前读取当前模型上下文窗口。 */
+async function openCompressionAdvisor() {
+  advisorLoading.value = true
+  try {
+    const modelLimits = await resolveModelLimits()
+    if (!modelLimits.contextWindow) {
+      message.warning('请先选择模型，或在模型参数覆盖中填写有效的 Context Window')
+      return
+    }
+    contextWindow.value = modelLimits.contextWindow
+    maxOutputTokens.value = modelLimits.maxOutputTokens
+    advisorVisible.value = true
+  } catch {
+    message.error('读取模型 Context Window 失败，请稍后重试')
+  } finally {
+    advisorLoading.value = false
+  }
+}
+
+function applyCompressionConfig(config: MemoryCompressionConfig) {
+  formData.value.memoryCompressionConfig = { ...config }
+  message.success(`已应用“${config.strategyType}”压缩方案，可继续手动调整`)
 }
 
 /**
@@ -276,6 +342,18 @@ defineExpose({
 
     <!-- 记忆压缩子配置 -->
     <div v-if="formData.enableMemory && formData.enableMemoryCompression" class="config-section">
+      <div class="compression-config-heading">
+        <span>当前方案：{{ strategyTypeLabel }}</span>
+        <span class="text-placeholder text-xs">智能方案仅作为起点，仍可按业务需要手动调整</span>
+        <ASpace v-if="formData.enableMemoryCompression" class="compression-actions" :size="6">
+          <AButton type="link" size="small" :loading="advisorLoading" @click="openCompressionAdvisor">
+            <BulbOutlined /> 智能配置
+          </AButton>
+          <AButton type="link" size="small" @click="helpVisible = true">
+            <ReadOutlined /> 压缩说明
+          </AButton>
+        </ASpace>
+      </div>
       <ARow :gutter="16">
         <ACol :span="6">
           <AFormItem label="最大Token数">
@@ -287,6 +365,20 @@ defineExpose({
             />
             <div class="text-placeholder text-xs mt-xs">
               模型上下文窗口 Token 上限，需匹配所用模型；实际压缩触发线为 maxToken × Token 比率
+            </div>
+          </AFormItem>
+        </ACol>
+        <ACol :span="6">
+          <AFormItem label="Token比率">
+            <AInputNumber
+              v-model:value="memoryCompressionForm.tokenRatio"
+              :min="0.1"
+              :max="1"
+              :step="0.05"
+              style="width: 100%"
+            />
+            <div class="text-placeholder text-xs mt-xs">
+              触发压缩的水位比例（0-1），上下文 Token 达到 maxToken × 该值即提前压缩，为模型输出预留空间
             </div>
           </AFormItem>
         </ACol>
@@ -317,16 +409,24 @@ defineExpose({
           </AFormItem>
         </ACol>
         <ACol :span="6">
-          <AFormItem label="Token比率">
+          <AFormItem label="最小压缩Token阈值">
             <AInputNumber
-              v-model:value="memoryCompressionForm.tokenRatio"
-              :min="0.1"
-              :max="1"
-              :step="0.05"
+              v-model:value="memoryCompressionForm.minCompressionTokenThreshold"
               style="width: 100%"
             />
             <div class="text-placeholder text-xs mt-xs">
-              触发压缩的水位比例（0-1），上下文 Token 达到 maxToken × 该值即提前压缩，为模型输出预留空间
+              待压缩内容 Token 数低于该值时跳过压缩，避免小体量内容产生无谓的 LLM 摘要开销
+            </div>
+          </AFormItem>
+        </ACol>
+        <ACol :span="6">
+          <AFormItem label="最小连续工具消息数">
+            <AInputNumber
+              v-model:value="memoryCompressionForm.minConsecutiveToolMessages"
+              style="width: 100%"
+            />
+            <div class="text-placeholder text-xs mt-xs">
+              连续工具消息数超过该值时，该段工具调用才会被压缩为摘要，短工具链完整保留
             </div>
           </AFormItem>
         </ACol>
@@ -352,17 +452,7 @@ defineExpose({
             </div>
           </AFormItem>
         </ACol>
-        <ACol :span="6">
-          <AFormItem label="最小连续工具消息数">
-            <AInputNumber
-              v-model:value="memoryCompressionForm.minConsecutiveToolMessages"
-              style="width: 100%"
-            />
-            <div class="text-placeholder text-xs mt-xs">
-              连续工具消息数超过该值时，该段工具调用才会被压缩为摘要，短工具链完整保留
-            </div>
-          </AFormItem>
-        </ACol>
+
         <ACol :span="6">
           <AFormItem label="当前轮压缩比">
             <AInputNumber
@@ -377,19 +467,16 @@ defineExpose({
             </div>
           </AFormItem>
         </ACol>
-        <ACol :span="6">
-          <AFormItem label="最小压缩令牌阈值">
-            <AInputNumber
-              v-model:value="memoryCompressionForm.minCompressionTokenThreshold"
-              style="width: 100%"
-            />
-            <div class="text-placeholder text-xs mt-xs">
-              待压缩内容 Token 数低于该值时跳过压缩，避免小体量内容产生无谓的 LLM 摘要开销
-            </div>
-          </AFormItem>
-        </ACol>
       </ARow>
     </div>
+    <MemoryCompressionAdvisorModal
+      v-model:open="advisorVisible"
+      :context-window="contextWindow"
+      :max-output-tokens="maxOutputTokens"
+      :initial-strategy-type="String(memoryCompressionForm.strategyType || '')"
+      @apply="applyCompressionConfig"
+    />
+    <MemoryCompressionHelpModal v-model:open="helpVisible" />
   </AForm>
 </template>
 
@@ -401,4 +488,7 @@ defineExpose({
   border-radius: var(--border-radius-md);
   margin-bottom: var(--spacing-md);
 }
+.compression-actions { margin-left: 10px; vertical-align: middle; }
+.compression-config-heading { display: flex; align-items: baseline; gap: 12px; margin-bottom: 14px; font-weight: 600; }
+@media (max-width: 700px) { .compression-config-heading { align-items: flex-start; flex-direction: column; gap: 2px; } }
 </style>

@@ -8,6 +8,8 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { RoutePaths } from '@/router/constants.ts'
 import SmartCodeEditor from '@/components/editor/SmartCodeEditor.vue'
 import ExtendConfigEditor, { type ExtendConfigData } from '@/components/model/ExtendConfigEditor.vue'
+import ContextWindowHint from '@/components/model/ContextWindowHint.vue'
+import MaxTokensHint from '@/components/model/MaxTokensHint.vue'
 import * as modelApi from '@/api/model'
 import * as promptApi from '@/api/prompt'
 import type { ModelProviderVO, ModelConfigVO, SystemPromptTemplateVO } from '@/types'
@@ -182,6 +184,7 @@ async function loadModelParams(modelId: string) {
     temperature: model.temperature,
     topP: model.topP,
     topK: model.topK,
+    contextWindow: model.contextWindow,
     maxTokens: model.maxTokens,
     repeatPenalty: model.repeatPenalty,
     seed: model.seed,
@@ -244,6 +247,22 @@ const extendConfigForm = computed({
   get: () => (modelParamsForm.value.extendConfig as ExtendConfigData) || null,
   set: (v: ExtendConfigData | null) => {
     modelParamsForm.value = { ...modelParamsForm.value, extendConfig: v }
+  }
+})
+
+/** 适配参数覆盖表单的宽泛对象类型，保证上下文窗口始终以数字形式回填。 */
+const contextWindowOverride = computed<number>({
+  get: () => Number(modelParamsForm.value.contextWindow) || 0,
+  set: (value) => {
+    modelParamsForm.value = { ...modelParamsForm.value, contextWindow: value }
+  }
+})
+
+/** 适配最大输出 Token 的宽泛参数类型，保证示例值可直接写回覆盖参数。 */
+const maxTokensOverride = computed<number>({
+  get: () => Number(modelParamsForm.value.maxTokens) || 0,
+  set: (value) => {
+    modelParamsForm.value = { ...modelParamsForm.value, maxTokens: value }
   }
 })
 
@@ -359,7 +378,7 @@ defineExpose({
       <div v-if="formData.modelConfigId && showModelParamsOverride" class="params-override-section">
         <ARow :gutter="16" :key="showModelParamsOverride">
           <ACol :span="6">
-            <AFormItem label="Temperature">
+            <AFormItem label="温度">
               <AInputNumber
                 v-model:value="modelParamsForm.temperature"
                 :min="0"
@@ -391,9 +410,13 @@ defineExpose({
             </AFormItem>
           </ACol>
           <ACol :span="6">
-            <AFormItem label="Max Tokens">
+            <AFormItem>
+              <template #label>
+                <span>上下文窗口</span>
+                <ContextWindowHint v-model="contextWindowOverride" />
+              </template>
               <AInputNumber
-                v-model:value="modelParamsForm.maxTokens"
+                v-model:value="modelParamsForm.contextWindow"
                 :min="1"
                 :max="1000000"
                 style="width: 100%"
@@ -401,7 +424,21 @@ defineExpose({
             </AFormItem>
           </ACol>
           <ACol :span="6">
-            <AFormItem label="Repeat Penalty">
+            <AFormItem>
+              <template #label>
+                <span>最大输出 Token 数</span>
+                <MaxTokensHint v-model="maxTokensOverride" />
+              </template>
+              <AInputNumber
+                v-model:value="maxTokensOverride"
+                :min="1"
+                :max="1000000"
+                style="width: 100%"
+              />
+            </AFormItem>
+          </ACol>
+          <ACol :span="6">
+            <AFormItem label="重复惩罚">
               <AInputNumber
                 v-model:value="modelParamsForm.repeatPenalty"
                 :min="0"
@@ -412,7 +449,7 @@ defineExpose({
             </AFormItem>
           </ACol>
           <ACol :span="6">
-            <AFormItem label="随机种子 (Seed)" name="seed">
+            <AFormItem label="随机种子">
               <AInputNumber
                 v-model:value="modelParamsForm.seed"
                 style="width: 100%"
@@ -420,7 +457,7 @@ defineExpose({
             </AFormItem>
           </ACol>
           <ACol :span="6">
-            <AFormItem label="Streaming">
+            <AFormItem label="流式输出">
               <ASwitch v-model:checked="modelParamsForm.streaming" />
             </AFormItem>
           </ACol>

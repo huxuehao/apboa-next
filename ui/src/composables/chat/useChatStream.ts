@@ -302,8 +302,8 @@ export function useChatStream(
             clearTimeout(compressionNoticeTimer)
             compressionNoticeTimer = null
           }
-          memoryCompressionActive.value = true
-          if (compressionEvent.value.status === 'FINISHED') {
+          memoryCompressionActive.value = compressionEvent.value.status === 'STARTED'
+          if (compressionEvent.value.status !== 'STARTED') {
             compressionNoticeTimer = setTimeout(() => {
               memoryCompressionActive.value = false
               compressionNoticeTimer = null

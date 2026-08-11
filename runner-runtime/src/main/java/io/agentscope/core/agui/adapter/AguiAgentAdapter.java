@@ -388,10 +388,24 @@ public class AguiAgentAdapter {
                 || !(reActAgent.getMemory() instanceof ObservableAutoContextMemory memory)) {
             return;
         }
-        memory.setCompressionListener(started -> {
-            state.compressionStarted = true;
-            Map<String, Object> usage = contextUsagePayload(started, "COMPRESSION", false);
-            usage.put("status", "STARTED");
+        memory.setCompressionListener(lifecycle -> {
+            state.compressionStarted = lifecycle.status()
+                    == ObservableAutoContextMemory.CompressionStatus.STARTED;
+            ObservableAutoContextMemory.ContextUsageSnapshot snapshot =
+                    lifecycle.status() == ObservableAutoContextMemory.CompressionStatus.STARTED
+                            ? lifecycle.before()
+                            : lifecycle.after();
+            Map<String, Object> usage = contextUsagePayload(
+                    snapshot, "COMPRESSION", lifecycle.compressed());
+            usage.put("status", lifecycle.status().name());
+            usage.put("compressed", lifecycle.compressed());
+            usage.put("beforeUsedTokens", lifecycle.before().usedTokens());
+            usage.put("beforeMessageCount", lifecycle.before().messageCount());
+            usage.put("afterUsedTokens", lifecycle.after().usedTokens());
+            usage.put("afterMessageCount", lifecycle.after().messageCount());
+            if (lifecycle.status() != ObservableAutoContextMemory.CompressionStatus.STARTED) {
+                state.compressionEventCount = currentCompressionEventCount();
+            }
             lifecycleEvents.tryEmitNext(new AguiEvent.Custom(
                     state.threadId,
                     state.runId,

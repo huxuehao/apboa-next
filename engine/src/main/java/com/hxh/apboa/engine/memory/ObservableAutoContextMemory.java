@@ -19,15 +19,29 @@ import java.util.function.Consumer;
 public class ObservableAutoContextMemory extends AutoContextMemory {
 
     private final AutoContextConfig config;
-    private volatile Consumer<ContextUsageSnapshot> compressionListener;
+    private volatile Consumer<CompressionLifecycleEvent> compressionListener;
+    private volatile String noProgressFingerprint;
 
     public ObservableAutoContextMemory(AutoContextConfig config, Model model) {
         super(config, new ToolCallSanitizingModel(model));
         this.config = Objects.requireNonNull(config, "config cannot be null");
     }
 
-    public void setCompressionListener(Consumer<ContextUsageSnapshot> listener) {
+    public void setCompressionListener(Consumer<CompressionLifecycleEvent> listener) {
         this.compressionListener = listener;
+    }
+
+    @Override
+    public void addMessage(Msg message) {
+        super.addMessage(message);
+        // 新消息会改变压缩输入，允许下一轮重新尝试压缩。
+        noProgressFingerprint = null;
+    }
+
+    @Override
+    public void deleteMessage(int index) {
+        super.deleteMessage(index);
+        noProgressFingerprint = null;
     }
 
     public ContextUsageSnapshot getContextUsageSnapshot() {
@@ -54,17 +68,72 @@ public class ObservableAutoContextMemory extends AutoContextMemory {
 
     @Override
     public boolean compressIfNeeded() {
-        List<Msg> messages = getMessages();
-        ContextUsageSnapshot snapshot = getContextUsageSnapshot();
-        boolean shouldCompress = messages.size() >= config.getMsgThreshold()
-                || snapshot.usedTokens() >= snapshot.tokenThreshold();
-        if (shouldCompress) {
-            Consumer<ContextUsageSnapshot> listener = compressionListener;
-            if (listener != null) {
-                listener.accept(snapshot);
-            }
+        ContextUsageSnapshot before = getContextUsageSnapshot();
+        boolean shouldCompress = before.messageCount() >= config.getMsgThreshold()
+                || before.usedTokens() >= before.tokenThreshold();
+        if (!shouldCompress) {
+            return false;
         }
-        return super.compressIfNeeded();
+
+        String fingerprint = before.usedTokens() + ":" + before.messageCount();
+        if (fingerprint.equals(noProgressFingerprint)) {
+            notifyLifecycle(CompressionStatus.SKIPPED, before, before, false);
+            return false;
+        }
+
+        notifyLifecycle(CompressionStatus.STARTED, before, before, false);
+        try {
+            boolean compressed = super.compressIfNeeded();
+            ContextUsageSnapshot after = getContextUsageSnapshot();
+            boolean reduced = after.usedTokens() < before.usedTokens()
+                    || after.messageCount() < before.messageCount();
+            if (!reduced) {
+                noProgressFingerprint = fingerprint;
+            } else {
+                noProgressFingerprint = null;
+            }
+            notifyLifecycle(
+                    compressed ? CompressionStatus.FINISHED : CompressionStatus.SKIPPED,
+                    before,
+                    after,
+                    compressed);
+            return compressed;
+        } catch (RuntimeException | Error error) {
+            ContextUsageSnapshot after = getContextUsageSnapshot();
+            notifyLifecycle(CompressionStatus.FAILED, before, after, false);
+            throw error;
+        }
+    }
+
+    @Override
+    public void clear() {
+        super.clear();
+        noProgressFingerprint = null;
+    }
+
+    private void notifyLifecycle(
+            CompressionStatus status,
+            ContextUsageSnapshot before,
+            ContextUsageSnapshot after,
+            boolean compressed) {
+        Consumer<CompressionLifecycleEvent> listener = compressionListener;
+        if (listener != null) {
+            listener.accept(new CompressionLifecycleEvent(status, before, after, compressed));
+        }
+    }
+
+    public enum CompressionStatus {
+        STARTED,
+        FINISHED,
+        SKIPPED,
+        FAILED
+    }
+
+    public record CompressionLifecycleEvent(
+            CompressionStatus status,
+            ContextUsageSnapshot before,
+            ContextUsageSnapshot after,
+            boolean compressed) {
     }
 
     public record ContextUsageSnapshot(

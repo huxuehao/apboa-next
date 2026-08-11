@@ -72,6 +72,9 @@ public class ChatModelFactory {
             if (modelParamsOverride.has("maxTokens")) {
                 configWrapper.setMaxTokens(modelParamsOverride.get("maxTokens").asInt());
             }
+            if (modelParamsOverride.has("contextWindow")) {
+                configWrapper.setContextWindow(modelParamsOverride.get("contextWindow").asInt());
+            }
             if (modelParamsOverride.has("repeatPenalty")) {
                 configWrapper.setRepeatPenalty(modelParamsOverride.get("repeatPenalty").asDouble());
             }
