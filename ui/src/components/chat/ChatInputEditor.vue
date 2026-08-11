@@ -94,7 +94,7 @@ watch(() => props.agentId, () => {
       agentSkills.value = skills.data.data.map((item:SkillPackage) => {
         return {
           id: item.name,
-          name: item.name,
+          name: item?.alias || item.name,
           description: item.description
         }
       })
