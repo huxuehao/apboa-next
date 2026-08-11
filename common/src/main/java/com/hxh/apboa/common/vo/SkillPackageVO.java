@@ -17,6 +17,7 @@ import java.util.List;
 public class SkillPackageVO implements SerializableEnable {
     private Long id;
     private String name;
+    private String alias;
     private String description;
     private String category;
     private Boolean enabled;

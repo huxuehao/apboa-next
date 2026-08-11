@@ -340,6 +340,7 @@ export interface SensitiveWordConfigVO {
 export interface SkillPackageVO {
   id: string | number
   name: string
+  alias?: string
   description: string
   category: string
   enabled: boolean

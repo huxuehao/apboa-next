@@ -15,6 +15,9 @@ import {
   createDeleteItem,
   createDivider,
 } from '@/composables/useCardMenuItems'
+import { useAccountStore } from '@/stores'
+
+const accountStore = useAccountStore()
 
 /**
  * Props定义
@@ -90,13 +93,24 @@ function handleMenuClick({ key }: { key: string }) {
       break
   }
 }
+
+/**
+ * 点击标题
+ */
+function handleTitleClick() {
+  if (accountStore.isReadOnly) {
+    emit('view', props.data.id as string)
+  } else {
+    emit('edit', props.data.id as string)
+  }
+}
 </script>
 
 <template>
   <div class="tool-card">
     <div class="card-header flex items-center gap-sm">
       <div class="card-avatar flex-center" :class="{ disabled: !data.enabled }"><img :src="toolAvatar" alt="tool" /></div>
-      <div class="card-name flex-1 truncate" :title="data.name" @click="emit('view', data.id as string)">{{ data.name }}</div>
+      <div class="card-name flex-1 truncate" :title="data.name" @click="handleTitleClick">{{ data.name }}</div>
       <ADropdown :trigger="['hover']">
         <AButton type="text" size="small" v-permission="['TENANT_EDITOR','TENANT_ADMIN','TENANT_OWNER']">
           <EllipsisOutlined />

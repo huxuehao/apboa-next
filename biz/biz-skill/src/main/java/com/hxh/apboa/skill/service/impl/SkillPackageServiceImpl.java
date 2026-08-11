@@ -1,6 +1,7 @@
 package com.hxh.apboa.skill.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hxh.apboa.common.cluster.core.MessagePublisher;
 import com.hxh.apboa.common.consts.RedisChannelTopic;
@@ -88,6 +89,14 @@ public class SkillPackageServiceImpl extends ServiceImpl<SkillPackageMapper, Ski
     }
 
     @Override
+    public boolean updateAlias(Long id, String alias) {
+        // 仅更新别名，不触发智能体重新注册
+        return update(new LambdaUpdateWrapper<SkillPackage>()
+                .eq(SkillPackage::getId, id)
+                .set(SkillPackage::getAlias, alias));
+    }
+
+    @Override
     public SkillPackageVO getDetail(Long id) {
         SkillPackage entity = getById(id);
         if (entity == null) {
@@ -96,6 +105,7 @@ public class SkillPackageServiceImpl extends ServiceImpl<SkillPackageMapper, Ski
         SkillPackageVO vo = new SkillPackageVO();
         vo.setId(entity.getId());
         vo.setName(entity.getName());
+        vo.setAlias(entity.getAlias());
         vo.setDescription(entity.getDescription());
         vo.setCategory(entity.getCategory());
         vo.setEnabled(entity.getEnabled());

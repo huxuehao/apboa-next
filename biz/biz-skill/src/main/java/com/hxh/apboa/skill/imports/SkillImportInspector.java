@@ -3,6 +3,7 @@ package com.hxh.apboa.skill.imports;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -102,7 +103,13 @@ public final class SkillImportInspector {
                 // skip invalid entries
             }
         }
-        Path fallback = skillsDir.resolve(skillName);
+        // 回退到目录名与技能名相同的场景（技能名含 Windows 非法字符时无法拼接路径，跳过回退）
+        Path fallback;
+        try {
+            fallback = skillsDir.resolve(skillName);
+        } catch (InvalidPathException e) {
+            return Optional.empty();
+        }
         return Files.isDirectory(fallback) ? Optional.of(fallback) : Optional.empty();
     }
 

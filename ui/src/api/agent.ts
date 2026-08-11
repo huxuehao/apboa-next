@@ -78,7 +78,7 @@ export function allowFileType(id: string) {
  * 执行工具
  */
 export function agentDoTool(toolName: string, args: any) {
-  return request.post<ApiResponse<any>>(`/api/runtime/agent/do/${toolName}/tool`, args)
+  return request.post<ApiResponse<any>>(`/api/runtime/tool/${toolName}/do`, args)
 }
 
 /**

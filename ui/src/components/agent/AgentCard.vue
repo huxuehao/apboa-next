@@ -56,9 +56,8 @@ const formattedTime = computed(() => {
 /**
  * 操作菜单项
  */
-const hasReadOnly = accountStore.isReadOnly
 const menuItems = computed(() => {
-  if (hasReadOnly) {
+  if (accountStore.isReadOnly) {
     return [
       createViewItem(),
       createDivider(),
@@ -80,12 +79,11 @@ const menuItems = computed(() => {
  * 点击标题
  */
 function handleTitleClick() {
-  // if (props.data.agentType==='CUSTOM') {
-  //   emit('architecture', props.data.id)
-  // } else {
-  //   emit('view', props.data.id)
-  // }
-  emit('view', String(props.data.id))
+  if (accountStore.isReadOnly) {
+    emit('view', String(props.data.id))
+  } else {
+    emit('configPanel', String(props.data.id))
+  }
 }
 
 /**

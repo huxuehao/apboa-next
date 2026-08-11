@@ -42,9 +42,22 @@ public class SkillPackageBuilder {
      * @return 构建结果
      */
     public static BuildResult build(AgentSkill agentSkill, String category) {
+        return build(agentSkill, category, agentSkill.getName());
+    }
+
+    /**
+     * 基于 AgentSkill 构建 SkillPackage 实体和 SkillFile 列表
+     *
+     * @param agentSkill  AgentSkill 对象
+     * @param category    技能分类
+     * @param resolvedName 规范化后的技能名称（文件系统目录与 DB 统一使用）
+     * @return 构建结果
+     */
+    public static BuildResult build(AgentSkill agentSkill, String category, String resolvedName) {
         SkillPackage skillPackage = new SkillPackage();
         skillPackage.setCategory(category);
-        skillPackage.setName(agentSkill.getName());
+        skillPackage.setName(resolvedName);
+        skillPackage.setAlias(resolveAlias(agentSkill, resolvedName));
         skillPackage.setDescription(agentSkill.getDescription());
 
         List<SkillFile> skillFiles = new ArrayList<>();
@@ -88,6 +101,21 @@ public class SkillPackageBuilder {
         }
 
         return new BuildResult(skillPackage, skillFiles);
+    }
+
+    /**
+     * 解析技能别名：优先取 SKILL.md 元数据中的 alias，否则回退规范化后的技能名称
+     *
+     * @param agentSkill  AgentSkill 对象
+     * @param fallbackName 回退的技能名称
+     * @return 技能别名
+     */
+    private static String resolveAlias(AgentSkill agentSkill, String fallbackName) {
+        Object alias = agentSkill.getMetadataValue("alias");
+        if (alias != null && !alias.toString().isBlank()) {
+            return alias.toString().trim();
+        }
+        return fallbackName;
     }
 
     /**

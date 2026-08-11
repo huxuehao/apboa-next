@@ -26,6 +26,9 @@ import {
   createViewItem
 } from '@/composables/useCardMenuItems'
 import { getMcpPrimaryAction } from '@/composables/useMcpPresentation'
+import { useAccountStore } from '@/stores'
+
+const accountStore = useAccountStore()
 
 const props = defineProps<{
   data: McpServerVO
@@ -168,6 +171,17 @@ function handleMenuClick({ key }: { key: string }) {
       break
   }
 }
+
+/**
+ * 点击标题
+ */
+function handleTitleClick() {
+  if (accountStore.isReadOnly) {
+    emit('view', props.data.id as string)
+  } else {
+    emit('edit', props.data.id as string)
+  }
+}
 </script>
 
 <template>
@@ -187,7 +201,7 @@ function handleMenuClick({ key }: { key: string }) {
           </span>
         </ATooltip>
       </div>
-      <div class="card-name flex-1 truncate" :title="data.name" @click="emit('view', data.id as string)">
+      <div class="card-name flex-1 truncate" :title="data.name" @click="handleTitleClick">
         {{ data.name }}
       </div>
       <ADropdown :trigger="['hover']">

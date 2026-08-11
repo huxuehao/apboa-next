@@ -125,10 +125,13 @@ public class SkillImportService {
         int importedCount = 0;
         int skippedCount = 0;
 
-        for (String skillName : allSkillNames) {
-            Optional<Path> sourceSkillDir = SkillImportInspector.findSkillDirectory(skillsDir, skillName);
+        for (String rawSkillName : allSkillNames) {
+            // 规范化技能名（Windows 非法字符如 /、段尾空格等），文件系统目录与 DB 统一使用规范化名
+            String skillName = SkillImportNormalizer.normalizeSkillName(rawSkillName);
+            // 源目录按 SKILL.md frontmatter 原始名匹配
+            Optional<Path> sourceSkillDir = SkillImportInspector.findSkillDirectory(skillsDir, rawSkillName);
             if (sourceSkillDir.isEmpty()) {
-                log.warn("技能 {} 源目录未找到，跳过安装", skillName);
+                log.warn("技能 {} 源目录未找到，跳过安装", rawSkillName);
                 skippedCount++;
                 continue;
             }
@@ -140,8 +143,8 @@ public class SkillImportService {
                 continue;
             }
 
-            AgentSkill agentSkill = repo.getSkill(skillName);
-            SkillPackageBuilder.BuildResult buildResult = SkillPackageBuilder.build(agentSkill, category);
+            AgentSkill agentSkill = repo.getSkill(rawSkillName);
+            SkillPackageBuilder.BuildResult buildResult = SkillPackageBuilder.build(agentSkill, category, skillName);
             SkillPackage skillPackage = buildResult.getSkillPackage();
             List<SkillFile> skillFiles = buildResult.getSkillFiles();
 
@@ -157,6 +160,10 @@ public class SkillImportService {
             } else {
                 skillPackage.setId(oldSkillPackage.getId());
                 skillPackage.setEnabled(oldSkillPackage.getEnabled() != null ? oldSkillPackage.getEnabled() : Boolean.TRUE);
+                // 保留用户自定义的别名，避免重新导入覆盖
+                if (oldSkillPackage.getAlias() != null && !oldSkillPackage.getAlias().isBlank()) {
+                    skillPackage.setAlias(oldSkillPackage.getAlias());
+                }
                 skillPackageService.updateById(skillPackage);
                 skillId = oldSkillPackage.getId();
                 // 删除旧的文件记录

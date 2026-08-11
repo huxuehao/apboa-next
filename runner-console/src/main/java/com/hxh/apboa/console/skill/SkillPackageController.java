@@ -121,6 +121,15 @@ public class SkillPackageController {
     }
 
     /**
+     * 仅修改技能别名（不触发关联智能体重新注册）
+     */
+    @PutMapping("/{id}/alias")
+    @RoleNeed({TenantRole.TENANT_ADMIN, TenantRole.TENANT_EDITOR})
+    public R<Boolean> updateAlias(@PathVariable("id") Long id, @RequestParam("alias") String alias) {
+        return R.data(skillPackageService.updateAlias(id, alias));
+    }
+
+    /**
      * 删除
      */
     @DeleteMapping

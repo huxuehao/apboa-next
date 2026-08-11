@@ -656,6 +656,7 @@ DROP TABLE IF EXISTS `skill_package`;
 CREATE TABLE `skill_package` (
   `id` bigint NOT NULL,
   `name` varchar(500) NOT NULL COMMENT '技能包名称',
+  `alias` varchar(500) DEFAULT NULL COMMENT '技能别名',
   `description` text NOT NULL COMMENT '技能描述',
   `category` varchar(100) DEFAULT NULL COMMENT '技能分类',
   `enabled` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否可用',

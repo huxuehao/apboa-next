@@ -13,6 +13,7 @@ import {
   DeleteOutlined,
   EditOutlined,
   EyeOutlined,
+  FormOutlined,
   HistoryOutlined,
   MessageOutlined,
   PlayCircleOutlined,
@@ -130,6 +131,13 @@ export function createToolGovernanceItem(): CardMenuItem {
  */
 export function createConfigPanelItem(): CardMenuItem {
   return { key: 'configPanel', label: '设计', icon: () => h(SettingOutlined) }
+}
+
+/**
+ * 创建「编辑别名」菜单项
+ */
+export function createEditAliasItem(): CardMenuItem {
+  return { key: 'editAlias', label: '编辑别名', icon: () => h(FormOutlined) }
 }
 
 /**

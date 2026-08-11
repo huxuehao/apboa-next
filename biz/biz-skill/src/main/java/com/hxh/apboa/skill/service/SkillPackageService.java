@@ -32,6 +32,15 @@ public interface SkillPackageService extends IService<SkillPackage> {
     boolean doUpdate(SkillPackage entity);
 
     /**
+     * 仅更新技能别名（不触发关联智能体重新注册）
+     *
+     * @param id    技能包ID
+     * @param alias 技能别名，空串表示清空
+     * @return 是否成功
+     */
+    boolean updateAlias(Long id, String alias);
+
+    /**
      * 获取技能包详情（包含关联的工具ID列表）
      *
      * @param id 技能包ID

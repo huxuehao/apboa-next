@@ -21,6 +21,11 @@ public class SkillPackage extends BaseTenantEntity {
     private String name;
 
     /**
+     * 技能别名
+     */
+    private String alias;
+
+    /**
      * 技能描述
      */
     private String description;
