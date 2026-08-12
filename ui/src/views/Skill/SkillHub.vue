@@ -420,7 +420,7 @@ onMounted(() => {
                   <div class="hub-card__meta-row flex items-center gap-sm">
                     <span class="hub-card__version text-xs text-secondary">版本: {{ item.version || '-' }}</span>
                     <span class="hub-card__stat text-xs text-secondary">
-                      下载量: {{ item.downloads || 0 }}
+                      下载: {{ item.downloads || 0 }}
                     </span>
                   </div>
                 </div>

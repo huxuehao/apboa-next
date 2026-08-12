@@ -68,11 +68,11 @@ const agentSkills = ref<AgentSkillItem[]>([])
 const defaultAgentSkills = [
   {
     id: 'user_interaction_protocol_rules',
-    name: '交互增强',
+    name: '交互增强「内置」',
     description: '当任务执行中缺少必要参数、需要用户填写表单、选择方案、确认动作时，AI 可通过该技能生成交互界面（表单、选择、确认）。'
   }, {
     id: 'vision_enhancement_protocol_rules',
-    name: '视觉增强',
+    name: '视觉增强「内置」',
     description: '该技能可以让模型在自然语言描述的基础上，附带卡片（card） 或图表（chart） 两类视觉组件，以提升信息传达效率。'
   }
 ]

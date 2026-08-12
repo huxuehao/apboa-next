@@ -488,7 +488,7 @@ defineExpose({
                 class="checkbox-item"
               >
                 <div class="item-info">
-                  <div class="item-name text-ellipsis" :title="skill.name">{{ skill.name }}</div>
+                  <div class="item-name text-ellipsis" :title="skill?.alias || skill.name">{{ skill?.alias || skill.name }}</div>
                   <div class="item-desc text-placeholder text-xs text-ellipsis" :title="skill.description">{{ skill.description }}</div>
                 </div>
               </ACheckbox>
