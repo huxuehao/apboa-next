@@ -52,7 +52,7 @@ function onContentScroll() {
 
 <template>
   <span class="guide-trigger" @click="open = true">
-    <QuestionCircleOutlined />
+    <QuestionCircleOutlined style="color: #2F54EB" />
   </span>
 
   <AModal

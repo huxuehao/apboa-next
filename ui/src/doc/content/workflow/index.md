@@ -109,7 +109,7 @@
 ${input}
 
 # 返回 JSON 格式
-{"result": ${input}, "status": "success"}
+{"result": "${input}", "status": "success"}
 
 # 使用 Velocity 条件判断
 #if($input.code == 200)

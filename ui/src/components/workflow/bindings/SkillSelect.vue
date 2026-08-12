@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import {SearchOutlined, CloseCircleFilled} from '@ant-design/icons-vue'
+import {computed, ref, watch} from 'vue'
+import {CloseCircleFilled, SearchOutlined} from '@ant-design/icons-vue'
 import skillAvatar from '@/assets/avatar/skill.png'
-import type { SkillPackageVO } from '@/types'
+import type {SkillPackageVO} from '@/types'
 
 const props = defineProps<{
   modelValue: string[]
@@ -35,8 +35,7 @@ const selectedItems = computed(() =>
 
 const selectedLabel = computed(() => {
   if (selectedItems.value.length === 0) return ''
-  const first = selectedItems.value[0]?.name || ''
-  return first
+  return selectedItems.value[0]?.name || ''
 })
 
 const selectedCount = computed(() => selectedItems.value.length)
@@ -130,7 +129,7 @@ watch(popoverOpen, (open) => {
                   @change="toggleItem(String(item.id))"
                 />
                 <div class="item-text">
-                  <span class="item-name">{{ item.name }}</span>
+                  <span class="item-name">{{ item?.alias || item.name }}</span>
                   <span class="item-desc">{{ item.description || '暂无描述' }}</span>
                 </div>
               </div>
