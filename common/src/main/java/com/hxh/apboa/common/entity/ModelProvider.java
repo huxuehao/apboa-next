@@ -22,7 +22,7 @@ import lombok.Setter;
 public class ModelProvider extends BaseTenantEntity {
 
     /**
-     * 提供商类型: DashScope, OpenAI, Anthropic, Gemini, Ollama
+     * 提供商类型: DashScope, OpenAI, Anthropic, Gemini, Ollama, OrcaRouter
      */
     private ModelProviderType type;
 

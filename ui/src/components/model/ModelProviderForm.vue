@@ -59,7 +59,8 @@ const providerTypeOptions = [
   { label: 'OpenAI', value: ModelProviderType.OPEN_AI },
   { label: 'Anthropic', value: ModelProviderType.ANTHROPIC },
 //   { label: 'Gemini', value: ModelProviderType.GEMINI },
-  { label: 'Ollama', value: ModelProviderType.OLLAMA }
+  { label: 'Ollama', value: ModelProviderType.OLLAMA },
+  { label: 'OrcaRouter', value: ModelProviderType.ORCA_ROUTER }
 ]
 
 /**
@@ -79,7 +80,8 @@ function getDefaultBaseUrl(type: ModelProviderType): string {
     [ModelProviderType.OPEN_AI]: 'https://api.openai.com',
     [ModelProviderType.ANTHROPIC]: 'https://api.anthropic.com',
     [ModelProviderType.OLLAMA]: 'http://localhost:11434',
-    [ModelProviderType.GEMINI]: 'http://localhost:8080'
+    [ModelProviderType.GEMINI]: 'http://localhost:8080',
+    [ModelProviderType.ORCA_ROUTER]: 'https://api.orcarouter.ai/v1'
   }
   return baseUrlMap[type] || ''
 }
