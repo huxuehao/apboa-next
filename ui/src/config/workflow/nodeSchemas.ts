@@ -245,6 +245,16 @@ public class DataProcess implements IteratorExecutor {
     showSummary: true,
   }),
   schema({
+    type: 'KNOWLEDGE_RETRIEVE', title: '知识库检索', group: 'integration',
+    description: '从指定知识库中检索相关文档片段，输入为检索关键词。',
+    icon: 'nodeknowledge_base', color: '#eb2f96', panelComponent: 'KnowledgeNodePanel',
+    defaultConfig: { knowledgeBaseConfigId: undefined, knowledgeBaseName: undefined, retrievalConfig: null },
+    inputConfigs: [{ name: 'query', sourceType: 'NODE_OUTPUT', type: 'String' }],
+    outputConfigs: output('Array'),
+    summaryComponent: 'KnowledgeNodeSummary',
+    showSummary: true,
+  }),
+  schema({
     type: 'MCP_CALL', title: 'MCP 调用', group: 'integration',
     description: '调用指定 MCP 服务上的工具，将输入参数传递给工具并返回执行结果。',
     icon: 'nodemcp', color: '#eb2f96', panelComponent: 'McpNodePanel',

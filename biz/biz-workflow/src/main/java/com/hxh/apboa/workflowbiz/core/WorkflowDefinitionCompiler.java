@@ -60,6 +60,7 @@ public class WorkflowDefinitionCompiler {
         bind(NodeType.DINGTALK_SEND, com.hxh.apboa.node.channel.dingtalk.DingTalkSendNode.class, com.hxh.apboa.node.channel.dingtalk.Config.class);
         bind(NodeType.FEISHU_SEND, com.hxh.apboa.node.channel.feishu.FeishuSendNode.class, com.hxh.apboa.node.channel.feishu.Config.class);
         bind(NodeType.INTENT_RECOGNITION, com.hxh.apboa.node.intent.IntentRecognitionNode.class, com.hxh.apboa.node.intent.Config.class);
+        bind(NodeType.KNOWLEDGE_RETRIEVE, com.hxh.apboa.node.knowledge.KnowledgeNode.class, com.hxh.apboa.node.knowledge.Config.class);
     }
 
     public static Set<NodeType> supportedTypes() {

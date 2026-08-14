@@ -39,6 +39,7 @@ export const nodeIconMap: Record<string, IconName> = {
   DINGTALK_SEND: 'nodedingding',
   FEISHU_SEND: 'nodefeishu',
   INTENT_RECOGNITION: 'nodeintentRecognition',
+  KNOWLEDGE_RETRIEVE: 'nodeknowledge_base',
 }
 
 /**
