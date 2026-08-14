@@ -2,7 +2,9 @@ package com.hxh.apboa.workflowbiz.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.hxh.apboa.common.UserDetail;
 import com.hxh.apboa.common.entity.Workflow;
 import com.hxh.apboa.common.entity.WorkflowNodeExecution;
@@ -12,6 +14,7 @@ import com.hxh.apboa.common.enums.NodeRunStatus;
 import com.hxh.apboa.common.enums.NodeType;
 import com.hxh.apboa.common.enums.WorkflowRunStatus;
 import com.hxh.apboa.common.util.UserUtils;
+import com.hxh.apboa.node.base.Node;
 import com.hxh.apboa.node.base.NodeOutput;
 import com.hxh.apboa.node.base.context.NodeContext;
 import com.hxh.apboa.node.base.request.ParamItem;
@@ -19,12 +22,14 @@ import com.hxh.apboa.node.base.request.RequestParams;
 import com.hxh.apboa.workflow.run.RunWorkflow;
 import com.hxh.apboa.workflow.run.cache.RunWorkflowCache;
 import com.hxh.apboa.workflowbiz.core.WorkflowDefinitionCompiler;
+import com.hxh.apboa.workflowbiz.dto.WorkflowNodeRunRequest;
 import com.hxh.apboa.workflowbiz.dto.WorkflowRunRequest;
 import com.hxh.apboa.workflowbiz.mapper.WorkflowMapper;
 import com.hxh.apboa.workflowbiz.mapper.WorkflowNodeExecutionMapper;
 import com.hxh.apboa.workflowbiz.mapper.WorkflowRunMapper;
 import com.hxh.apboa.workflowbiz.mapper.WorkflowVersionMapper;
 import com.hxh.apboa.workflowbiz.service.WorkflowRunService;
+import com.hxh.apboa.workflowbiz.vo.WorkflowNodeRunResult;
 import com.hxh.apboa.workflowbiz.vo.WorkflowRunResult;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -33,6 +38,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -68,6 +74,118 @@ public class WorkflowRunServiceImpl extends ServiceImpl<WorkflowRunMapper, Workf
         return nodeExecutionMapper.selectList(new LambdaQueryWrapper<WorkflowNodeExecution>()
                 .eq(WorkflowNodeExecution::getWorkflowRunId, String.valueOf(runId))
                 .orderByAsc(WorkflowNodeExecution::getStartTime));
+    }
+
+    @Override
+    public WorkflowNodeRunResult debugNodeRun(WorkflowNodeRunRequest request, UserDetail userDetail) {
+        if (request == null || request.getNode() == null) {
+            throw new RuntimeException("节点定义不能为空");
+        }
+
+        // 将「节点输出」类输入改写为「固定值」测试值，仅作用于本次独立运行，不影响原始配置
+        JsonNode preparedNode = prepareNodeForDebug(request.getNode(), request.getInputs(), request.getInputTypes());
+
+        Node node = compiler.compileSubNode(preparedNode);
+
+        NodeContext context = new NodeContext("node-debug-" + System.currentTimeMillis());
+        context.setSkipVerify(true);
+        if (request.getVariables() != null) {
+            request.getVariables().forEach(context.getVariables()::storeVariable);
+        }
+        if (userDetail != null) {
+            context.getVariables().storeVariable("tenantId", userDetail.getTenantId());
+            context.getVariables().storeVariable("tenantCode", userDetail.getTenantCode());
+            context.getVariables().storeVariable("userId", userDetail.getId());
+            context.getVariables().storeVariable("userName", userDetail.getUsername());
+        }
+
+        NodeOutput output = node.execute(context);
+        return toNodeRunResult(output);
+    }
+
+    /**
+     * 准备单节点运行的节点定义：将 NODE_OUTPUT 输入改写为 CONSTANT 并注入测试值/类型。
+     */
+    private JsonNode prepareNodeForDebug(JsonNode nodeJson, Map<String, Object> inputs, Map<String, String> inputTypes) {
+        ObjectNode copy = nodeJson.deepCopy();
+        JsonNode inputConfigs = copy.get("inputConfigs");
+        if (inputConfigs == null || !inputConfigs.isArray()) {
+            return copy;
+        }
+        for (JsonNode item : inputConfigs) {
+            if (!item.isObject()) {
+                continue;
+            }
+            ObjectNode cfg = (ObjectNode) item;
+            String classify = text(cfg, "classify", text(cfg, "sourceType", null));
+            if (!"NODE_OUTPUT".equals(classify)) {
+                continue;
+            }
+            String name = text(cfg, "name", "input");
+
+            cfg.put("classify", "CONSTANT");
+            cfg.remove("sourceType");
+            cfg.remove("sourceNodeId");
+            cfg.remove("nodeId");
+            cfg.remove("sourceOutputName");
+            cfg.remove("outputName");
+
+            if (inputTypes != null && inputTypes.get(name) != null && !inputTypes.get(name).isBlank()) {
+                cfg.put("type", inputTypes.get(name));
+            }
+
+            Object value = inputs == null ? null : inputs.get(name);
+            if (value == null) {
+                cfg.putNull("value");
+            } else {
+                cfg.set("value", objectMapper.valueToTree(value));
+            }
+        }
+        return copy;
+    }
+
+    private String text(JsonNode node, String field, String defaultValue) {
+        JsonNode value = node.get(field);
+        return value == null || value.isNull() ? defaultValue : value.asText();
+    }
+
+    private WorkflowNodeRunResult toNodeRunResult(NodeOutput output) {
+        WorkflowNodeRunResult result = new WorkflowNodeRunResult();
+        if (output == null) {
+            return result;
+        }
+        result.setNodeId(output.getNodeId());
+        result.setNodeTitle(output.getNodeName());
+        result.setNodeType(output.getNodeType() == null ? null : output.getNodeType().name());
+        result.setStatus(toNodeStatus(output.getStatus()));
+        result.setOutput(output.getDefaultOutput());
+        result.setOutputs(output.getAllOutput());
+        result.setInputs(toMap(output.getExecutionContext().get("inputs")));
+        result.setExecutionContext(output.getExecutionContext());
+        result.setVerifyErrors(output.getVerifyErrors());
+        result.setError(output.getErrorMessage());
+        result.setStartTime(toMillis(output.getStartTime()));
+        result.setEndTime(toMillis(output.getEndTime()));
+        result.setDuration(output.getExecutionDuration());
+        return result;
+    }
+
+    private String toNodeStatus(NodeOutput.ExecutionStatus status) {
+        if (status == NodeOutput.ExecutionStatus.SUCCESS) {
+            return "SUCCESS";
+        }
+        if (status == NodeOutput.ExecutionStatus.RUNNING) {
+            return "RUNNING";
+        }
+        return "FAIL";
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> toMap(Object value) {
+        if (value instanceof Map) {
+            return (Map<String, Object>) value;
+        }
+        return null;
     }
 
     private WorkflowRunResult doRun(Workflow workflow, WorkflowRunRequest request, UserDetail userDetail, boolean publishedOnly) {

@@ -6,13 +6,18 @@ import {
   EyeOutlined,
   FullscreenOutlined,
   FormOutlined,
+  PlayCircleOutlined,
 } from '@ant-design/icons-vue'
 
-defineProps<{
+withDefaults(defineProps<{
   open: boolean
   x: number
   y: number
-}>()
+  /** 当前节点是否支持「运行此节点」独立运行 */
+  canRun?: boolean
+}>(), {
+  canRun: false,
+})
 
 defineEmits<{
   edit: []
@@ -21,6 +26,7 @@ defineEmits<{
   delete: []
   fit: []
   logs: []
+  run: []
   close: []
 }>()
 </script>
@@ -42,6 +48,10 @@ defineEmits<{
     <button type="button" @click="$emit('fit')">
       <FullscreenOutlined />
       <span>适配到此节点</span>
+    </button>
+    <button v-if="canRun" type="button" @click="$emit('run')">
+      <PlayCircleOutlined />
+      <span>运行此节点</span>
     </button>
     <button type="button" @click="$emit('logs')">
       <EyeOutlined />

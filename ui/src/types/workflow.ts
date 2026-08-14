@@ -145,6 +145,29 @@ export interface WorkflowRunResult {
   nodeExecutions: WorkflowNodeExecution[]
 }
 
+export interface WorkflowNodeRunRequest {
+  node: Record<string, unknown>
+  inputs?: Record<string, unknown>
+  inputTypes?: Record<string, string>
+  variables?: Record<string, unknown>
+}
+
+export interface WorkflowNodeRunResult {
+  nodeId: string
+  nodeTitle?: string
+  nodeType?: string
+  status: string
+  output?: unknown
+  outputs?: Record<string, unknown>
+  inputs?: Record<string, unknown>
+  executionContext?: Record<string, unknown>
+  verifyErrors?: Record<string, unknown>
+  error?: string
+  startTime?: number
+  endTime?: number
+  duration?: number
+}
+
 export interface WorkflowValidationResult {
   valid: boolean
   errors: Array<{ nodeId?: string; field?: string; message?: string } | string>

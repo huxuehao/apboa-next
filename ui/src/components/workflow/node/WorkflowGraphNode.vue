@@ -4,6 +4,7 @@ import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import type { FlowNodeData, WorkflowResourceMaps } from '@/types/workflow'
 import IconFont from '@/components/common/IconFont.vue'
 import { getNodeIconName } from '@/config/workflow/common'
+import { isNodeRunnable } from '@/config/workflow/nodeRun'
 import { hasOutgoingEdge } from '@/utils/workflow/edgeRules'
 
 const props = defineProps<{
@@ -15,6 +16,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'add-node': [payload: { x: number; y: number; sourceHandle: string }]
+  run: []
 }>()
 
 const hovered = ref(false)
@@ -49,6 +51,12 @@ function clearAddModifier() {
 
 const color = computed(() => props.data.schema?.color || '#1677ff')
 const showSummary = computed(() => props.data.schema?.showSummary ?? true)
+const runnable = computed(() => isNodeRunnable(props.data.type))
+
+function onRunClick() {
+  if (props.locked || !runnable.value) return
+  emit('run')
+}
 // 缓存 defineAsyncComponent 结果，相同组件名始终返回同一引用，防止 Vue 因引用变化而销毁重建组件
 const asyncSummaryCache = new Map<string, ReturnType<typeof defineAsyncComponent>>()
 
@@ -114,7 +122,22 @@ onBeforeUnmount(() => {
         <IconFont :name="getNodeIconName(data.type)" :size="17" color="#ffffff" />
       </div>
       <div class="node-title" :title="data.label">{{ data.label }}</div>
-      <span class="node-state" />
+      <div class="node-actions">
+        <ATooltip title="运行此节点" v-if="runnable && hovered && !locked">
+          <button
+            type="button"
+            class="node-run-button"
+            @pointerdown.stop
+            @pointerup.stop
+            @mousedown.stop
+            @mouseup.stop
+            @click.stop="onRunClick"
+          >
+            <span class="play-triangle" />
+          </button>
+        </ATooltip>
+        <span v-else class="node-state" />
+      </div>
     </div>
     <div v-if="showSummary" class="node-bottom">
       <Suspense>
@@ -219,7 +242,7 @@ onBeforeUnmount(() => {
 }
 .node-top {
   display: grid;
-  grid-template-columns: 32px minmax(0, 1fr) 10px;
+  grid-template-columns: 32px minmax(0, 1fr) 20px;
   gap: 5px;
   align-items: center;
   padding: 12px 12px 10px;
@@ -246,12 +269,42 @@ onBeforeUnmount(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.node-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+}
+.node-run-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.play-triangle {
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 5.5px 0 5.5px 8px;
+  border-color: transparent transparent transparent #9da0ad;
+  /* 关键：给边框添加圆角，使三角的边有弧度 */
+  border-radius: 20%;
+  margin-left: 1px;
+  transition: border-color 0.15s;
+}
+.node-run-button:hover .play-triangle {
+  border-color: transparent transparent transparent #6a6e7b;
+}
 .node-state {
   width: 9px;
   height: 9px;
-  border: 1px solid #d9d9d9;
   border-radius: 50%;
-  background: #f5f5f5;
 }
 .node-bottom {
   padding: 0 10px 12px 12px;

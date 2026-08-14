@@ -47,11 +47,13 @@ public abstract class EnhancedNode implements Node {
             // 解析节点输入
             Map<String, Object> inputs = resolveInputs(context);
             output.addExecutionContext("inputs", inputs);
-            // 校验参数
-            VerifyResult verifyResult = verifyConfig(inputs);
-            if (!verifyResult.isValid()) {
-                output.markUnverify(verifyResult);
-                return output;
+            // 校验参数（单节点独立运行时可跳过，让运行时错误自然暴露）
+            if (!context.isSkipVerify()) {
+                VerifyResult verifyResult = verifyConfig(inputs);
+                if (!verifyResult.isValid()) {
+                    output.markUnverify(verifyResult);
+                    return output;
+                }
             }
             // 节点执行逻辑
             NodeOutput executedOutput = doExecute(inputs, output, context);
