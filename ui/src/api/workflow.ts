@@ -5,6 +5,8 @@ import type {
   Workflow,
   WorkflowDetail,
   WorkflowNodeExecution,
+  WorkflowNodeRunRequest,
+  WorkflowNodeRunResult,
   WorkflowQuery,
   WorkflowResource,
   WorkflowRun,
@@ -71,6 +73,10 @@ export function workflowDebugRun(id: string, payload: WorkflowRunRequest) {
 
 export function workflowRun(id: string, payload: WorkflowRunRequest) {
   return request.post<ApiResponse<WorkflowRunResult>>(`/api/runtime/workflow/${id}/run`, payload)
+}
+
+export function workflowDebugNodeRun(payload: WorkflowNodeRunRequest) {
+  return request.post<ApiResponse<WorkflowNodeRunResult>>('/api/runtime/workflow/debug-node-run', payload)
 }
 
 export function workflowRunPage(query: WorkflowRunQuery) {

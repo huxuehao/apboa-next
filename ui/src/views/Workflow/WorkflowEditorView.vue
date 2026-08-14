@@ -11,6 +11,7 @@ import WorkflowTopLeft from '@/components/workflow/editor/WorkflowTopLeft.vue'
 import NodeLibraryPopover from '@/components/workflow/library/NodeLibraryPopover.vue'
 import WorkflowConfigPanel from '@/components/workflow/panels/WorkflowConfigPanel.vue'
 import WorkflowRunDock from '@/components/workflow/panels/WorkflowRunDock.vue'
+import WorkflowNodeRunPanel from '@/components/workflow/panels/WorkflowNodeRunPanel.vue'
 import WorkflowValidationPanel from '@/components/workflow/panels/WorkflowValidationPanel.vue'
 import WorkflowPublishModal from '@/components/workflow/version/WorkflowPublishModal.vue'
 import WorkflowVersionModal from '@/components/workflow/version/WorkflowVersionModal.vue'
@@ -23,6 +24,7 @@ import {
   cloneDefaultOutputs,
   getWorkflowNodeSchema,
 } from '@/config/workflow/nodeSchemas'
+import { isNodeRunnable } from '@/config/workflow/nodeRun'
 import { createDefaultWorkflowDefinition, ensureWorkflowDefinition } from '@/utils/workflow/defaultDefinition'
 import { validateOutputEdge } from '@/utils/workflow/edgeRules'
 import type {
@@ -31,6 +33,8 @@ import type {
   WorkflowFlowEdge,
   WorkflowFlowNode,
   WorkflowNodeDefinition,
+  WorkflowNodeRunRequest,
+  WorkflowNodeRunResult,
   WorkflowNodeSchema,
   WorkflowResourceMaps,
   WorkflowRunRequest,
@@ -68,6 +72,11 @@ const pendingSourceHandle = ref<string>('output')
 const pendingEdgeId = ref<string | null>(null)
 const runDockOpen = ref(false)
 const runDockWidth = ref(440)
+const nodeRunPanelOpen = ref(false)
+const nodeRunPanelWidth = ref(442)
+const nodeRunNodeId = ref<string | null>(null)
+const nodeRunLoading = ref(false)
+const nodeRunResult = ref<WorkflowNodeRunResult | null>(null)
 const versionModalOpen = ref(false)
 const validationPanelOpen = ref(false)
 const validationPanelWidth = ref(440)
@@ -110,12 +119,32 @@ provide('subWorkflowActive', subWorkflowActive)
 
 const workflowId = computed(() => String(route.params.id || ''))
 const selectedNode = computed(() => nodes.value.find((item) => item.id === selectedNodeId.value) || null)
-const activeSidePanelWidth = computed(() => {
-  if (validationPanelOpen.value) return validationPanelWidth.value
-  if (runDockOpen.value) return runDockWidth.value
-  return 0
+const nodeRunNode = computed(() => nodes.value.find((item) => item.id === nodeRunNodeId.value) || null)
+const contextNode = computed(() => nodes.value.find((item) => item.id === contextMenu.value.nodeId) || null)
+const canRunContextNode = computed(() => isNodeRunnable(contextNode.value?.data.type))
+
+// 右侧面板统一排布（从右到左）：校验、调试、节点运行，配置面板固定在最左
+const PANEL_EDGE = 16
+const PANEL_GAP = 12
+const sidePanels = computed(() => {
+  const panels: { key: string; width: number }[] = []
+  if (validationPanelOpen.value) panels.push({ key: 'validation', width: validationPanelWidth.value })
+  if (runDockOpen.value) panels.push({ key: 'runDock', width: runDockWidth.value })
+  if (nodeRunPanelOpen.value) panels.push({ key: 'nodeRun', width: nodeRunPanelWidth.value })
+  return panels
 })
-const configPanelRightOffset = computed(() => (activeSidePanelWidth.value ? activeSidePanelWidth.value + 28 : 16))
+function sidePanelRightOffset(key: string) {
+  let offset = PANEL_EDGE
+  for (const panel of sidePanels.value) {
+    if (panel.key === key) break
+    offset += panel.width + PANEL_GAP
+  }
+  return offset
+}
+const configPanelRightOffset = computed(() => {
+  const total = sidePanels.value.reduce((sum, p) => sum + p.width + PANEL_GAP, 0)
+  return sidePanels.value.length ? PANEL_EDGE + total : PANEL_EDGE
+})
 const canUndo = computed(() => history.value.length > 0)
 const canRedo = computed(() => future.value.length > 0)
 const nodeNames = computed(() =>
@@ -580,6 +609,7 @@ function deleteSelectedNodes(nodeIds: string[]) {
   nodes.value = nodes.value.filter((node) => !ids.has(node.id))
   edges.value = edges.value.filter((edge) => !ids.has(edge.source) && !ids.has(edge.target))
   if (selectedNodeId.value && ids.has(selectedNodeId.value)) selectedNodeId.value = null
+  if (nodeRunNodeId.value && ids.has(nodeRunNodeId.value)) closeNodeRunPanel()
   closeContextMenu()
 }
 
@@ -915,6 +945,37 @@ function closeContextMenu() {
   contextMenu.value.open = false
 }
 
+function openNodeRunPanel(nodeId: string) {
+  const node = nodes.value.find((item) => item.id === nodeId)
+  if (!node || !isNodeRunnable(node.data.type)) {
+    message.warning('该节点不支持独立运行')
+    return
+  }
+  nodeRunNodeId.value = nodeId
+  nodeRunResult.value = null
+  nodeRunPanelOpen.value = true
+  closeContextMenu()
+}
+
+function closeNodeRunPanel() {
+  nodeRunPanelOpen.value = false
+  nodeRunNodeId.value = null
+  nodeRunResult.value = null
+}
+
+async function runNode(payload: WorkflowNodeRunRequest) {
+  nodeRunLoading.value = true
+  try {
+    const response = await workflowApi.workflowDebugNodeRun(payload)
+    nodeRunResult.value = response.data.data
+  } catch (error) {
+    console.error('节点运行失败', error)
+    message.error(error instanceof Error ? error.message : '节点运行失败')
+  } finally {
+    nodeRunLoading.value = false
+  }
+}
+
 function clearPendingAdd() {
   pendingSourceNodeId.value = null
   pendingSourceHandle.value = 'output'
@@ -1049,6 +1110,7 @@ function clearAllPanels() {
   selectedNodeId.value = null
   validationPanelOpen.value = false
   runDockOpen.value = false
+  closeNodeRunPanel()
   closeLibrary()
   closeContextMenu()
   publishModalOpen.value = false
@@ -1209,6 +1271,7 @@ function computeParentUpstreamNodes(startNodeId: string): WorkflowFlowNode[] {
       @show-library-from-edge="openLibraryFromEdge"
       @delete-nodes="deleteSelectedNodes"
       @delete-edges="deleteSelectedEdges"
+      @run-node="openNodeRunPanel"
     />
 
     <WorkflowTopLeft
@@ -1291,6 +1354,7 @@ function computeParentUpstreamNodes(startNodeId: string): WorkflowFlowNode[] {
       :loading="validating"
       :result="validationResult"
       :node-names="nodeNames"
+      :right-offset="sidePanelRightOffset('validation')"
       @close="validationPanelOpen = false"
       @focus-node="focusNode"
     />
@@ -1302,9 +1366,21 @@ function computeParentUpstreamNodes(startNodeId: string): WorkflowFlowNode[] {
       :result="store.lastRun"
       :nodes="nodes"
       :loading="running"
+      :right-offset="sidePanelRightOffset('runDock')"
       @run="debugRun"
       @close="runDockOpen = false"
       @focus-node="focusNode"
+    />
+
+    <WorkflowNodeRunPanel
+      v-model:width="nodeRunPanelWidth"
+      :open="nodeRunPanelOpen"
+      :node="nodeRunNode"
+      :loading="nodeRunLoading"
+      :result="nodeRunResult"
+      :right-offset="sidePanelRightOffset('nodeRun')"
+      @run="runNode"
+      @close="closeNodeRunPanel"
     />
 
     <WorkflowVersionModal
@@ -1327,11 +1403,13 @@ function computeParentUpstreamNodes(startNodeId: string): WorkflowFlowNode[] {
       :open="contextMenu.open"
       :x="contextMenu.x"
       :y="contextMenu.y"
+      :can-run="canRunContextNode"
       @edit="selectedNodeId = contextMenu.nodeId; closeContextMenu()"
       @rename="selectedNodeId = contextMenu.nodeId; closeContextMenu()"
       @copy="copyNode(contextMenu.nodeId)"
       @delete="deleteNode(contextMenu.nodeId)"
       @fit="focusNode(contextMenu.nodeId); closeContextMenu()"
+      @run="openNodeRunPanel(contextMenu.nodeId)"
       @logs="openDebugPanel(); closeContextMenu()"
     />
 

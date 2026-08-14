@@ -221,12 +221,38 @@ public class DifyIKnowledge implements IKnowledge {
         }
 
         String modeStr = retrievalConfig.get(RETRIEVAL_MODE).asText();
-        try {
-            return RetrievalMode.valueOf(modeStr.toUpperCase());
-        } catch (IllegalArgumentException e) {
-            log.warn("Invalid retrieval mode: {}, using default: {}", modeStr, DEFAULT_RETRIEVAL_MODE);
+        if (modeStr == null || modeStr.isBlank()) {
             return DEFAULT_RETRIEVAL_MODE;
         }
+
+        String normalized = modeStr.trim().toUpperCase();
+
+        // 兼容旧前端使用的别名（VECTOR / FULL_TEXT）
+        switch (normalized) {
+            case "VECTOR":
+                return RetrievalMode.SEMANTIC_SEARCH;
+            case "FULL_TEXT":
+                return RetrievalMode.FULL_TEXT_SEARCH;
+            default:
+                break;
+        }
+
+        // 按枚举常量名解析（HYBRID_SEARCH / SEMANTIC_SEARCH / KEYWORD_SEARCH / FULL_TEXT_SEARCH）
+        try {
+            return RetrievalMode.valueOf(normalized);
+        } catch (IllegalArgumentException ignored) {
+            // 继续尝试 Dify API 值
+        }
+
+        // 兼容 Dify API 值（hybrid_search / semantic_search / keyword_search / full_text_search）
+        try {
+            return RetrievalMode.fromValue(modeStr.trim());
+        } catch (IllegalArgumentException ignored) {
+            // 无法解析则回退默认值
+        }
+
+        log.warn("Invalid retrieval mode: {}, using default: {}", modeStr, DEFAULT_RETRIEVAL_MODE);
+        return DEFAULT_RETRIEVAL_MODE;
     }
 
     private void applyRerankingConfig(DifyRAGConfig.Builder builder, JsonNode rerankingConfig) {

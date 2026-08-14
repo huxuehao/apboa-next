@@ -4,7 +4,9 @@ import com.baomidou.mybatisplus.extension.service.IService;
 import com.hxh.apboa.common.UserDetail;
 import com.hxh.apboa.common.entity.WorkflowNodeExecution;
 import com.hxh.apboa.common.entity.WorkflowRun;
+import com.hxh.apboa.workflowbiz.dto.WorkflowNodeRunRequest;
 import com.hxh.apboa.workflowbiz.dto.WorkflowRunRequest;
+import com.hxh.apboa.workflowbiz.vo.WorkflowNodeRunResult;
 import com.hxh.apboa.workflowbiz.vo.WorkflowRunResult;
 
 import java.util.List;
@@ -15,4 +17,9 @@ public interface WorkflowRunService extends IService<WorkflowRun> {
     WorkflowRunResult run(Long workflowId, WorkflowRunRequest request, UserDetail userDetail);
 
     List<WorkflowNodeExecution> nodeExecutions(Long runId);
+
+    /**
+     * 单节点独立运行（不持久化任何日志）。
+     */
+    WorkflowNodeRunResult debugNodeRun(WorkflowNodeRunRequest request, UserDetail userDetail);
 }

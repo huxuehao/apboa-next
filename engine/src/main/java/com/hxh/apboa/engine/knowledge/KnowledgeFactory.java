@@ -24,8 +24,17 @@ public class KnowledgeFactory {
     private final KnowledgeBaseConfigService knowledgeBaseConfigService;
 
     public KnowledgeWrapper getKnowledge(AgentDefinition definition) {
-
         KnowledgeBaseConfig knowledgeBaseConfig = knowledgeBaseConfigService.getByAgentId(definition.getId());
+        return getKnowledge(knowledgeBaseConfig);
+    }
+
+    /**
+     * 根据知识库配置构建知识库实体（Knowledge）。
+     *
+     * @param knowledgeBaseConfig 知识库配置
+     * @return 知识库包装对象，配置为空/未启用/类型未注册时返回 null
+     */
+    public KnowledgeWrapper getKnowledge(KnowledgeBaseConfig knowledgeBaseConfig) {
         if (knowledgeBaseConfig == null) {
             return null;
         }

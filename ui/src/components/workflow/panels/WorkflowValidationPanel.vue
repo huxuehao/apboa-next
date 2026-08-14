@@ -10,6 +10,7 @@ const props = defineProps<{
   loading: boolean
   result: WorkflowValidationResult | null
   nodeNames: Record<string, string>
+  rightOffset: number
 }>()
 
 const width = defineModel<number>('width', { default: 442 })
@@ -65,7 +66,7 @@ watch(
 </script>
 
 <template>
-  <aside v-if="open" class="validation-panel" :class="{ dragging }" :style="{ width: `${width}px` }">
+  <aside v-if="open" class="validation-panel" :class="{ dragging }" :style="{ width: `${width}px`, right: `${rightOffset}px` }">
     <div class="resize-handle" @mousedown.prevent="beginResize" />
 
     <header class="validation-header">

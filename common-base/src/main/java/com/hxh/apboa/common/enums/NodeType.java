@@ -162,5 +162,9 @@ public enum NodeType {
     /**
      * 意图识别节点
      */
-    INTENT_RECOGNITION
+    INTENT_RECOGNITION,
+    /**
+     * 知识库检索节点
+     */
+    KNOWLEDGE_RETRIEVE
 }

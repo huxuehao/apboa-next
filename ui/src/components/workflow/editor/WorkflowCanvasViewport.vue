@@ -28,6 +28,7 @@ const emit = defineEmits<{
   showLibraryFromEdge: [payload: { edgeId: string; x: number; y: number }]
   deleteNodes: [nodeIds: string[]]
   deleteEdges: [edgeIds: string[]]
+  runNode: [nodeId: string]
 }>()
 
 const flow = useVueFlow()
@@ -370,6 +371,7 @@ defineExpose({ addAtCenter, fitAll, zoomInCanvas, zoomOutCanvas, resetZoom, fitN
           v-bind="slotProps"
           :locked="readonly"
           @add-node="(pos: any) => onNodeAddClick(String(slotProps.id), pos)"
+          @run="emit('runNode', String(slotProps.id))"
         />
       </template>
       <template #edge-workflow="slotProps">

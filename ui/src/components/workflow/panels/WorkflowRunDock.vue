@@ -12,6 +12,7 @@ const props = defineProps<{
   result: WorkflowRunResult | null
   nodes: WorkflowFlowNode[]
   loading?: boolean
+  rightOffset: number
 }>()
 
 const inputText = defineModel<string>('inputText', { default: '{\n  "params": [],\n  "variables": {}\n}' })
@@ -301,7 +302,7 @@ function beginResize(event: MouseEvent) {
 </script>
 
 <template>
-  <section v-if="open" class="run-dock" :class="{ dragging }" :style="{ width: `${width}px` }">
+  <section v-if="open" class="run-dock" :class="{ dragging }" :style="{ width: `${width}px`, right: `${rightOffset}px` }">
     <div class="resize-handle" @mousedown.prevent="beginResize" />
 
     <header class="dock-header">

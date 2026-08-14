@@ -39,6 +39,10 @@ public class NodeContext {
      * 节点执行轨迹，严格按照本次运行的节点执行顺序记录。
      */
     private final List<NodeOutput> executionTrace;
+    /**
+     * 是否跳过节点配置校验（单节点独立运行时使用）。
+     */
+    private boolean skipVerify = false;
 
     public NodeContext(String workflowInstanceId) {
         this.workflowInstanceId = workflowInstanceId;

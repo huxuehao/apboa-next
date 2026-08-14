@@ -6,7 +6,6 @@
 <script setup lang="ts">
 import { h, computed } from 'vue'
 import { EllipsisOutlined, ProfileOutlined } from '@ant-design/icons-vue'
-import knowledgeAvatar from '@/assets/avatar/knowledgebase.png'
 import type { KnowledgeBaseConfigVO } from '@/types'
 import {
   createViewItem,
@@ -16,6 +15,10 @@ import {
   createDivider,
 } from '@/composables/useCardMenuItems'
 import { useAccountStore } from '@/stores'
+import knowledgeAvatar from '@/assets/avatar/knowledgebase.png'
+import dify from '@/assets/brand/dify-color.png'
+import ragflow from '@/assets/brand/ragflow.png'
+import bailian from '@/assets/brand/bailian-color.png'
 
 const accountStore = useAccountStore()
 
@@ -63,6 +66,15 @@ const kbTypeText = computed(() => {
     RAGFLOW: 'RagFlow',
   }
   return typeMap[props.data.kbType] || props.data.kbType
+})
+const kbLog = computed(() => {
+  const typeMap: Record<string, any> = {
+    LOCAL: knowledgeAvatar,
+    BAILIAN: bailian,
+    DIFY: dify,
+    RAGFLOW: ragflow,
+  }
+  return typeMap[props.data.kbType]
 })
 
 /**
@@ -132,7 +144,7 @@ function handleTitleClick() {
 <template>
   <div class="knowledge-card">
     <div class="card-header flex items-center gap-sm">
-      <div class="card-avatar flex-center" :class="{ disabled: !data.enabled }"><img :src="knowledgeAvatar" alt="knowledge" /></div>
+      <div class="card-avatar flex-center" :class="{ disabled: !data.enabled }"><img :src="kbLog" alt="knowledge" /></div>
       <div class="card-name flex-1 truncate" :title="data.name" @click="handleTitleClick">{{ data.name }}</div>
       <ADropdown :trigger="['hover']">
         <AButton type="text" size="small" v-permission="['TENANT_EDITOR','TENANT_ADMIN','TENANT_OWNER']">

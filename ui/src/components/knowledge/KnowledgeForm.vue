@@ -338,6 +338,7 @@ function loadConfigData() {
     }
     if (retrievalConfig) {
       Object.assign(difyRetrieval, retrievalConfig)
+      normalizeLegacyDifyMode()
     }
     if (rerankingConfig) {
       difyReranking.enableRerank = !!rerankingConfig.enableRerank
@@ -382,6 +383,17 @@ function loadConfigData() {
     if (retrievalConfig) {
       Object.assign(localRetrieval, retrievalConfig)
     }
+  }
+}
+
+/**
+ * 兼容旧版本存储的 Dify 检索模式别名
+ */
+function normalizeLegacyDifyMode() {
+  if (difyRetrieval.retrievalMode === 'VECTOR') {
+    difyRetrieval.retrievalMode = 'SEMANTIC_SEARCH'
+  } else if (difyRetrieval.retrievalMode === 'FULL_TEXT') {
+    difyRetrieval.retrievalMode = 'FULL_TEXT_SEARCH'
   }
 }
 
@@ -811,8 +823,9 @@ function removeMetadataCondition(index: number) {
             <AFormItem label="检索模式（Retrieval Mode）">
               <ASelect v-model:value="difyRetrieval.retrievalMode">
                 <ASelectOption value="HYBRID_SEARCH">混合检索</ASelectOption>
-                <ASelectOption value="VECTOR">向量检索</ASelectOption>
-                <ASelectOption value="FULL_TEXT">全文检索</ASelectOption>
+                <ASelectOption value="SEMANTIC_SEARCH">向量检索</ASelectOption>
+                <ASelectOption value="KEYWORD_SEARCH">关键词检索</ASelectOption>
+                <ASelectOption value="FULL_TEXT_SEARCH">全文检索</ASelectOption>
               </ASelect>
             </AFormItem>
             <AFormItem label="返回Top K（Top K）">
