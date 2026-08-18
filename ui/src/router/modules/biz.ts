@@ -153,6 +153,24 @@ const bizRoutes: AppRouteRecordRaw[] = [
           hidden: false
         },
       },
+      {
+        path: RoutePaths.KNOWLEDGE_NEW,
+        name: RouteNames.KNOWLEDGE_NEW,
+        component: () => import('@/views/Knowledge/KnowledgeEditor.vue'),
+        meta: {
+          title: '新增知识库',
+          hidden: true
+        },
+      },
+      {
+        path: RoutePaths.KNOWLEDGE_EDIT,
+        name: RouteNames.KNOWLEDGE_EDIT,
+        component: () => import('@/views/Knowledge/KnowledgeEditor.vue'),
+        meta: {
+          title: '编辑知识库',
+          hidden: true
+        },
+      },
       // 工作台
       {
         path: RoutePaths.DASHBOARD,

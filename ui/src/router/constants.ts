@@ -41,6 +41,8 @@ export const RouteNames = {
 
   // 知识库管理
   KNOWLEDGE: 'Knowledge',
+  KNOWLEDGE_NEW: 'KnowledgeNew',
+  KNOWLEDGE_EDIT: 'KnowledgeEdit',
 
   // 工具管理
   TOOL: 'Tool',
@@ -127,9 +129,8 @@ export const RoutePaths = {
 
   // 知识库管理
   KNOWLEDGE: 'knowledge',
-
-  // 知识库文档管理
-  KNOWLEDGE_DOCUMENTS: '/knowledge/:id/documents',
+  KNOWLEDGE_NEW: '/knowledge/new',
+  KNOWLEDGE_EDIT: '/knowledge/:id/edit',
 
   // 工具管理
   TOOL: 'tool',

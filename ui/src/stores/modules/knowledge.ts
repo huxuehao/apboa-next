@@ -19,6 +19,8 @@ export const useKnowledgeStore = defineStore('knowledge', () => {
   const hasMore = ref<boolean>(true)
   const currentPage = ref<number>(1)
   const pageSize = ref<number>(50)
+  /** 列表页挂载时是否需要重新拉取（编辑/新增路由保存成功后置位） */
+  const needsRefresh = ref<boolean>(false)
 
   /**
    * 加载分页数据
@@ -141,12 +143,29 @@ export const useKnowledgeStore = defineStore('knowledge', () => {
     message.success('操作成功')
   }
 
+  /**
+   * 标记列表需要刷新（编辑/新增保存成功后调用）
+   */
+  function markNeedsRefresh() {
+    needsRefresh.value = true
+  }
+
+  /**
+   * 消费刷新标记：返回是否被标记，同时清除标记
+   */
+  function consumeNeedsRefresh(): boolean {
+    const flag = needsRefresh.value
+    needsRefresh.value = false
+    return flag
+  }
+
   return {
     list,
     selectedKbType,
     keyword,
     loading,
     hasMore,
+    needsRefresh,
     fetchPage,
     loadMore,
     setKbType,
@@ -155,6 +174,8 @@ export const useKnowledgeStore = defineStore('knowledge', () => {
     resetPagination,
     deleteConfig,
     checkUsedWithAgent,
-    toggleEnabled
+    toggleEnabled,
+    markNeedsRefresh,
+    consumeNeedsRefresh
   }
 })

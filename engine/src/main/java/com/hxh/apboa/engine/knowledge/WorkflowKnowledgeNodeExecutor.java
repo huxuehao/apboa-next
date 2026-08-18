@@ -53,7 +53,7 @@ public class WorkflowKnowledgeNodeExecutor implements KnowledgeNodeExecutor {
                 knowledgeBaseConfig.getRetrievalConfig(), retrievalConfigOverride);
         knowledgeBaseConfig.setRetrievalConfig(mergedRetrievalConfig);
 
-        KnowledgeWrapper knowledgeWrapper = knowledgeFactory.getKnowledge(knowledgeBaseConfig);
+        KnowledgeWrapper knowledgeWrapper = knowledgeFactory.getKnowledgeWrapper(knowledgeBaseConfig);
         if (knowledgeWrapper == null || knowledgeWrapper.getKnowledge() == null) {
             throw new RuntimeException("知识库类型未注册或构建失败，ID: " + knowledgeBaseConfigId);
         }
