@@ -451,7 +451,7 @@ CREATE TABLE `model_config` (
 DROP TABLE IF EXISTS `model_provider`;
 CREATE TABLE `model_provider` (
   `id` bigint NOT NULL,
-  `type` varchar(50) NOT NULL COMMENT '提供商类型: DashScope, OpenAI, Anthropic, Gemini, Ollama',
+  `type` varchar(50) NOT NULL COMMENT '提供商类型: DashScope, OpenAI, Anthropic, Gemini, Ollama, OrcaRouter',
   `name` varchar(100) NOT NULL COMMENT '提供商名称',
   `description` varchar(500) DEFAULT NULL COMMENT '提供商描述',
   `base_url` varchar(500) DEFAULT NULL COMMENT '基础URL',

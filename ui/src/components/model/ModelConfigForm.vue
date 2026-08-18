@@ -233,7 +233,8 @@ function getProviderTypeLabel(type: string): string {
     [ModelProviderType.OPEN_AI]: 'OpenAI',
     [ModelProviderType.ANTHROPIC]: 'Anthropic',
     [ModelProviderType.GEMINI]: 'Gemini',
-    [ModelProviderType.OLLAMA]: 'Ollama'
+    [ModelProviderType.OLLAMA]: 'Ollama',
+    [ModelProviderType.ORCA_ROUTER]: 'OrcaRouter'
   }
   return map[type] || type
 }

@@ -15,7 +15,8 @@ public enum ModelProviderType {
     OPEN_AI("OpenAI"),
     ANTHROPIC("Anthropic"),
     GEMINI("Gemini"),
-    OLLAMA("Ollama");
+    OLLAMA("Ollama"),
+    ORCA_ROUTER("OrcaRouter");
 
     private final String description;
 }

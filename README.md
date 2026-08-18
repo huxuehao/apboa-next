@@ -139,7 +139,7 @@ HTTP / SSE / STDIO 三协议 MCP 客户端。LazyMcpAgentTool 实现懒加载—
 
 ### 🤖 多模型适配器
 
-统一模型工厂适配 OpenAI · DashScope · Anthropic · Gemini · Ollama 五大供应商。Agent 级参数覆盖（temperature / topP / topK / seed），无需改代码切换供应商。
+统一模型工厂适配 OpenAI · DashScope · Anthropic · Gemini · Ollama · OrcaRouter 六大供应商。Agent 级参数覆盖（temperature / topP / topK / seed），无需改代码切换供应商。
 
 ### 📚 知识库与 RAG
 
@@ -303,7 +303,7 @@ PgVector / Milvus / Elasticsearch / Qdrant / Weaviate——修改 `VECTOR_STORE_
 ## 能力清单
 
 - **ReAct 智能体** — Reasoning + Acting 循环，可配置最大迭代次数、计划规划、用户确认
-- **多模型支持** — OpenAI / DashScope / Anthropic / Gemini / Ollama，Agent 级参数覆盖
+- **多模型支持** — OpenAI / DashScope / Anthropic / Gemini / Ollama / OrcaRouter，Agent 级参数覆盖
 - **MCP 集成** — HTTP / SSE / STDIO 三协议，懒加载 + 运行时降级 + 工具治理
 - **工具系统** — 内置工具 + Groovy 动态工具 + Agent-as-Tool + 工具确认机制
 - **技能包** — VEP / APIP 内置协议技能 + 用户自定义技能（26 种文件类型）

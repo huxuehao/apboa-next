@@ -64,7 +64,8 @@ export enum ModelProviderType {
   OPEN_AI = 'OPEN_AI',
   ANTHROPIC = 'ANTHROPIC',
   GEMINI = 'GEMINI',
-  OLLAMA = 'OLLAMA'
+  OLLAMA = 'OLLAMA',
+  ORCA_ROUTER = 'ORCA_ROUTER'
 }
 
 /**
