@@ -227,7 +227,7 @@ details > summary::before {
 
 /* 滚动条样式 */
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 9px; /* 整体宽度增加，为间隙留空间 */
   height: 8px;
 }
 
@@ -238,8 +238,10 @@ details > summary::before {
 
 ::-webkit-scrollbar-thumb {
   background-color: var(--color-border-base);
-  border-radius: var(--border-radius-base);
+  /*border-radius: var(--border-radius-base);*/
   transition: background-color var(--transition-fast);
+  border-left: 4px solid transparent;
+  background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {

@@ -5,30 +5,23 @@
  */
 <script setup lang="ts">
 /* eslint-disable vue/multi-word-component-names */
-import { ref, h, computed, watch } from 'vue'
+import { ref, h, computed, watch, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { Modal } from 'ant-design-vue'
 import {DatabaseOutlined, SearchOutlined} from '@ant-design/icons-vue'
 import { useKnowledgeStore } from '@/stores'
 import { storeToRefs } from 'pinia'
 import * as knowledgeApi from '@/api/knowledge'
-import type { KnowledgeBaseConfigVO, KbType } from '@/types'
+import type { KbType } from '@/types'
 import KnowledgeCard from '@/components/knowledge/KnowledgeCard.vue'
 import CreateCard from '@/components/knowledge/CreateCard.vue'
-import KnowledgeForm from '@/components/knowledge/KnowledgeForm.vue'
-import RagDocManagerPage from '@/components/rag/RagDocManagerPage.vue'
 import {ApboaModalApi} from "@/components/common/ApboaModalApi.ts";
 import ApboaInfiniteLoading from '@/components/common/ApboaInfiniteLoading.vue'
 
+const router = useRouter()
 const store = useKnowledgeStore()
 const { list, selectedKbType, keyword, loading, hasMore } = storeToRefs(store)
 
-const formVisible = ref<boolean>(false)
-const currentData = ref<KnowledgeBaseConfigVO | undefined>(undefined)
-const initialKbType = ref<KbType | undefined>(undefined)
-/** 文档管理模态窗 */
-const docManagerVisible = ref<boolean>(false)
-const docManagerKbId = ref<string>('')
-const docManagerKbName = ref<string>('')
 /** 用于强制重建 InfiniteLoading 组件的 key */
 const infiniteLoadingKey = ref(0)
 /** 是否首次加载 */
@@ -61,12 +54,10 @@ const kbTypeMap: Record<string, string> = {
 }
 
 /**
- * 处理新增
+ * 处理新增（新路由打开）
  */
 function handleCreate(kbType: KbType) {
-  currentData.value = undefined
-  initialKbType.value = kbType
-  formVisible.value = true
+  router.push({ path: '/knowledge/new', query: { kbType } })
 }
 
 /**
@@ -196,13 +187,10 @@ async function handleView(id: string) {
 }
 
 /**
- * 处理编辑
+ * 处理编辑（新路由打开，本地知识库默认进入“文档管理”）
  */
-async function handleEdit(id: string) {
-  const response = await knowledgeApi.detail(id)
-  currentData.value = response.data.data
-  initialKbType.value = undefined
-  formVisible.value = true
+function handleEdit(id: string) {
+  router.push(`/knowledge/${id}/edit`)
 }
 
 /**
@@ -244,20 +232,10 @@ async function handleDelete(id: string) {
 }
 
 /**
- * 处理表单提交成功
- */
-function handleFormSuccess() {
-  resetListAndRebuild()
-}
-
-/**
- * 处理文档管理
+ * 处理文档管理（与编辑合并，打开同一编辑路由）
  */
 function handleManageDocuments(id: string) {
-  const item = list.value.find(i => i.id === id)
-  docManagerKbId.value = id
-  docManagerKbName.value = item?.name || ''
-  docManagerVisible.value = true
+  router.push(`/knowledge/${id}/edit`)
 }
 
 /**
@@ -347,6 +325,15 @@ watch([selectedKbType, keyword], () => {
   isFirstLoad.value = true;
   infiniteLoadingKey.value++;
 });
+
+/**
+ * 从编辑/新增路由返回时（保存成功置位了刷新标记），重新拉取列表
+ */
+onMounted(() => {
+  if (store.consumeNeedsRefresh()) {
+    resetListAndRebuild()
+  }
+});
 </script>
 
 <template>
@@ -403,26 +390,6 @@ watch([selectedKbType, keyword], () => {
         @infinite="handleInfiniteLoading"
       />
     </section>
-
-    <KnowledgeForm
-      v-model:visible="formVisible"
-      :data="currentData"
-      :initial-kb-type="initialKbType"
-      @success="handleFormSuccess"
-    />
-
-    <ApboaModal
-      v-model:open="docManagerVisible"
-      default-width="100%"
-      destroyOnClose
-      :footer="null"
-    >
-      <RagDocManagerPage
-        v-if="docManagerVisible"
-        :doc-manager-kb-name="docManagerKbName"
-        :knowledge-base-config-id="docManagerKbId"
-      />
-    </ApboaModal>
   </div>
 </template>
 

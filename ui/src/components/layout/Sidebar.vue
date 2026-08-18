@@ -440,27 +440,28 @@ const roleName = computed(() => {
 
 /* 滚动条样式 */
 .sidebar-menu {
+  &::-webkit-scrollbar {
+    width: 0;
+  }
   &::-webkit-scrollbar-track {
     background-color: transparent;
   }
 
   &::-webkit-scrollbar-thumb {
-    background-color: rgba(0, 0, 0, 0.03);
+    background-color: transparent;
   }
 
   &:hover::-webkit-scrollbar {
-    width: 6px;
+    width: 8px;
     height: 8px;
   }
 
   &:hover::-webkit-scrollbar-track {
     background-color: var(--color-bg-base);
-    border-radius: var(--border-radius-base);
   }
 
   &:hover::-webkit-scrollbar-thumb {
     background-color: var(--color-border-base);
-    border-radius: var(--border-radius-base);
     transition: background-color var(--transition-fast);
   }
 

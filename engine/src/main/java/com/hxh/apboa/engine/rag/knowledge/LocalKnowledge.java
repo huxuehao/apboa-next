@@ -68,6 +68,7 @@ public class LocalKnowledge implements Knowledge {
                     payload.put("documentId", chunk.getDocumentId());
                     payload.put("chunkIndex", chunk.getChunkIndex());
                     payload.put("tokenCount", chunk.getTokenCount());
+                    payload.put("fileName", chunk.getFileName());
 
                     DocumentMetadata metadata = DocumentMetadata.builder()
                             .content(TextBlock.builder().text(chunk.getContent()).build())
@@ -77,6 +78,8 @@ public class LocalKnowledge implements Knowledge {
                             .build();
 
                     Document doc = new Document(metadata);
+                    // 统一检索通路中保留本地分块的相关度分值
+                    doc.setScore(chunk.getScore());
                     documents.add(doc);
                 }
 

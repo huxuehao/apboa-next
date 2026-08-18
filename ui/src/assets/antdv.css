@@ -24,9 +24,8 @@
 .ant-tree-select-selector {
   /* 基础样式 */
   background-color: var(--ant-filled-bg) !important;
-  border-color: var(--ant-filled-border) !important;
+  border-color: transparent !important;
   border-radius: var(--ant-filled-radius) !important;
-  border: none !important;
 
   /* 占位符颜色 */
   &::placeholder {
@@ -42,14 +41,16 @@
   /* 聚焦状态 */
   &:focus,
   &.ant-input-focused,
+  &.ant-input-number-focused,
   &.ant-input-affix-wrapper-focused,
   &.ant-picker-focused,
   .ant-select-focused & {
     background-color: var(--ant-filled-focus-bg) !important;
-    /*border-color: var(--ant-filled-focus-border) !important;*/
-    /*box-shadow: 0 0 0 2px var(--ant-filled-shadow) !important;*/
-    border-color: transparent !important;
-    box-shadow: 0 0 0 1px rgba(14,14,14,0.1) !important;
+    border-color: var(--ant-filled-border) !important;
+    box-shadow: 0 0 0 1px transparent !important;
+    .ant-input {
+      border: 1px solid transparent !important;
+    }
   }
 
   /* 禁用状态 */

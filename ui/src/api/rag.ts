@@ -1,5 +1,5 @@
 import request from '@/utils/request'
-import type { ApiResponse } from '@/types'
+import type { ApiResponse, KbType } from '@/types'
 import type { RagDocument, RagDocumentChunk } from '@/types'
 
 /**
@@ -40,10 +40,20 @@ export function listChunks(documentId: string) {
 }
 
 /**
- * RAG检索测试
+ * RAG检索测试（支持所有类型知识库）
+ * kbType 通过 query 参数传递，retrievalConfig 为本次测试的高级参数覆盖（仅测试生效，不落库）
  */
-export function search(params: { knowledgeBaseConfigId: string; query: string; limit?: number; scoreThreshold?: number }) {
-  return request.post<ApiResponse<Record<string, unknown>[]>>('/api/runtime/rag/document/search', params)
+export function search(params: {
+  knowledgeBaseConfigId: string
+  kbType: KbType
+  query: string
+  retrievalConfig?: Record<string, unknown>
+}) {
+  const { kbType, ...body } = params
+  return request.post<ApiResponse<Record<string, unknown>[]>>(
+    `/api/runtime/rag/document/search?kbType=${kbType}`,
+    body
+  )
 }
 
 /**

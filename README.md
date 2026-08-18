@@ -67,6 +67,9 @@ bash start-simple.sh
 | pnpm | 9+ | 前端包管理 |
 
 ### 1. 初始化中间件
+1111
+2222
+
 
 确保 MySQL 和 Redis 已启动。创建数据库并导入初始化脚本：
 

@@ -25,7 +25,7 @@ public class KnowledgeFactory {
 
     public KnowledgeWrapper getKnowledge(AgentDefinition definition) {
         KnowledgeBaseConfig knowledgeBaseConfig = knowledgeBaseConfigService.getByAgentId(definition.getId());
-        return getKnowledge(knowledgeBaseConfig);
+        return getKnowledgeWrapper(knowledgeBaseConfig);
     }
 
     /**
@@ -34,7 +34,7 @@ public class KnowledgeFactory {
      * @param knowledgeBaseConfig 知识库配置
      * @return 知识库包装对象，配置为空/未启用/类型未注册时返回 null
      */
-    public KnowledgeWrapper getKnowledge(KnowledgeBaseConfig knowledgeBaseConfig) {
+    public KnowledgeWrapper getKnowledgeWrapper(KnowledgeBaseConfig knowledgeBaseConfig) {
         if (knowledgeBaseConfig == null) {
             return null;
         }
@@ -54,6 +54,10 @@ public class KnowledgeFactory {
                 .knowledge(iKnowledge.build(knowledgeBaseConfig))
                 .retrievalConfig(knowledgeBaseConfig.getRetrievalConfig())
                 .build();
+    }
+
+    public static IKnowledge getKnowledge(KbType kbType) {
+        return KNOWLEDGE_MAP.get(kbType);
     }
 
     public static void register(IKnowledge knowledge) {

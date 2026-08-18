@@ -22,6 +22,8 @@ import ChunkDrawer from './ChunkDrawer.vue'
 import MediaIcon from '@/components/common/MediaIcon.vue'
 
 const props = defineProps<{
+  name?: string | null
+  description?: string | null
   knowledgeBaseConfigId: string
 }>()
 
@@ -265,19 +267,25 @@ function formatFileSize(bytes: number): string {
  */
 const columns = computed(() => [
   {
+    title: '#',
+    key: 'index',
+    width: 55,
+    align: 'center' as const,
+  },
+  {
     title: '文件名',
     key: 'fileName',
   },
   {
     title: '大小',
     key: 'fileSize',
-    width: 100,
+    width: 120,
     align: 'center' as const,
   },
   {
     title: '分块数',
     key: 'chunkCount',
-    width: 100,
+    width: 120,
     align: 'center' as const,
   },
   {
@@ -297,6 +305,10 @@ const columns = computed(() => [
 
 <template>
   <div class="doc-list-container">
+    <h3 class="intro-title">{{ name }}</h3>
+    <p class="intro-desc text-secondary">
+      {{ description }}
+    </p>
     <!-- 工具栏 -->
     <div class="doc-list-toolbar">
       <div class="doc-list-toolbar-left">
@@ -316,7 +328,7 @@ const columns = computed(() => [
       <div class="doc-list-toolbar-right">
         <AInput
           v-model:value="searchKeyword"
-          placeholder="搜索文件名..."
+          placeholder="搜索文件名"
           style="width: 200px"
           allow-clear
         >
@@ -348,12 +360,15 @@ const columns = computed(() => [
           :data-source="filteredDocuments"
           :columns="columns"
           :pagination="false"
-          :scroll="{ y: 'calc(100vh - 190px)' }"
+          :scroll="{ y: 'calc(100vh - 225px)' }"
           row-key="id"
           size="small"
         >
-          <template #bodyCell="{ column, record }">
-            <template v-if="column.key === 'fileName'">
+          <template #bodyCell="{ column, record, index }">
+            <template v-if="column.key === 'index'">
+              {{ index + 1 }}
+            </template>
+            <template v-else-if="column.key === 'fileName'">
               <div class="doc-table-file">
                 <MediaIcon :type="getFileExt((record.fileName as string) || '')" :size="20" />
                 <div class="doc-table-file-info">
@@ -463,12 +478,25 @@ const columns = computed(() => [
 <style scoped lang="scss">
 @use '@/styles/rag/_doc-manager.scss' as *;
 
-@use '@/styles/rag/_doc-manager.scss' as *;
+.intro-title {
+  font-size: var(--font-size-2xl);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: var(--spacing-sm);
+}
 
+.intro-desc {
+  font-size: var(--font-size-base);
+  line-height: 1.6;
+  max-width: 800px;
 
+  /* 新增以下三行 */
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
 
 .doc-table {
-
   :deep(table) {
     border-collapse: collapse;
   }

@@ -4,8 +4,8 @@
  * @author huxuehao
  */
 <script setup lang="ts">
-import { h, computed } from 'vue'
-import { EllipsisOutlined, ProfileOutlined } from '@ant-design/icons-vue'
+import { computed } from 'vue'
+import { EllipsisOutlined } from '@ant-design/icons-vue'
 import type { KnowledgeBaseConfigVO } from '@/types'
 import {
   createViewItem,
@@ -81,24 +81,17 @@ const kbLog = computed(() => {
  * 操作菜单项
  */
 const menuItems = computed(() => {
-  const items = [
-    createViewItem(),
-    createEditItem(),
-    createEnableItem(props.data.enabled),
-  ]
-
-  // 本地知识库显示文档管理入口
-  if (props.data.kbType === 'LOCAL') {
+  const items = [createViewItem()]
+  if (!accountStore.isReadOnly) {
     items.push(
+      createEditItem(),
+      createEnableItem(props.data.enabled),
       createDivider(),
-      {
-        key: 'manageDocuments',
-        label: '文档',
-        icon: () => h(ProfileOutlined)
-      })
+      createDeleteItem()
+    )
   }
 
-  items.push(createDivider(), createDeleteItem())
+
   return items
 })
 
@@ -119,9 +112,6 @@ function handleMenuClick({ key }: { key: string }) {
     case 'delete':
       emit('delete', props.data.id as string)
       break
-    case 'manageDocuments':
-      emit('manageDocuments', props.data.id as string)
-      break
   }
 }
 
@@ -132,11 +122,7 @@ function handleTitleClick() {
   if (accountStore.isReadOnly) {
     emit('view', String(props.data.id))
   } else {
-    if (props.data.kbType === 'LOCAL') {
-      emit('manageDocuments', props.data.id as string)
-    } else {
-      emit('edit', props.data.id as string)
-    }
+    emit('edit', props.data.id as string)
   }
 }
 </script>

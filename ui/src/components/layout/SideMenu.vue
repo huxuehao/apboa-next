@@ -252,6 +252,7 @@ const handleMenuClick = (item: MenuItem) => {
 
   &.active {
     color: #000000;
+    font-weight: 500;
     background-color: #E9EAEA;
 
     .menu-icon {

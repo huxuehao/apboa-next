@@ -1,7 +1,11 @@
 package com.hxh.apboa.runtime.endpoint;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.toolkit.IdWorker;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.hxh.apboa.common.config.auth.RoleNeed;
+import com.hxh.apboa.common.entity.Attach;
 import com.hxh.apboa.common.entity.KnowledgeBaseConfig;
 import com.hxh.apboa.common.entity.RagDocument;
 import com.hxh.apboa.common.entity.RagDocumentChunk;
@@ -9,16 +13,19 @@ import com.hxh.apboa.common.enums.KbType;
 import com.hxh.apboa.common.enums.RagDocumentStatus;
 import com.hxh.apboa.common.enums.TenantRole;
 import com.hxh.apboa.common.r.R;
+import com.hxh.apboa.common.util.JsonUtils;
 import com.hxh.apboa.common.util.TenantUtils;
-import com.hxh.apboa.common.vo.RagDocumentChunkVO;
+import com.hxh.apboa.engine.knowledge.IKnowledge;
+import com.hxh.apboa.engine.knowledge.KnowledgeFactory;
 import com.hxh.apboa.engine.rag.DocumentParser;
-import com.hxh.apboa.knowledge.service.KnowledgeBaseConfigService;
 import com.hxh.apboa.engine.rag.mapper.RagDocumentChunkMapper;
 import com.hxh.apboa.engine.rag.mapper.RagDocumentMapper;
 import com.hxh.apboa.engine.rag.service.LocalRagService;
+import com.hxh.apboa.knowledge.service.KnowledgeBaseConfigService;
 import com.hxh.apboa.resource.service.AttachService;
-import com.hxh.apboa.common.entity.Attach;
-import com.baomidou.mybatisplus.core.toolkit.IdWorker;
+import io.agentscope.core.rag.Knowledge;
+import io.agentscope.core.rag.model.Document;
+import io.agentscope.core.rag.model.RetrieveConfig;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -31,6 +38,7 @@ import java.io.OutputStream;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -171,37 +179,160 @@ public class RagEndPoint {
     }
 
     /**
-     * RAG检索测试
+     * RAG检索测试（支持所有类型知识库）
+     *
+     * <p>统一走 KnowledgeFactory → Knowledge.retrieve 通路（参考 WorkflowKnowledgeNodeExecutor），
+     * 测试面板的高级参数通过 retrievalConfig 覆盖项合并到知识库检索配置上，仅本次测试生效、不落库。
      */
     @PostMapping("/search")
-    public R<List<Map<String, Object>>> search(@RequestBody Map<String, Object> params) {
+    public R<List<Map<String, Object>>> search(@RequestBody Map<String, Object> params, @RequestParam("kbType") KbType kbType) {
+        if (params.get("knowledgeBaseConfigId") == null) {
+            return R.fail("知识库配置ID不能为空");
+        }
         Long kbConfigId = Long.valueOf(params.get("knowledgeBaseConfigId").toString());
         String query = (String) params.get("query");
-        int limit = params.containsKey("limit") ? Integer.parseInt(params.get("limit").toString()) : 5;
-        double scoreThreshold = params.containsKey("scoreThreshold")
-                ? Double.parseDouble(params.get("scoreThreshold").toString()) : 0.5;
+        if (query == null || query.isBlank()) {
+            return R.fail("检索关键词不能为空");
+        }
 
         KnowledgeBaseConfig kbConfig = knowledgeBaseConfigService.getById(kbConfigId);
         if (kbConfig == null) {
             return R.fail("知识库配置不存在");
         }
+        if (kbConfig.getKbType() != kbType) {
+            return R.fail("知识库类型与配置不一致");
+        }
 
-        List<RagDocumentChunkVO> chunks =
-                localRagService.retrieve(query, kbConfig, limit, scoreThreshold);
+        IKnowledge iKnowledge = KnowledgeFactory.getKnowledge(kbType);
+        if (iKnowledge == null) {
+            return R.fail("知识库类型未注册: " + kbType);
+        }
 
-        List<Map<String, Object>> results = chunks.stream().map(chunk -> {
-            Map<String, Object> map = new java.util.HashMap<>();
-            map.put("id", chunk.getId());
-            map.put("documentId", chunk.getDocumentId());
-            map.put("fileName", chunk.getFileName());
-            map.put("chunkIndex", chunk.getChunkIndex());
-            map.put("content", chunk.getContent());
-            map.put("tokenCount", chunk.getTokenCount());
-            map.put("score", chunk.getScore());
-            return map;
-        }).toList();
+        try {
+            // 将本次测试的高级参数覆盖项合并到检索配置（仅本次生效，不落库）
+            JsonNode mergedRetrievalConfig = mergeRetrievalConfig(
+                    kbConfig.getRetrievalConfig(), JsonUtils.valueToTree(params.get("retrievalConfig")));
+            kbConfig.setRetrievalConfig(mergedRetrievalConfig);
 
-        return R.data(results);
+            Knowledge knowledge = iKnowledge.build(kbConfig);
+            RetrieveConfig retrieveConfig = buildRetrieveConfig(kbType, mergedRetrievalConfig);
+
+            List<Document> documents = knowledge.retrieve(query, retrieveConfig).block();
+            if (documents == null) {
+                documents = List.of();
+            }
+
+            List<Map<String, Object>> results = documents.stream().map(doc -> {
+                Map<String, Object> map = new HashMap<>();
+                map.put("id", doc.getId());
+                map.put("docId", doc.getMetadata().getDocId());
+                map.put("chunkId", doc.getMetadata().getChunkId());
+                map.put("content", doc.getMetadata().getContentText());
+                map.put("score", doc.getScore());
+                map.put("fileName", resolveFileName(doc));
+                map.put("chunkIndex", resolvePayloadValue(doc, "chunkIndex", "position"));
+                map.put("tokenCount", resolvePayloadValue(doc, "tokenCount", "tokens"));
+                map.put("payload", doc.getPayload());
+                return map;
+            }).toList();
+
+            return R.data(results);
+        } catch (Exception e) {
+            return R.fail("检索失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 从检索结果中解析文档名（按各类型 payload 字段自适应：
+     * 本地 -> fileName，Dify -> document.name，RagFlow -> document_name）
+     */
+    private Object resolveFileName(Document doc) {
+        Object fileName = doc.getPayloadValue("fileName");
+        if (fileName != null) {
+            return fileName;
+        }
+        Object document = doc.getPayloadValue("document");
+        if (document instanceof Map<?, ?> documentInfo) {
+            Object name = documentInfo.get("name");
+            if (name != null) {
+                return name;
+            }
+        }
+        return doc.getPayloadValue("document_name");
+    }
+
+    /**
+     * 从检索结果 payload 中按顺序取第一个存在的字段值
+     */
+    private Object resolvePayloadValue(Document doc, String... keys) {
+        for (String key : keys) {
+            Object value = doc.getPayloadValue(key);
+            if (value != null) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 将本次测试的高级参数覆盖项浅合并到知识库检索配置之上，覆盖项为空时直接返回基础配置。
+     */
+    private JsonNode mergeRetrievalConfig(JsonNode base, JsonNode override) {
+        if (override == null || override.isNull() || !override.isObject() || override.isEmpty()) {
+            return base;
+        }
+        if (base == null || base.isNull() || !base.isObject()) {
+            return override;
+        }
+        ObjectNode merged = base.deepCopy();
+        override.fields().forEachRemaining(entry -> merged.set(entry.getKey(), entry.getValue()));
+        return merged;
+    }
+
+    /**
+     * 根据知识库类型从合并后的检索配置中构建 RetrieveConfig。
+     */
+    private RetrieveConfig buildRetrieveConfig(KbType kbType, JsonNode mergedRetrievalConfig) {
+        int defaultLimit;
+        String thresholdKey;
+        double defaultThreshold;
+        switch (kbType) {
+            case DIFY -> {
+                defaultLimit = 10;
+                thresholdKey = "scoreThreshold";
+                defaultThreshold = 0.0;
+            }
+            case RAGFLOW -> {
+                defaultLimit = 1024;
+                thresholdKey = "similarityThreshold";
+                defaultThreshold = 0.2;
+            }
+            case LOCAL -> {
+                defaultLimit = 5;
+                thresholdKey = "scoreThreshold";
+                defaultThreshold = 0.5;
+            }
+            default -> {
+                defaultLimit = 5;
+                thresholdKey = "scoreThreshold";
+                defaultThreshold = 0.0;
+            }
+        }
+
+        int limit = JsonUtils.getIntValue(mergedRetrievalConfig, "topK", defaultLimit);
+        double scoreThreshold = JsonUtils.getDoubleValue(mergedRetrievalConfig, thresholdKey, defaultThreshold);
+
+        return RetrieveConfig.builder()
+                .limit(Math.max(limit, 1))
+                .scoreThreshold(clampScore(scoreThreshold))
+                .build();
+    }
+
+    /**
+     * 将分数阈值限制在 [0, 1] 区间，避免 RetrieveConfig 构建失败。
+     */
+    private double clampScore(double value) {
+        return Math.max(0.0, Math.min(1.0, value));
     }
 
 
