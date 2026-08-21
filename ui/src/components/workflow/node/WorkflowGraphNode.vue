@@ -133,7 +133,7 @@ onBeforeUnmount(() => {
             @mouseup.stop
             @click.stop="onRunClick"
           >
-            <span class="play-triangle" />
+            <IconFont :name="getNodeIconName('START')" :size="13" color="#DBDCDE" />
           </button>
         </ATooltip>
         <span v-else class="node-state" />
@@ -207,12 +207,12 @@ onBeforeUnmount(() => {
   border-radius: 12px;
   background: #fff;
   color: #262626;
-  box-shadow: 0px 2px 12px rgba(131, 131, 132, 0.05);
+  box-shadow: 0 2px 12px rgba(131, 131, 132, 0.05);
   border: 1px solid transparent;
   transition: 0.15s;
 }
 .graph-node.hovered {
-  box-shadow: 0px 2px 12px rgba(131, 131, 132, 0.25);
+  box-shadow: 0 2px 12px rgba(131, 131, 132, 0.25);
 }
 .graph-node.selected {
   border: 1px solid #1677ff;
@@ -286,20 +286,6 @@ onBeforeUnmount(() => {
   border: 0;
   background: transparent;
   cursor: pointer;
-}
-.play-triangle {
-  width: 0;
-  height: 0;
-  border-style: solid;
-  border-width: 5.5px 0 5.5px 8px;
-  border-color: transparent transparent transparent #9da0ad;
-  /* 关键：给边框添加圆角，使三角的边有弧度 */
-  border-radius: 20%;
-  margin-left: 1px;
-  transition: border-color 0.15s;
-}
-.node-run-button:hover .play-triangle {
-  border-color: transparent transparent transparent #6a6e7b;
 }
 .node-state {
   width: 9px;

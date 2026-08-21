@@ -107,6 +107,7 @@ export interface AgentDefinitionVO {
   description: string
   modelConfigId: string
   modelParamsOverride: Record<string, unknown> | null
+  ragConfig: Record<string, unknown> | null
   skill: string[]
   workflow: string[]
   tool: string[]

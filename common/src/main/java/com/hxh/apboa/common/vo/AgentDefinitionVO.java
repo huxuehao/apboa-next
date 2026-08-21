@@ -28,6 +28,12 @@ public class AgentDefinitionVO implements SerializableEnable {
     private String description;
     private Long modelConfigId;
     private JsonNode modelParamsOverride;
+
+    /**
+     * RAG检索参数配置（topK/scoreThreshold/ragMode）
+     */
+    private JsonNode ragConfig;
+
     private List<Long> skill;
     private List<Long> workflow;
     private List<Long> tool;
