@@ -161,7 +161,9 @@ public class ChatSessionServiceImpl extends ServiceImpl<ChatSessionMapper, ChatS
         if (ids.isEmpty()) {
             ids.add(curId);
         }
-        List<ChatMessage> list = chatMessageService.listByIdsOrderByDepth(ids, session.getMessageTable());
+        // 仅已归档会话才传归档表名；message_table 为 ARCHIVE_FAILED 等失败标记时必须回落主表，
+        // 否则 MessageTableRouter 会抛“非法的归档表名”异常
+        List<ChatMessage> list = chatMessageService.listByIdsOrderByDepth(ids, isArchived(session) ? session.getMessageTable() : null);
         List<ChatMessageVO> result = BeanUtils.copyList(list, ChatMessageVO.class);
         hydrateSubAgentRuns(sessionId, result);
         return result;
@@ -197,7 +199,8 @@ public class ChatSessionServiceImpl extends ServiceImpl<ChatSessionMapper, ChatS
         }
 
         // 2. 查询该路径上全部消息并按 depth 升序
-        List<ChatMessage> allMessages = chatMessageService.listByIdsOrderByDepth(ids, session.getMessageTable());
+        // 与 getCurrentMessages 一致：仅已归档会话才传归档表名，失败标记回落主表
+        List<ChatMessage> allMessages = chatMessageService.listByIdsOrderByDepth(ids, isArchived(session) ? session.getMessageTable() : null);
 
         // 3. 根据游标切片
         List<ChatMessage> page;

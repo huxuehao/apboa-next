@@ -52,6 +52,12 @@ public class AgentDefinition extends BaseTenantEntity {
     private JsonNode modelParamsOverride;
 
     /**
+     * rag的参数
+     */
+    @TableField(typeHandler = JsonNodeTypeHandler.class)
+    private JsonNode ragConfig;
+
+    /**
      * 工具选择策略
      */
     private ToolChoiceStrategy toolChoiceStrategy;

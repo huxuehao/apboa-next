@@ -13,7 +13,7 @@ import java.util.List;
 public interface KnowledgeBaseConfigService extends IService<KnowledgeBaseConfig> {
     List<Object> usedWithAgent(List<Long> ids);
 
-    KnowledgeBaseConfig getByAgentId(Long agentId);
+    List<KnowledgeBaseConfig> getByAgentId(Long agentId);
 
     boolean deleteByIds(List<Long> ids);
 

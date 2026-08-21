@@ -4,7 +4,7 @@
  * @author huxuehao
  */
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { RoutePaths } from '@/router/constants.ts'
 import * as knowledgeApi from '@/api/knowledge'
 import * as mcpApi from '@/api/mcp'
@@ -16,7 +16,7 @@ import type {
   AgentMcpBindingVO,
   McpToolVO
 } from '@/types'
-import { McpActivationStatus, McpToolExposureMode } from '@/types'
+import { McpActivationStatus, McpToolExposureMode, RAGMode } from '@/types'
 import { countCommonElements } from '@/utils/tools'
 import {
   getMcpConnectionStatusColor,
@@ -29,6 +29,8 @@ interface KnowledgeFormModel {
   mcp: string[]
   mcpBindings: AgentMcpBindingVO[]
   subAgent: string[]
+  /** RAG检索参数（topK/scoreThreshold/ragMode），默认取自所选知识库的检索配置 */
+  ragConfig: Record<string, unknown> | null
 }
 
 /**
@@ -248,15 +250,120 @@ async function validate(): Promise<boolean> {
 }
 
 function handleKBChange(kbId: string, checked: boolean) {
+  const selected = formData.value.knowledgeBase
   if (checked) {
-    formData.value.knowledgeBase.push(kbId)
+    const isFirstSelection = selected.length === 0
+    if (!selected.includes(kbId)) {
+      selected.push(kbId)
+    }
+    // 选中第一个知识库且尚未配置 ragConfig 时，用该知识库的检索配置预填默认值
+    if (isFirstSelection && isEmptyRagConfig()) {
+      const kb = allKnowledgeBases.value.find(item => String(item.id) === kbId)
+      if (kb) {
+        applyRagDefaults(extractRagDefaults(kb))
+      }
+    }
   } else {
-    const index = formData.value.knowledgeBase.indexOf(kbId)
+    const index = selected.indexOf(kbId)
     if (index > -1) {
-      formData.value.knowledgeBase.splice(index, 1)
+      selected.splice(index, 1)
+    }
+    // 取消选中最后一个知识库时清空 ragConfig
+    if (selected.length === 0) {
+      formData.value.ragConfig = null
+      ragConfigForm.value = { topK: 5, scoreThreshold: 0.5, ragMode: RAGMode.AGENTIC }
     }
   }
 }
+
+/**
+ * ragConfig 表单值（Top K / 阈值 / RAG 模式）
+ */
+interface RagConfigValue {
+  topK: number
+  scoreThreshold: number
+  ragMode: RAGMode
+}
+
+const ragConfigForm = ref<RagConfigValue>({ topK: 5, scoreThreshold: 0.5, ragMode: RAGMode.AGENTIC })
+
+/**
+ * 是否已选中知识库（选中后展示 ragConfig 配置区）
+ */
+const hasKnowledge = computed(() => (formData.value.knowledgeBase || []).length > 0)
+
+/**
+ * 首个选中的知识库（用于阈值文案与默认值来源）
+ */
+const firstSelectedKnowledge = computed(() => {
+  const ids = formData.value.knowledgeBase || []
+  return allKnowledgeBases.value.find(kb => ids.includes(String(kb.id)))
+})
+
+/**
+ * 阈值文案（RagFlow 使用“相似度阈值”，其余使用“分数阈值”）
+ */
+const ragThresholdLabel = computed(() =>
+  firstSelectedKnowledge.value?.kbType === 'RAGFLOW' ? '相似度阈值' : '分数阈值'
+)
+
+/**
+ * ragConfig 是否为空（未配置）
+ */
+function isEmptyRagConfig(): boolean {
+  const rc = formData.value.ragConfig
+  return !rc || Object.keys(rc).length === 0
+}
+
+/**
+ * 从知识库配置中提取 RAG 默认参数（按类型映射阈值键）：
+ * - topK：读取检索配置的 topK（百炼无此字段时用默认 5）
+ * - 阈值：本地/百炼/Dify 读 scoreThreshold，RagFlow 读 similarityThreshold，缺失时用默认 0.5
+ * - ragMode：取知识库自身的 ragMode
+ */
+function extractRagDefaults(kb: KnowledgeBaseConfigVO): RagConfigValue {
+  const rc = kb.retrievalConfig || {}
+  let scoreThreshold = 0.5
+  if (kb.kbType === 'RAGFLOW') {
+    if (typeof rc.similarityThreshold === 'number') scoreThreshold = rc.similarityThreshold
+  } else if (typeof rc.scoreThreshold === 'number') {
+    scoreThreshold = rc.scoreThreshold
+  }
+  return {
+    topK: typeof rc.topK === 'number' ? rc.topK : 5,
+    scoreThreshold,
+    ragMode: kb.ragMode || RAGMode.AGENTIC
+  }
+}
+
+/**
+ * 应用默认值到 ragConfig 表单与模型
+ */
+function applyRagDefaults(defaults: RagConfigValue) {
+  ragConfigForm.value = { ...defaults }
+  formData.value.ragConfig = { ...defaults }
+}
+
+/**
+ * 从模型（已保存的 ragConfig）回填表单
+ */
+function syncRagConfigFromModel() {
+  const rc = formData.value.ragConfig
+  if (rc && Object.keys(rc).length > 0) {
+    ragConfigForm.value = {
+      topK: typeof rc.topK === 'number' ? rc.topK : 5,
+      scoreThreshold: typeof rc.scoreThreshold === 'number' ? rc.scoreThreshold : 0.5,
+      ragMode: rc.ragMode === RAGMode.GENERIC ? RAGMode.GENERIC : RAGMode.AGENTIC
+    }
+  }
+}
+
+/**
+ * 表单输入变化时同步回模型（ragConfig 变为非空后不再被自动预填覆盖）
+ */
+watch(ragConfigForm, (value) => {
+  formData.value.ragConfig = { ...value }
+}, { deep: true })
 
 function handleMcpChange(mcpId: string, checked: boolean) {
   const bindings = formData.value.mcpBindings || []
@@ -322,6 +429,17 @@ onMounted(async () => {
     loadAllAgents()
   ])
   await preloadSelectedMcpTools()
+
+  // 回填已保存的 ragConfig；编辑模式下已选中知识库但未配置 ragConfig 时，
+  // 用第一个选中知识库的检索配置预填默认值
+  syncRagConfigFromModel()
+  if (isEmptyRagConfig()) {
+    const ids = formData.value.knowledgeBase || []
+    const first = allKnowledgeBases.value.find(kb => ids.includes(String(kb.id)))
+    if (first) {
+      applyRagDefaults(extractRagDefaults(first))
+    }
+  }
 })
 
 defineExpose({
@@ -358,6 +476,46 @@ defineExpose({
           <AButton type="text">未配置知识库</AButton>
           <AButton type="link" :href="`/#/${RoutePaths.KNOWLEDGE}`" target="_blank">去配置</AButton>
           <AButton type="link" @click="loadAllKnowledgeBases">刷新</AButton>
+        </div>
+      </AFormItem>
+
+      <!-- RAG检索参数：选中知识库后展示，默认值取自所选知识库的检索配置 -->
+      <AFormItem label="RAG检索参数" v-if="hasKnowledge">
+        <div class="params-override-section">
+          <ARow :gutter="16">
+            <ACol :span="6">
+              <AFormItem label="Top K">
+                <AInputNumber
+                  v-model:value="ragConfigForm.topK"
+                  :min="1"
+                  :max="1000"
+                  style="width: 100%"
+                />
+              </AFormItem>
+            </ACol>
+            <ACol :span="6">
+              <AFormItem :label="ragThresholdLabel">
+                <AInputNumber
+                  v-model:value="ragConfigForm.scoreThreshold"
+                  :min="0"
+                  :max="1"
+                  :step="0.1"
+                  style="width: 100%"
+                />
+              </AFormItem>
+            </ACol>
+            <ACol :span="6">
+              <AFormItem label="RAG模式">
+                <ASelect v-model:value="ragConfigForm.ragMode" style="width: 100%">
+                  <ASelectOption value="GENERIC">Generic（在每个推理步骤之前自动检索和注入知识）</ASelectOption>
+                  <ASelectOption value="AGENTIC">Agentic（Agent 使用工具决定何时检索）</ASelectOption>
+                </ASelect>
+              </AFormItem>
+            </ACol>
+          </ARow>
+          <div class="text-placeholder" style="font-size: 12px;">
+            默认值取自所选知识库的检索配置（RagFlow 使用相似度阈值，其余类型使用分数阈值），可在此针对当前智能体覆盖。
+          </div>
         </div>
       </AFormItem>
 
@@ -539,6 +697,14 @@ defineExpose({
   .item-desc {
     line-height: 1.4;
   }
+}
+
+.params-override-section {
+  padding: var(--spacing-md);
+  background-color: #fcfcfc;
+  border: 1px solid #eaeaea;
+  border-radius: var(--border-radius-md);
+  margin-bottom: var(--spacing-md);
 }
 
 .mcp-grid {

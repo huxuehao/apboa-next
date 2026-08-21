@@ -27,6 +27,7 @@ import io.agentscope.core.memory.LongTermMemoryMode;
 import io.agentscope.core.memory.autocontext.AutoContextConfig;
 import io.agentscope.core.memory.autocontext.AutoContextHook;
 import io.agentscope.core.model.Model;
+import io.agentscope.core.rag.RAGMode;
 import io.agentscope.core.state.StatePersistence;
 import io.agentscope.core.plan.PlanNotebook;
 import io.agentscope.core.rag.model.RetrieveConfig;
@@ -97,14 +98,27 @@ public class ReActAgentHelper {
                         ? skillBoxFactory.getSkillBox(definition, toolkit, codeExecutionConfig, executionRole)
                         : skillBoxFactory.getSkillBox(definition, codeExecutionConfig, executionRole));
 
-        KnowledgeWrapper knowledgeWrapper = knowledgeFactory.getKnowledge(definition);
-        if (knowledgeWrapper != null) {
-            builder.knowledge(knowledgeWrapper.getKnowledge());
-            builder.ragMode(knowledgeWrapper.getRagMode());
+        // ####### 知识库 #########
+        List<KnowledgeWrapper> knowledgeWrappers = knowledgeFactory.getKnowledge(definition);
+        for (KnowledgeWrapper knowledgeWrapper : knowledgeWrappers) {
+            if (knowledgeWrapper != null) {
+                builder.knowledge(knowledgeWrapper.getKnowledge());
+            }
+        }
+        if (!knowledgeWrappers.isEmpty()) {
+            int limit = 5;
+            double scoreThreshold = 0.5;
+            RAGMode ragMode = RAGMode.AGENTIC;
+            JsonNode ragConfig = definition.getRagConfig();
+            if (ragConfig != null) {
+                limit = JsonUtils.getIntValue(ragConfig, "topK", 5);
+                scoreThreshold = JsonUtils.getDoubleValue(ragConfig, "scoreThreshold", 0.5);
+                try {
+                    ragMode = RAGMode.valueOf(JsonUtils.getStringValue(ragConfig, "ragMode", "AGENTIC"));
+                } catch (Exception ignored) {}
+            }
 
-            JsonNode retrievalConfigNode = knowledgeWrapper.getRetrievalConfig();
-            int limit = JsonUtils.getIntValue(retrievalConfigNode, "topK", 5);
-            double scoreThreshold = JsonUtils.getDoubleValue(retrievalConfigNode, "scoreThreshold", 0.5);
+            builder.ragMode(ragMode);
             builder.retrieveConfig(
                     RetrieveConfig.builder()
                             .limit(limit)
@@ -112,6 +126,8 @@ public class ReActAgentHelper {
                             .build());
         }
 
+
+        // ####### 计划 #########
         Boolean isPlanActive = AgentContext.getIfExists().map(AgentContext::isPlanActive).orElse(false);
         if (definition.getEnablePlanning() && isPlanActive) {
             PlanNotebook planNotebook = PlanNotebook.builder()

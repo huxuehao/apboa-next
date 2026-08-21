@@ -133,9 +133,12 @@ public class ChatMessageArchiveTask {
                                 targetTable, sessionId);
 
                         // 4e. 删除 agentscope_sessions 中会话的消息
+                        // 注意：session_id 为 VARCHAR(255)，表中可能存在 channel-… 等非纯数字值。
+                        // 若按 Long 绑定，MySQL 会做数值转换并抛 ERROR 1292 (Truncated incorrect DOUBLE value)，
+                        // 导致整个归档事务回滚、会话被标记为 ARCHIVE_FAILED，因此必须按字符串绑定。
                         jdbcTemplate.update(
                                 "DELETE FROM agentscope_sessions WHERE session_id = ?",
-                                sessionId);
+                                String.valueOf(sessionId));
 
                         log.debug("归档会话 {} 的 {} 条消息 -> {}", sessionId, moved, targetTable);
                     });

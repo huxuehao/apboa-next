@@ -8,6 +8,8 @@ import com.hxh.apboa.knowledge.service.KnowledgeBaseConfigService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -23,37 +25,41 @@ public class KnowledgeFactory {
 
     private final KnowledgeBaseConfigService knowledgeBaseConfigService;
 
-    public KnowledgeWrapper getKnowledge(AgentDefinition definition) {
-        KnowledgeBaseConfig knowledgeBaseConfig = knowledgeBaseConfigService.getByAgentId(definition.getId());
-        return getKnowledgeWrapper(knowledgeBaseConfig);
+    public List<KnowledgeWrapper> getKnowledge(AgentDefinition definition) {
+        List<KnowledgeBaseConfig> knowledgeBaseConfigs = knowledgeBaseConfigService.getByAgentId(definition.getId());
+        return getKnowledgeWrapper(knowledgeBaseConfigs);
     }
 
     /**
      * 根据知识库配置构建知识库实体（Knowledge）。
      *
-     * @param knowledgeBaseConfig 知识库配置
+     * @param knowledgeBaseConfigs 知识库配置
      * @return 知识库包装对象，配置为空/未启用/类型未注册时返回 null
      */
-    public KnowledgeWrapper getKnowledgeWrapper(KnowledgeBaseConfig knowledgeBaseConfig) {
-        if (knowledgeBaseConfig == null) {
-            return null;
+    public List<KnowledgeWrapper> getKnowledgeWrapper(List<KnowledgeBaseConfig> knowledgeBaseConfigs) {
+        if (knowledgeBaseConfigs == null) {
+            return List.of();
         }
 
-        if (!knowledgeBaseConfig.getEnabled()) {
-            return null;
-        }
+        List<KnowledgeWrapper> objects = new ArrayList<>();
+        for (KnowledgeBaseConfig knowledgeBaseConfig : knowledgeBaseConfigs) {
+            if (!knowledgeBaseConfig.getEnabled()) {
+                continue;
+            }
 
-        IKnowledge iKnowledge = KNOWLEDGE_MAP.get(knowledgeBaseConfig.getKbType());
-        if (iKnowledge == null) {
-            return null;
-        }
+            IKnowledge iKnowledge = KNOWLEDGE_MAP.get(knowledgeBaseConfig.getKbType());
+            if (iKnowledge == null) {
+                continue;
+            }
 
-        return KnowledgeWrapper
-                .builder()
-                .ragMode(knowledgeBaseConfig.getRagMode())
-                .knowledge(iKnowledge.build(knowledgeBaseConfig))
-                .retrievalConfig(knowledgeBaseConfig.getRetrievalConfig())
-                .build();
+            objects.add(KnowledgeWrapper
+                    .builder()
+                    .ragMode(knowledgeBaseConfig.getRagMode())
+                    .knowledge(iKnowledge.build(knowledgeBaseConfig))
+                    .retrievalConfig(knowledgeBaseConfig.getRetrievalConfig())
+                    .build());
+        }
+        return objects;
     }
 
     public static IKnowledge getKnowledge(KbType kbType) {

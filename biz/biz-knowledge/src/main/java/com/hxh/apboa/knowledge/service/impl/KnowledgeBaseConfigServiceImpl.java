@@ -43,19 +43,14 @@ public class KnowledgeBaseConfigServiceImpl extends ServiceImpl<KnowledgeBaseCon
     }
 
     @Override
-    public KnowledgeBaseConfig getByAgentId(Long agentId) {
+    public List<KnowledgeBaseConfig> getByAgentId(Long agentId) {
         List<Long> knowledgeIds = agentKnowledgeBaseService.getKnowledgeIds(agentId);
 
         if (knowledgeIds.isEmpty()) {
             return null;
         }
 
-        List<KnowledgeBaseConfig> knowledgeBaseConfigs = listByIds(knowledgeIds);
-        if (knowledgeBaseConfigs == null) {
-            return null;
-        }
-
-        return knowledgeBaseConfigs.getFirst();
+        return listByIds(knowledgeIds);
     }
 
     @Override
